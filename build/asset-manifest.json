@@ -1,0 +1,13 @@
+{
+  "files": {
+    "main.css": "/hypertextbook2/static/css/main.e6c13ad2.css",
+    "main.js": "/hypertextbook2/static/js/main.136222b9.js",
+    "index.html": "/hypertextbook2/index.html",
+    "main.e6c13ad2.css.map": "/hypertextbook2/static/css/main.e6c13ad2.css.map",
+    "main.136222b9.js.map": "/hypertextbook2/static/js/main.136222b9.js.map"
+  },
+  "entrypoints": [
+    "static/css/main.e6c13ad2.css",
+    "static/js/main.136222b9.js"
+  ]
+}
