@@ -10,7 +10,7 @@ const root = ReactDOM.createRoot(container);
 
 root.render(
   <React.StrictMode>
-    <BrowserRouter>
+    <BrowserRouter basename="/hypertextbook2">
       <App />
     </BrowserRouter>
   </React.StrictMode>
