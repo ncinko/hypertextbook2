@@ -113,9 +113,9 @@ export default function DoublePendulum() {
 
     historyRef.current.forEach((pt) => {
       // Map theta1 from [-PI, PI] to x position [0, p5.width]
-      const x = p5.map(pt.theta1, -Math.PI, Math.PI, 100, p5.width/2);
+      const x = p5.map(pt.theta1, -Math.PI, Math.PI, 100, p5.width/1.5);
       // Map theta2 from [-PI, PI] to y position [p5.height, 0] (inverting y-axis)
-      const y = p5.map(pt.theta2, -Math.PI, Math.PI, p5.height/2, 100);
+      const y = p5.map(pt.theta2, -Math.PI, Math.PI, p5.height/1.5, 100);
       
       // Compute alpha based on age: older points are more transparent.
       const alpha = p5.map(pt.time, cutoff, now, 50, 255);
@@ -169,105 +169,108 @@ export default function DoublePendulum() {
   };
 
   // ===================== Render =====================
-  return (
-    <div className="max-w-5xl mx-auto text-center p-6">
-      <h1 className="text-2xl font-bold mb-4">Double Pendulum Simulation with Phase Plot</h1>
-      {/* Flex container for canvases */}
-      <div className="flex flex-row justify-center">
-        {/* Simulation Canvas */}
-        <div className="m-2">
-          <Sketch
-            setup={setupSim}
-            draw={drawSim}
-            mousePressed={mousePressed}
-            mouseDragged={mouseDragged}
-            mouseReleased={mouseReleased}
-          />
+return (
+  <div className="max-w-5xl mx-auto text-center p-6">
+    <h1 className="text-2xl font-bold mb-4">
+      Double Pendulum Simulation with Phase Plot
+    </h1>
+    {/* Control Panel above canvases */}
+    <div className="flex justify-center mb-4">
+      <div className="space-y-4 max-w-md w-full">
+        <div>
+          <label>
+            Length 1:&nbsp;
+            <input
+              type="range"
+              min="50"
+              max="300"
+              value={l1}
+              onChange={(e) => setL1(parseFloat(e.target.value))}
+            />
+          </label>
+          <span> {l1}px</span>
         </div>
-        {/* Phase Plot Canvas */}
-        <div className="m-2">
-          <Sketch
-            setup={setupPhasePlot}
-            draw={drawPhasePlot}
-          />
+        <div>
+          <label>
+            Length 2:&nbsp;
+            <input
+              type="range"
+              min="50"
+              max="300"
+              value={l2}
+              onChange={(e) => setL2(parseFloat(e.target.value))}
+            />
+          </label>
+          <span> {l2}px</span>
         </div>
-      </div>
-      {/* Control Panel */}
-      <div className="flex justify-center mt-4">
-        <div className="space-y-4 max-w-md w-full">
-          <div>
-            <label>
-              Length 1:&nbsp;
-              <input
-                type="range"
-                min="50"
-                max="300"
-                value={l1}
-                onChange={(e) => setL1(parseFloat(e.target.value))}
-              />
-            </label>
-            <span> {l1}px</span>
-          </div>
-          <div>
-            <label>
-              Length 2:&nbsp;
-              <input
-                type="range"
-                min="50"
-                max="300"
-                value={l2}
-                onChange={(e) => setL2(parseFloat(e.target.value))}
-              />
-            </label>
-            <span> {l2}px</span>
-          </div>
-          <div>
-            <label>
-              Mass 1:&nbsp;
-              <input
-                type="range"
-                min="10"
-                max="50"
-                value={m1}
-                onChange={(e) => setM1(parseFloat(e.target.value))}
-              />
-            </label>
-            <span> {m1}</span>
-          </div>
-          <div>
-            <label>
-              Mass 2:&nbsp;
-              <input
-                type="range"
-                min="10"
-                max="50"
-                value={m2}
-                onChange={(e) => setM2(parseFloat(e.target.value))}
-              />
-            </label>
-            <span> {m2}</span>
-          </div>
-          <div>
-            <label>
-              Simulation Speed:&nbsp;
-              <input
-                type="range"
-                min="0.1"
-                max="5"
-                step="0.1"
-                value={simSpeed}
-                onChange={(e) => setSimSpeed(parseFloat(e.target.value))}
-              />
-            </label>
-            <span> {simSpeed}x</span>
-          </div>
+        <div>
+          <label>
+            Mass 1:&nbsp;
+            <input
+              type="range"
+              min="10"
+              max="50"
+              value={m1}
+              onChange={(e) => setM1(parseFloat(e.target.value))}
+            />
+          </label>
+          <span> {m1}</span>
         </div>
-      </div>
-      <div className="mt-4">
-        <Link to="/" className="text-blue-500 hover:underline">
-          Back to Landing Page
-        </Link>
+        <div>
+          <label>
+            Mass 2:&nbsp;
+            <input
+              type="range"
+              min="10"
+              max="50"
+              value={m2}
+              onChange={(e) => setM2(parseFloat(e.target.value))}
+            />
+          </label>
+          <span> {m2}</span>
+        </div>
+        <div>
+          <label>
+            Simulation Speed:&nbsp;
+            <input
+              type="range"
+              min="0.1"
+              max="5"
+              step="0.1"
+              value={simSpeed}
+              onChange={(e) => setSimSpeed(parseFloat(e.target.value))}
+            />
+          </label>
+          <span> {simSpeed}x</span>
+        </div>
       </div>
     </div>
-  );
+    {/* Canvases container */}
+    <div className="flex flex-row justify-center">
+      <div className="m-2">
+        <Sketch
+          setup={setupSim}
+          draw={drawSim}
+          mousePressed={mousePressed}
+          mouseDragged={mouseDragged}
+          mouseReleased={mouseReleased}
+        />
+      </div>
+      <div className="m-2">
+        <Sketch
+          setup={setupPhasePlot}
+          draw={drawPhasePlot}
+        />
+      </div>
+    </div>
+    <div className="mt-4">
+      <Link to="/" className="text-blue-500 hover:underline">
+        Back to Landing Page
+      </Link>
+    </div>
+  </div>
+);
+
+
+
 }
