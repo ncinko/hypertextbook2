@@ -152,7 +152,7 @@ export default function SpringMass() {
 
   return (
     <div className="container">
-      <h1>Spring-Mass Simulation with Real-Time Phase Plot</h1>
+      <h1>Harmonic Oscillator</h1>
       {/* Control Panel */}
       <div className="control-panel">
         <div className="slider-group">
@@ -211,9 +211,6 @@ export default function SpringMass() {
         <div className="canvas">
           <Sketch setup={setupPhase} draw={drawPhase} />
         </div>
-      </div>
-      <div className="back-link">
-        <Link to="/">Back to Landing Page</Link>
       </div>
     </div>
   );

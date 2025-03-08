@@ -1,12 +1,12 @@
 // src/IdealGas.js
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import Sketch from 'react-p5';
 import { Link } from 'react-router-dom';
 import './styles.css';
 
 export default function IdealGas() {
   // Temperature slider state (controls average speed)
-  const [temperature, setTemperature] = useState(1);
+  const [temperature, setTemperature] = useState(50);
   const numParticles = 1000; // number of gas particles
 
   // Simulation state: an array of particles (each particle: {x, y, vx, vy, r})
@@ -20,7 +20,7 @@ export default function IdealGas() {
       const x = p5.random(r, width - r);
       const y = p5.random(r, height - r);
       // Set initial speed proportional to temperature (adjust scaling factor as needed)
-      const speed = Math.sqrt(temperature);
+      const speed = 50;
       const angle = p5.random(0, 2 * Math.PI);
       const vx = speed * Math.cos(angle);
       const vy = speed * Math.sin(angle);
@@ -34,6 +34,7 @@ export default function IdealGas() {
     const canvas = p5.createCanvas(600, 400);
     canvas.parent(canvasParentRef);
     initializeParticles(p5, 600, 400);
+	p5.loop()
   };
 
   const drawSim = (p5) => {
@@ -107,77 +108,78 @@ for (let i = 0; i < particles.length; i++) {
       let p = particles[i];
       p5.ellipse(p.x, p.y, p.r * 2, p.r * 2);
     }
+	p5.redraw();
   };
 
   // ===== Histogram Canvas (Particle Energy Distribution) =====
   const setupHist = (p5, canvasParentRef) => {
     p5.createCanvas(400, 400).parent(canvasParentRef);
+	p5.frameRate(30);
+	p5.loop();
   };
 
-  const drawHist = (p5) => {
+ // Add a ref to store temperature
+const temperatureRef = useRef(temperature);
+
+// Update the ref when temperature changes
+useEffect(() => {
+  temperatureRef.current = temperature;
+}, [temperature]);
+
+// In drawHist, use the ref instead of the state variable directly:
+const drawHist = (p5) => {
   p5.background(255);
   const particles = particlesRef.current;
   if (particles.length === 0) return;
-  
-  // Compute speeds for each particle (sqrt(vx² + vy²))
+
+  // Compute speeds for each particle
   const speeds = particles.map(p => Math.sqrt(p.vx * p.vx + p.vy * p.vy));
-  
-  // Build a histogram of speeds
+
+  // Build histogram
   const binCount = 20;
   const maxSpeed = 200;
   const bins = Array(binCount).fill(0);
   speeds.forEach(speed => {
-    let bin = Math.floor((speed / maxSpeed) * binCount);
-    if (bin >= binCount) bin = binCount - 1;
-    bins[bin]++;
+      let bin = Math.floor((speed / maxSpeed) * binCount);
+      if (bin >= binCount) bin = binCount - 1;
+      bins[bin]++;
   });
-  
+
   // Draw histogram bars
   const barWidth = p5.width / binCount;
   const maxCount = Math.max(...bins);
   p5.fill(50, 100, 200);
   for (let i = 0; i < binCount; i++) {
-    const barHeight = p5.map(bins[i], 0, maxCount, 0, p5.height - 40);
-    p5.rect(i * barWidth, p5.height - barHeight, barWidth - 2, barHeight);
+      const barHeight = p5.map(bins[i], 0, maxCount, 0, p5.height - 40);
+      p5.rect(i * barWidth, p5.height - barHeight, barWidth - 2, barHeight);
   }
-  
-  // --- Overlay the Theoretical Curve ---
-  // For a 2D Maxwell–Boltzmann speed distribution (with mass = 1 and k_B = 1),
-  // one form (ignoring normalization) is: f(v) = (v / (sigma^2)) * exp(-v²/(2σ²))
-  // where sigma is related to the temperature.
-  const sigma = (temperature) / Math.sqrt(2);
-  const theoretical = (v) => {
-    return (v / (sigma * sigma)) * Math.exp(-v * v / (2 * sigma * sigma));
-  };
-  
-  // Sample the theoretical function over the range of speeds
+
+  // Use the updated temperature via the ref
+  const sigma = (temperatureRef.current) / Math.sqrt(2);
+  const theoretical = (v) => (v / (sigma * sigma)) * Math.exp(-v * v / (2 * sigma * sigma));
   const sampleCount = 100;
   const theoreticalValues = [];
   for (let i = 0; i <= sampleCount; i++) {
-    const v = (i / sampleCount) * maxSpeed;
-    const value = theoretical(v);
-    theoreticalValues.push({ v, value });
+      const v = (i / sampleCount) * maxSpeed;
+      theoreticalValues.push({ v, value: theoretical(v) });
   }
-  
-  // Scale the theoretical values to match the vertical scale of the histogram.
-  // First, determine the maximum theoretical value.
+
   const maxTheoretical = Math.max(...theoreticalValues.map(pt => pt.value));
   const scaleFactor = (p5.height - 40) / maxTheoretical;
-  
-  // Draw the theoretical curve (in red)
+
   p5.noFill();
   p5.stroke(0, 0, 0);
   p5.strokeWeight(1);
   p5.beginShape();
   theoreticalValues.forEach(pt => {
-    const x = p5.map(pt.v, 0, maxSpeed, 0, p5.width);
-    const y = p5.height - (pt.value * scaleFactor);
-    p5.vertex(x, y);
+      const x = p5.map(pt.v, 0, maxSpeed, 0, p5.width);
+      const y = p5.height - (pt.value * scaleFactor);
+      p5.vertex(x, y);
   });
   p5.endShape();
-  
-
 };
+
+
 
 
   // When the temperature slider changes, reinitialize all particle velocities
@@ -198,13 +200,13 @@ for (let i = 0; i < particles.length; i++) {
 
   return (
     <div className="container">
-      <h1>2D Ideal Gas Simulation with Energy Histogram</h1>
+      <h1>2D Ideal Gas</h1>
       {/* Control Panel */}
       <div className="control-panel">
         <div className="slider-group">
           <div>
             <label>
-              Temperature: {temperature.toFixed(2)}
+              Temperature: {temperature.toFixed(0)}
               <input
                 type="range"
                 min="1"
@@ -225,9 +227,6 @@ for (let i = 0; i < particles.length; i++) {
         <div className="canvas">
           <Sketch setup={setupHist} draw={drawHist} />
         </div>
-      </div>
-      <div className="back-link">
-        <Link to="/">Back to Landing Page</Link>
       </div>
     </div>
   );

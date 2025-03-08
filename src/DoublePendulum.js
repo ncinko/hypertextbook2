@@ -1,18 +1,16 @@
-// src/DoublePendulum.js
 import React, { useState, useRef } from 'react';
-import './styles.css';
 import Sketch from 'react-p5';
-import { Link } from 'react-router-dom';
+import './styles.css';
 
 export default function DoublePendulum() {
-  // Adjustable parameters via sliders
-  const [l1, setL1] = useState(200); // length of first arm
-  const [l2, setL2] = useState(200); // length of second arm
-  const [m1, setM1] = useState(20);  // mass of first bob (ellipse diameter)
-  const [m2, setM2] = useState(20);  // mass of second bob
-  const [simSpeed, setSimSpeed] = useState(1); // simulation speed multiplier
+  // Simulation parameters
+  const [l1, setL1] = useState(200); // Length of first arm
+  const [l2, setL2] = useState(200); // Length of second arm
+  const [m1, setM1] = useState(20);  // Mass of first bob (diameter)
+  const [m2, setM2] = useState(20);  // Mass of second bob
+  const [simSpeed, setSimSpeed] = useState(1); // Simulation speed multiplier
 
-  // Simulation state (angles and angular velocities)
+  // Simulation state: angles (theta) and angular velocities (omega)
   const stateRef = useRef({
     theta1: 0.1,
     theta2: 2.5,
@@ -20,48 +18,49 @@ export default function DoublePendulum() {
     omega2: 0,
   });
 
-  // History for phase plot (store timestamp, theta1, theta2)
+  // History for phase plot: stores { time, theta1, theta2 }
   const historyRef = useRef([]);
 
-  // Ref to track which bob (if any) is being dragged
+  // Ref to track which bob is being dragged (if any)
   const draggingRef = useRef(null);
 
-  const g = 1; // gravitational constant (adjust as needed)
-  const prevTime = useRef(0);
+  // Gravitational constant and time-tracking
+  const g = 1;
+  const prevTimeRef = useRef(0);
 
-  // ===================== Simulation Canvas =====================
+  // ------------------ Simulation Sketch ------------------
   const setupSim = (p5, canvasParentRef) => {
     p5.createCanvas(600, 600).parent(canvasParentRef);
-    prevTime.current = p5.millis();
+    p5.frameRate(60); // Force continuous drawing
+    prevTimeRef.current = p5.millis();
   };
 
   const drawSim = (p5) => {
     p5.background(255);
 
-    // Compute time step in seconds; cap for stability, then scale with simSpeed
-    let dt = (p5.millis() - prevTime.current) / 1000;
-    if (dt > 0.05) dt = 0.05;
-    dt *= simSpeed * 10;
-    prevTime.current = p5.millis();
+    // Calculate time step (in seconds), cap dt for stability, and scale with simSpeed
+    const currentTime = p5.millis();
+    let dt = (currentTime - prevTimeRef.current) / 1000;
+    dt = Math.min(dt, 0.05) * simSpeed * 10;
+    prevTimeRef.current = currentTime;
 
-    // Retrieve current simulation state
     let { theta1, theta2, omega1, omega2 } = stateRef.current;
     const delta = theta2 - theta1;
 
-    // Only update physics when not dragging a bob
+    // Update physics only when not dragging a bob
     if (!draggingRef.current) {
-      const denominator1 = l1 * (2 * m1 + m2 - m2 * p5.cos(2 * delta));
+      const denom1 = l1 * (2 * m1 + m2 - m2 * p5.cos(2 * delta));
       const domega1 = (
-        -g * (2 * m1 + m2) * p5.sin(theta1)
-        - m2 * g * p5.sin(theta1 - 2 * theta2)
-        - 2 * p5.sin(delta) * m2 * (omega2 * omega2 * l2 + omega1 * omega1 * l1 * p5.cos(delta))
-      ) / denominator1;
+        -g * (2 * m1 + m2) * p5.sin(theta1) -
+        m2 * g * p5.sin(theta1 - 2 * theta2) -
+        2 * p5.sin(delta) * m2 * (omega2 * omega2 * l2 + omega1 * omega1 * l1 * p5.cos(delta))
+      ) / denom1;
 
       const domega2 = (
         2 * p5.sin(delta) * (
-          omega1 * omega1 * l1 * (m1 + m2)
-          + g * (m1 + m2) * p5.cos(theta1)
-          + omega2 * omega2 * l2 * m2 * p5.cos(delta)
+          omega1 * omega1 * l1 * (m1 + m2) +
+          g * (m1 + m2) * p5.cos(theta1) +
+          omega2 * omega2 * l2 * m2 * p5.cos(delta)
         )
       ) / (l2 * (2 * m1 + m2 - m2 * p5.cos(2 * delta)));
 
@@ -69,140 +68,112 @@ export default function DoublePendulum() {
       omega2 += domega2 * dt;
       theta1 += omega1 * dt;
       theta2 += omega2 * dt;
+
+      stateRef.current = { theta1, theta2, omega1, omega2 };
     }
+	stateRef.current = { theta1, theta2, omega1, omega2 }
 
-    // Save the updated state
-    stateRef.current = { theta1, theta2, omega1, omega2 };
-
-    // Record history for the phase plot
-    const now = p5.millis();
-    historyRef.current.push({ time: now, theta1, theta2 });
-    // Keep only the last 10 seconds of data
-    const cutoff = now - 10000;
-    historyRef.current = historyRef.current.filter((pt) => pt.time >= cutoff);
+    // Record history for the phase plot (keep last 10 seconds)
+    historyRef.current.push({theta1, theta2, time: currentTime});
+	const cutoff = currentTime - 10000;
+    historyRef.current = historyRef.current.filter(pt => pt.time >= cutoff);
 
     // Calculate pendulum bob positions
     const originX = 300;
-    const originY = 150;
+    const originY = 50;
     const x1 = originX + l1 * p5.sin(theta1);
     const y1 = originY + l1 * p5.cos(theta1);
     const x2 = x1 + l2 * p5.sin(theta2 + Math.PI);
     const y2 = y1 + l2 * p5.cos(theta2 + Math.PI);
 
-    // Draw the pendulum arms
+    // Draw arms and bobs
     p5.stroke(0);
     p5.strokeWeight(2);
     p5.line(originX, originY, x1, y1);
     p5.line(x1, y1, x2, y2);
 
-    // Draw the bobs
     p5.fill(127);
     p5.ellipse(x1, y1, m1, m1);
     p5.ellipse(x2, y2, m2, m2);
   };
 
-  // ===================== Phase Plot Canvas =====================
-  const setupPhasePlot = (p5, canvasParentRef) => {
-    p5.createCanvas(500, 500).parent(canvasParentRef);
-	p5.loop();
-  };
-
-  const drawPhasePlot = (p5) => {
-  // Clear the background with slight transparency
-  p5.background(255, 255, 255, 50);
-
-  // Define margins and mapping ranges for θ1 and θ2
-  const margin = 50;
-  const xMin = -Math.PI, xMax = Math.PI; // for θ1
-  const yMin = -Math.PI, yMax = Math.PI; // for θ2
-
-  // Draw axes
-  p5.stroke(0);
-  p5.strokeWeight(1);
-  
-  // Horizontal axis for θ2 = 0
-  const yAxisHorizontal = p5.map(0, yMin, yMax, p5.height - margin, margin);
-  p5.line(margin, yAxisHorizontal, p5.width - margin, yAxisHorizontal);
-  
-  // Vertical axis for θ1 = 0
-  const xAxisVertical = p5.map(0, xMin, xMax, margin, p5.width - margin);
-  p5.line(xAxisVertical, margin, xAxisVertical, p5.height - margin);
-  
-  // Optional: Draw labels for the axes
-  p5.textSize(14);
-  p5.textFont('Verdana')
-  p5.textStyle('normal')
-  p5.fill(0);
-  p5.textAlign("right", "center");
-  p5.text("Angle 1", xAxisVertical - 5, margin);
-  p5.textAlign("center", "top");
-  p5.text("Angle 2", p5.width - margin, yAxisHorizontal + 5);
-  
-  // Draw the phase points (each point represents {theta1, theta2} at a given time)
-  const now = p5.millis();
-  const cutoff = now - 10000; // keep 10 seconds of history
-  
-  historyRef.current.forEach((pt) => {
-    // Map θ1 and θ2 values to canvas coordinates using the defined margins
-    const x = p5.map(pt.theta1, xMin, xMax, margin, p5.width - margin);
-    const y = p5.map(pt.theta2+Math.PI, yMin, yMax, p5.height - margin, margin);
-    // Determine alpha (transparency) based on the age of the point
-    const alpha = p5.map(pt.time, cutoff, now, 50, 255);
-    p5.noStroke();
-    p5.fill(0, 50, 100, alpha);
-    p5.ellipse(x, y, 2, 2);
-  });
-};
-
-
-
-  // ===================== Mouse Interactions =====================
+  // ------------------ Mouse Interactions ------------------
   const mousePressed = (p5) => {
     const originX = 300;
-    const originY = 150;
+    const originY = 50;
     const { theta1, theta2 } = stateRef.current;
     const x1 = originX + l1 * p5.sin(theta1);
     const y1 = originY + l1 * p5.cos(theta1);
     const x2 = x1 + l2 * p5.sin(theta2 + Math.PI);
     const y2 = y1 + l2 * p5.cos(theta2 + Math.PI);
 
-    if (p5.dist(p5.mouseX, p5.mouseY, x2, y2) < m2) {
-      draggingRef.current = "mass2";
-    } else if (p5.dist(p5.mouseX, p5.mouseY, x1, y1) < m1) {
-      draggingRef.current = "mass1";
+    if (p5.dist(p5.mouseX, p5.mouseY, x1, y1) < m1) {
+      draggingRef.current = 'mass1';
+    } else if (p5.dist(p5.mouseX, p5.mouseY, x2, y2) < m2) {
+      draggingRef.current = 'mass2';
     } else {
-      draggingRef.current = null;
+      draggingRef.current = false;
     }
   };
 
   const mouseDragged = (p5) => {
-    if (draggingRef.current === "mass1") {
-      const originX = 300;
-      const originY = 150;
+    const originX = 300;
+    const originY = 50;
+    if (draggingRef.current === 'mass1') {
       const newTheta1 = p5.atan2(p5.mouseY - originY, p5.mouseX - originX) - Math.PI / 2;
       stateRef.current.theta1 = -newTheta1;
       stateRef.current.omega1 = 0;
-    } else if (draggingRef.current === "mass2") {
-      const originX = 300;
-      const originY = 150;
+    } else if (draggingRef.current === 'mass2') {
       const { theta1 } = stateRef.current;
       const x1 = originX + l1 * p5.sin(theta1);
       const y1 = originY + l1 * p5.cos(theta1);
-      const newTheta2 = -p5.atan2(p5.mouseY - y1, p5.mouseX - x1) - Math.PI/2;
+      const newTheta2 = -p5.atan2(p5.mouseY - y1, p5.mouseX - x1) - Math.PI / 2;
       stateRef.current.theta2 = newTheta2;
       stateRef.current.omega2 = 0;
     }
   };
 
   const mouseReleased = () => {
-    draggingRef.current = null;
+    draggingRef.current = false;
   };
 
-  // ===================== Render =====================
+  // ------------------ Phase Plot Sketch ------------------
+  const setupPhasePlot = (p5, canvasParentRef) => {
+    p5.createCanvas(500, 500).parent(canvasParentRef);
+    p5.frameRate(60); // Ensure continuous updates
+  };
+
+  const drawPhasePlot = (p5) => {
+    p5.background(255);
+
+    // Define margins and mapping ranges for θ1 and θ2
+    const margin = 50;
+    const xMin = -Math.PI, xMax = Math.PI;
+    const yMin = -Math.PI, yMax = Math.PI;
+
+    // Draw axes
+    p5.stroke(0);
+    p5.strokeWeight(1);
+    const yAxisPos = p5.map(0, yMin, yMax, p5.height - margin, margin);
+    p5.line(margin, yAxisPos, p5.width - margin, yAxisPos);
+    const xAxisPos = p5.map(0, xMin, xMax, margin, p5.width - margin);
+    p5.line(xAxisPos, margin, xAxisPos, p5.height - margin);
+
+    // Draw phase plot points
+    p5.noStroke();
+    p5.fill(50, 100, 200, 150);
+    historyRef.current.forEach(pt => {
+      const x = p5.map(pt.theta1, xMin, xMax, margin, p5.width - margin);
+      // Shifting theta2 by π to adjust the phase plot range
+      const y = p5.map(pt.theta2 + Math.PI, yMin, yMax, p5.height - margin, margin);
+      p5.ellipse(x, y, 2, 2);
+    });
+  };
+
+  // ------------------ Render ------------------
   return (
     <div className="container">
-      <h1 className="title">Double Pendulum Simulation with Phase Plot</h1>
-      {/* Control Panel above canvases */}
+      <h1 className="title">Double Pendulum</h1>
       <div className="control-panel">
         <div className="slider-group">
           <div>
@@ -216,7 +187,7 @@ export default function DoublePendulum() {
                 onChange={(e) => setL1(parseFloat(e.target.value))}
               />
             </label>
-            <span> {l1}px</span>
+            <span>{l1}px</span>
           </div>
           <div>
             <label>
@@ -229,7 +200,7 @@ export default function DoublePendulum() {
                 onChange={(e) => setL2(parseFloat(e.target.value))}
               />
             </label>
-            <span> {l2}px</span>
+            <span>{l2}px</span>
           </div>
           <div>
             <label>
@@ -242,7 +213,7 @@ export default function DoublePendulum() {
                 onChange={(e) => setM1(parseFloat(e.target.value))}
               />
             </label>
-            <span> {m1}</span>
+            <span>{m1}</span>
           </div>
           <div>
             <label>
@@ -255,7 +226,7 @@ export default function DoublePendulum() {
                 onChange={(e) => setM2(parseFloat(e.target.value))}
               />
             </label>
-            <span> {m2}</span>
+            <span>{m2}</span>
           </div>
           <div>
             <label>
@@ -269,11 +240,10 @@ export default function DoublePendulum() {
                 onChange={(e) => setSimSpeed(parseFloat(e.target.value))}
               />
             </label>
-            <span> {simSpeed}x</span>
+            <span>{simSpeed}x</span>
           </div>
         </div>
       </div>
-      {/* Canvases container */}
       <div className="canvases">
         <div className="canvas">
           <Sketch
@@ -287,9 +257,6 @@ export default function DoublePendulum() {
         <div className="canvas">
           <Sketch setup={setupPhasePlot} draw={drawPhasePlot} />
         </div>
-      </div>
-      <div className="back-link">
-        <Link to="/">Back to Landing Page</Link>
       </div>
     </div>
   );
