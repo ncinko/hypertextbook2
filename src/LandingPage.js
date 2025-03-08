@@ -6,7 +6,7 @@ export default function LandingPage() {
   return (
     <div className="max-w-3xl mx-auto text-center p-6">
       <h1 className="text-3xl font-bold mb-6">
-        Welcome to the Physics Interactive Website
+        Welcome to the Physics Nook
       </h1>
       <p className="mb-4">
         Explore interactive simulations and explanations of various physics topics.

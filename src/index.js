@@ -10,7 +10,7 @@ const root = ReactDOM.createRoot(container);
 
 root.render(
   <React.StrictMode>
-    <HashRouter basename="/hypertextbook2">
+    <HashRouter>
       <App />
     </HashRouter>
   </React.StrictMode>
