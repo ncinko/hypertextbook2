@@ -5,9 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Redirecting...</title>
     <script>
-        var path = window.location.pathname;
-        var newUrl = window.location.origin + "/hypertextbook2" + "/#" + path;
-        window.location.replace(newUrl);
+        (function() {
+            var redirectPath = window.location.pathname;
+            var newUrl = window.location.origin + "/your-repo" + redirectPath;
+            window.location.replace(newUrl);
+        })();
     </script>
 </head>
 <body>
