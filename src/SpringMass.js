@@ -158,7 +158,7 @@ export default function SpringMass() {
         <div className="slider-group">
           <div>
             <label>
-              Spring Constant (k): {k.toFixed(2)}
+              Spring Constant: {k.toFixed(2)}
               <input
                 type="range"
                 min="0.1"
@@ -171,7 +171,7 @@ export default function SpringMass() {
           </div>
           <div>
             <label>
-              Mass (m): {mass.toFixed(2)}
+              Mass: {mass.toFixed(2)}
               <input
                 type="range"
                 min="0.5"

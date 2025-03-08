@@ -1,13 +1,13 @@
 {
   "files": {
     "main.css": "/hypertextbook2/static/css/main.b5a6ae7c.css",
-    "main.js": "/hypertextbook2/static/js/main.487ed575.js",
+    "main.js": "/hypertextbook2/static/js/main.08f0325b.js",
     "index.html": "/hypertextbook2/index.html",
     "main.b5a6ae7c.css.map": "/hypertextbook2/static/css/main.b5a6ae7c.css.map",
-    "main.487ed575.js.map": "/hypertextbook2/static/js/main.487ed575.js.map"
+    "main.08f0325b.js.map": "/hypertextbook2/static/js/main.08f0325b.js.map"
   },
   "entrypoints": [
     "static/css/main.b5a6ae7c.css",
-    "static/js/main.487ed575.js"
+    "static/js/main.08f0325b.js"
   ]
 }

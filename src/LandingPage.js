@@ -5,8 +5,8 @@ import './styles.css';
 export default function LandingPage() {
   const canvasRef = useRef(null);
   const starsRef = useRef([
-    { x: 150, y: 150, size: 8, color: '#bde5f4', vx: 0, vy: 0.15, mass: 4 },
-    { x: 250, y: 150, size: 16, color: '#f5957a', vx: 0, vy: -0.1, mass: 8 }
+    { x: 250, y: 150, size: 8, color: '#bde5f4', vx: 0, vy: 0.15, mass: 4 },
+    { x: 350, y: 150, size: 16, color: '#f5957a', vx: 0, vy: -0.1, mass: 8 }
   ]);
   const [growingStar, setGrowingStar] = useState(null);
   const holdStartRef = useRef(null);
@@ -19,8 +19,8 @@ export default function LandingPage() {
   useEffect(() => {
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
-    canvas.width = 400;
-    canvas.height = 300;
+    canvas.width = 600;
+    canvas.height = 400;
 
 function updateStars() {
   let newStars = [];

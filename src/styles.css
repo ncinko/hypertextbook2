@@ -1,12 +1,29 @@
+body {
+  background-color: #f8f9fa;
+  margin: 0;
+  padding: 0;
+  min-height: 97vh;
+}
+
+
 /* Landing Page Styles */
 .landing-container {
-  min-height: 100vh;
+  min-height: 86vh;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   background-color: #f8f9fa;
   padding: 2rem;
+}
+
+.binary-star-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background-color: #f8f9fa;
+  padding: 1rem;
 }
 
 .hero-section {
@@ -79,34 +96,37 @@
 
 .slider-group {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
+  justify-content: center;
   gap: 1rem;
   max-width: 400px;
-  width: 100%;
+  width: 80%;
 }
 
 .canvases {
   display: flex;
-  flex-direction: row;
-  justify-content: center;
+  flex-wrap: wrap;
+  justify-content: space-between;
   gap: 1rem;
 }
 
 .canvas {
-  margin: 1rem;
+  flex: 1 1 45%;
+  margin-bottom: 20px;
 }
 
-.back-link {
-  margin-top: 1rem;
-}
-
-/* When the screen width is 768px or less, stack the canvases */
+/* On smaller screens, stack the canvases vertically */
 @media (max-width: 768px) {
   .canvases {
     flex-direction: column;
+    align-items: center;
+  }
+  
+  .canvas {
+    width: 100%;
+    flex: none;
   }
 }
-
 /* Navbar */
 .navbar {
     background: #1a1a2e;
