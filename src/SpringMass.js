@@ -18,13 +18,25 @@ export default function SpringMass() {
   const prevTimeSim = useRef(0);
   // For tracking dragging status
   const draggingRef = useRef(false);
-  // Define the mass size (diameter) for both drawing and hit detection
+  // Define the mass size (diameter) for hit detection
   const massSize = 30;
 
-  // ===== Simulation Canvas (Spring Animation) =====
+  // ===== Responsive Simulation Canvas (Spring Animation) =====
   const setupSim = (p5, canvasParentRef) => {
-    p5.createCanvas(600, 400).parent(canvasParentRef);
+    const resizeCanvasToParent = () => {
+      const parentWidth = canvasParentRef.getBoundingClientRect().width;
+      // Maintain the original aspect ratio (600:400 -> 3:2)
+      const canvasWidth = parentWidth;
+      const canvasHeight = canvasWidth * (600 / 600);
+      p5.resizeCanvas(canvasWidth, canvasHeight);
+    };
+
+    const parentWidth = canvasParentRef.getBoundingClientRect().width;
+    const canvasWidth = parentWidth;
+    const canvasHeight = canvasWidth * (600 / 600);
+    p5.createCanvas(canvasWidth, canvasHeight).parent(canvasParentRef);
     prevTimeSim.current = p5.millis();
+    p5.windowResized = resizeCanvasToParent;
   };
 
   const drawSim = (p5) => {
@@ -38,7 +50,6 @@ export default function SpringMass() {
 
     // Retrieve current simulation state
     let { x, v } = stateRef.current;
-
     // Compute acceleration using Hooke's Law with damping: a = (-k*x - damping*v) / mass
     const a = (-k * x - damping * v) / mass;
 
@@ -54,12 +65,10 @@ export default function SpringMass() {
     const cutoff = currentTime - 10000;
     historyRef.current = historyRef.current.filter((pt) => pt.t >= cutoff);
 
-    // Define drawing coordinates for the simulation:
-    const originX = 300;
-    const originY = 50;
-    // Equilibrium position (vertical)
-    const equilibriumY = originY + 200;
-    // Current mass position is equilibrium plus displacement
+    // Define drawing coordinates responsively:
+    const originX = p5.width / 2; // center horizontally
+    const originY = p5.height * (50 / 400); // scale the original 50px offset
+    const equilibriumY = originY + p5.height * (200 / 400); // maintain the relative offset (200px originally)
     const massY = equilibriumY + x;
 
     // Draw the spring as a zig-zag between the fixed origin and the mass
@@ -79,19 +88,19 @@ export default function SpringMass() {
     p5.vertex(originX, massY);
     p5.endShape();
 
-    // Draw the mass as a red circle
+    // Draw the mass as a circle (scaled by mass)
     p5.fill(127);
-    p5.ellipse(originX, massY, 20*Math.sqrt(mass), 20*Math.sqrt(mass));
+    p5.ellipse(originX, massY, 20 * Math.sqrt(mass), 20 * Math.sqrt(mass));
   };
 
   // ===== Mouse Interactions for Dragging the Mass =====
   const mousePressed = (p5) => {
-    const originX = 300;
-    const originY = 50;
-    const equilibriumY = originY + 200;
+    const originX = p5.width / 2;
+    const originY = p5.height * (50 / 400);
+    const equilibriumY = originY + p5.height * (200 / 400);
     const { x } = stateRef.current;
     const massY = equilibriumY + x;
-    // Check if the mouse is within half the mass's diameter (i.e. a circle radius)
+    // Check if the mouse is within half the mass's diameter
     const d = p5.dist(p5.mouseX, p5.mouseY, originX, massY);
     if (d < massSize / 2) {
       draggingRef.current = true;
@@ -100,8 +109,8 @@ export default function SpringMass() {
 
   const mouseDragged = (p5) => {
     if (draggingRef.current) {
-      const originY = 50;
-      const equilibriumY = originY + 200;
+      const originY = p5.height * (50 / 400);
+      const equilibriumY = originY + p5.height * (200 / 400);
       // New displacement is mouseY minus equilibrium position
       let newX = p5.mouseY - equilibriumY;
       // Update the simulation state and reset velocity
@@ -114,10 +123,17 @@ export default function SpringMass() {
     draggingRef.current = false;
   };
 
-  // ===== Phase Plot Canvas (Displacement vs. Velocity) =====
+  // ===== Responsive Phase Plot Canvas (Displacement vs. Velocity) =====
   const setupPhase = (p5, canvasParentRef) => {
-    p5.createCanvas(400, 400).parent(canvasParentRef);
-    p5.loop(); // Ensure continuous redraw
+    const resizeCanvasToParent = () => {
+      const parentWidth = canvasParentRef.getBoundingClientRect().width;
+      p5.resizeCanvas(parentWidth, parentWidth);
+    };
+
+    const parentWidth = canvasParentRef.getBoundingClientRect().width;
+    p5.createCanvas(parentWidth, parentWidth).parent(canvasParentRef);
+    p5.loop();
+    p5.windowResized = resizeCanvasToParent;
   };
 
   const drawPhase = (p5) => {

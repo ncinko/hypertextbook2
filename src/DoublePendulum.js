@@ -28,11 +28,19 @@ export default function DoublePendulum() {
   const g = 1;
   const prevTimeRef = useRef(0);
 
-  // ------------------ Simulation Sketch ------------------
+  // ------------------ Responsive Simulation Sketch ------------------
   const setupSim = (p5, canvasParentRef) => {
-    p5.createCanvas(600, 600).parent(canvasParentRef);
-    p5.frameRate(60); // Force continuous drawing
+    const resizeCanvasToParent = () => {
+      const parentWidth = canvasParentRef.getBoundingClientRect().width;
+      // Maintain a square canvas based on parent's width
+      p5.resizeCanvas(parentWidth, parentWidth);
+    };
+
+    const parentWidth = canvasParentRef.getBoundingClientRect().width;
+    p5.createCanvas(parentWidth, parentWidth).parent(canvasParentRef);
+    p5.frameRate(60);
     prevTimeRef.current = p5.millis();
+    p5.windowResized = resizeCanvasToParent;
   };
 
   const drawSim = (p5) => {
@@ -71,20 +79,30 @@ export default function DoublePendulum() {
 
       stateRef.current = { theta1, theta2, omega1, omega2 };
     }
-	stateRef.current = { theta1, theta2, omega1, omega2 }
+    // Ensure state is up to date
+    stateRef.current = { theta1, theta2, omega1, omega2 };
 
     // Record history for the phase plot (keep last 10 seconds)
-    historyRef.current.push({theta1, theta2, time: currentTime});
-	const cutoff = currentTime - 10000;
+    historyRef.current.push({ theta1, theta2, time: currentTime });
+    const cutoff = currentTime - 10000;
     historyRef.current = historyRef.current.filter(pt => pt.time >= cutoff);
 
+    // Responsive scaling: assume a base width of 600 (original design)
+    const scaleFactor = p5.width / 600;
+    // Use a responsive origin: center horizontally and scale vertical offset
+    const originX = p5.width / 2;
+    const originY = 50 * scaleFactor;
+    // Scale pendulum lengths and masses
+    const effectiveL1 = l1 * scaleFactor;
+    const effectiveL2 = l2 * scaleFactor;
+    const effectiveM1 = m1 * scaleFactor;
+    const effectiveM2 = m2 * scaleFactor;
+
     // Calculate pendulum bob positions
-    const originX = 300;
-    const originY = 50;
-    const x1 = originX + l1 * p5.sin(theta1);
-    const y1 = originY + l1 * p5.cos(theta1);
-    const x2 = x1 + l2 * p5.sin(theta2 + Math.PI);
-    const y2 = y1 + l2 * p5.cos(theta2 + Math.PI);
+    const x1 = originX + effectiveL1 * p5.sin(theta1);
+    const y1 = originY + effectiveL1 * p5.cos(theta1);
+    const x2 = x1 + effectiveL2 * p5.sin(theta2 + Math.PI);
+    const y2 = y1 + effectiveL2 * p5.cos(theta2 + Math.PI);
 
     // Draw arms and bobs
     p5.stroke(0);
@@ -93,23 +111,28 @@ export default function DoublePendulum() {
     p5.line(x1, y1, x2, y2);
 
     p5.fill(127);
-    p5.ellipse(x1, y1, m1, m1);
-    p5.ellipse(x2, y2, m2, m2);
+    p5.ellipse(x1, y1, effectiveM1, effectiveM1);
+    p5.ellipse(x2, y2, effectiveM2, effectiveM2);
   };
 
-  // ------------------ Mouse Interactions ------------------
+  // ------------------ Responsive Mouse Interactions ------------------
   const mousePressed = (p5) => {
-    const originX = 300;
-    const originY = 50;
+    const scaleFactor = p5.width / 600;
+    const originX = p5.width / 2;
+    const originY = 50 * scaleFactor;
+    const effectiveL1 = l1 * scaleFactor;
+    const effectiveL2 = l2 * scaleFactor;
+    const effectiveM1 = m1 * scaleFactor;
+    const effectiveM2 = m2 * scaleFactor;
     const { theta1, theta2 } = stateRef.current;
-    const x1 = originX + l1 * p5.sin(theta1);
-    const y1 = originY + l1 * p5.cos(theta1);
-    const x2 = x1 + l2 * p5.sin(theta2 + Math.PI);
-    const y2 = y1 + l2 * p5.cos(theta2 + Math.PI);
+    const x1 = originX + effectiveL1 * p5.sin(theta1);
+    const y1 = originY + effectiveL1 * p5.cos(theta1);
+    const x2 = x1 + effectiveL2 * p5.sin(theta2 + Math.PI);
+    const y2 = y1 + effectiveL2 * p5.cos(theta2 + Math.PI);
 
-    if (p5.dist(p5.mouseX, p5.mouseY, x1, y1) < m1) {
+    if (p5.dist(p5.mouseX, p5.mouseY, x1, y1) < effectiveM1) {
       draggingRef.current = 'mass1';
-    } else if (p5.dist(p5.mouseX, p5.mouseY, x2, y2) < m2) {
+    } else if (p5.dist(p5.mouseX, p5.mouseY, x2, y2) < effectiveM2) {
       draggingRef.current = 'mass2';
     } else {
       draggingRef.current = false;
@@ -117,16 +140,18 @@ export default function DoublePendulum() {
   };
 
   const mouseDragged = (p5) => {
-    const originX = 300;
-    const originY = 50;
+    const scaleFactor = p5.width / 600;
+    const originX = p5.width / 2;
+    const originY = 50 * scaleFactor;
     if (draggingRef.current === 'mass1') {
       const newTheta1 = p5.atan2(p5.mouseY - originY, p5.mouseX - originX) - Math.PI / 2;
       stateRef.current.theta1 = -newTheta1;
       stateRef.current.omega1 = 0;
     } else if (draggingRef.current === 'mass2') {
       const { theta1 } = stateRef.current;
-      const x1 = originX + l1 * p5.sin(theta1);
-      const y1 = originY + l1 * p5.cos(theta1);
+      const effectiveL1 = l1 * scaleFactor;
+      const x1 = originX + effectiveL1 * p5.sin(theta1);
+      const y1 = originY + effectiveL1 * p5.cos(theta1);
       const newTheta2 = -p5.atan2(p5.mouseY - y1, p5.mouseX - x1) - Math.PI / 2;
       stateRef.current.theta2 = newTheta2;
       stateRef.current.omega2 = 0;
@@ -137,10 +162,17 @@ export default function DoublePendulum() {
     draggingRef.current = false;
   };
 
-  // ------------------ Phase Plot Sketch ------------------
+  // ------------------ Responsive Phase Plot Sketch ------------------
   const setupPhasePlot = (p5, canvasParentRef) => {
-    p5.createCanvas(500, 500).parent(canvasParentRef);
-    p5.frameRate(60); // Ensure continuous updates
+    const resizeCanvasToParent = () => {
+      const parentWidth = canvasParentRef.getBoundingClientRect().width;
+      p5.resizeCanvas(parentWidth, parentWidth);
+    };
+
+    const parentWidth = canvasParentRef.getBoundingClientRect().width;
+    p5.createCanvas(parentWidth, parentWidth).parent(canvasParentRef);
+    p5.frameRate(60);
+    p5.windowResized = resizeCanvasToParent;
   };
 
   const drawPhasePlot = (p5) => {

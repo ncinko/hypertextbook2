@@ -25,22 +25,27 @@ export default function IdealGas() {
   };
 
   // Responsive Simulation Canvas
-  const setupSim = (p5, canvasParentRef) => {
-    const resizeCanvasToParent = () => {
-      const canvasWidth = canvasParentRef.offsetWidth || 600;
-      const canvasHeight = canvasWidth / 1.5; // maintain 3:2 ratio
-      p5.resizeCanvas(canvasWidth, canvasHeight);
-    };
-
-    const canvasWidth = canvasParentRef.offsetWidth || 600;
-    const canvasHeight = canvasWidth / 1.5;
-    const canvas = p5.createCanvas(canvasWidth, canvasHeight);
-    canvas.parent(canvasParentRef);
-    initializeParticles(p5, canvasWidth, canvasHeight);
-    p5.loop();
-
-    p5.windowResized = resizeCanvasToParent;
+  // In setupSim, use the parent's bounding rect for a more reliable width
+const setupSim = (p5, canvasParentRef) => {
+  const resizeCanvasToParent = () => {
+    const parentWidth = canvasParentRef.getBoundingClientRect().width;
+    const canvasWidth = parentWidth || 600;
+    const canvasHeight = canvasWidth / 1; // keep 3:2 aspect ratio
+    p5.resizeCanvas(canvasWidth, canvasHeight);
   };
+
+  const parentWidth = canvasParentRef.getBoundingClientRect().width;
+  const canvasWidth = parentWidth || 600;
+  const canvasHeight = canvasWidth / 1;
+  const canvas = p5.createCanvas(canvasWidth, canvasHeight);
+  canvas.parent(canvasParentRef);
+  initializeParticles(p5, canvasWidth, canvasHeight);
+  p5.loop();
+
+  // Update canvas size on window resize
+  p5.windowResized = resizeCanvasToParent;
+};
+
 
   const drawSim = (p5) => {
     p5.background(240);

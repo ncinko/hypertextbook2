@@ -96,7 +96,7 @@ body {
 
 .slider-group {
   display: flex;
-  flex-direction: row;
+  flex-wrap: nowrap; /* default: keep sliders in one line */
   justify-content: center;
   gap: 1rem;
   max-width: 400px;
@@ -107,11 +107,14 @@ body {
   display: flex;
   flex-wrap: wrap;
   justify-content: space-between;
-  gap: 1rem;
 }
 
+/* Constrain each canvas container to 45% of the parent width */
 .canvas {
   flex: 1 1 45%;
+  max-width: 45%;
+  box-sizing: border-box;
+  padding: 10px;
   margin-bottom: 20px;
 }
 
@@ -124,7 +127,11 @@ body {
   
   .canvas {
     width: 100%;
+	max-width: 100%;
     flex: none;
+  }
+  .slider-group {
+    flex-wrap: wrap; /* allow wrapping when screen is too narrow */
   }
 }
 /* Navbar */
