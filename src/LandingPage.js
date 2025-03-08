@@ -6,7 +6,7 @@ export default function LandingPage() {
   const canvasRef = useRef(null);
   const starsRef = useRef([
     { x: 150, y: 150, size: 8, color: '#bde5f4', vx: 0, vy: 0.15, mass: 4 },
-    { x: 250, y: 150, size: 16, color: '#f5957a', vx: 0, vy: -0.075, mass: 8 }
+    { x: 250, y: 150, size: 16, color: '#f5957a', vx: 0, vy: -0.1, mass: 8 }
   ]);
   const [growingStar, setGrowingStar] = useState(null);
   const holdStartRef = useRef(null);
@@ -194,7 +194,12 @@ function updateStars() {
   return (
     <div className="landing-container">
       <div className="binary-star-container">
-        <canvas ref={canvasRef} className="binary-star-canvas"></canvas>
+        <canvas 
+          ref={canvasRef} 
+          className="binary-star-canvas" 
+          onMouseDown={handleMouseDown} 
+          onMouseUp={handleMouseUp}
+        ></canvas>
       </div>
       <div className="hero-section">
         <h1 className="hero-title">Welcome to the Physics Nook</h1>
@@ -202,6 +207,8 @@ function updateStars() {
           Explore interactive simulations of various physics topics.
         </p>
       </div>
+      
+      
     </div>
   );
 }
