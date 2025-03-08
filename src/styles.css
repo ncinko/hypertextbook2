@@ -1,0 +1,36 @@
+/* src/styles.css */
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  text-align: center;
+  padding: 1.5rem;
+}
+
+.control-panel {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 1rem;
+}
+
+.slider-group {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  max-width: 400px;
+  width: 100%;
+}
+
+.canvases {
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+  gap: 1rem;
+}
+
+.canvas {
+  margin: 1rem;
+}
+
+.back-link {
+  margin-top: 1rem;
+}

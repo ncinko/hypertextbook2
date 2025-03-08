@@ -1,5 +1,6 @@
 // src/App.js
 import React from 'react';
+import './styles.css';
 import {Routes, Route, Link } from 'react-router-dom';
 import LandingPage from './LandingPage';
 import DoublePendulum from './DoublePendulum';

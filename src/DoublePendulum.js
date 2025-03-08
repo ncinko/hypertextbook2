@@ -1,5 +1,6 @@
 // src/DoublePendulum.js
 import React, { useState, useRef } from 'react';
+import './styles.css';
 import Sketch from 'react-p5';
 import { Link } from 'react-router-dom';
 
@@ -40,7 +41,7 @@ export default function DoublePendulum() {
     // Compute time step in seconds; cap for stability, then scale with simSpeed
     let dt = (p5.millis() - prevTime.current) / 1000;
     if (dt > 0.05) dt = 0.05;
-    dt *= simSpeed*10;
+    dt *= simSpeed * 10;
     prevTime.current = p5.millis();
 
     // Retrieve current simulation state
@@ -102,29 +103,57 @@ export default function DoublePendulum() {
 
   // ===================== Phase Plot Canvas =====================
   const setupPhasePlot = (p5, canvasParentRef) => {
-    p5.createCanvas(400, 400).parent(canvasParentRef);
+    p5.createCanvas(500, 500).parent(canvasParentRef);
   };
 
   const drawPhasePlot = (p5) => {
-    // Clear background with some transparency to create a fading effect
-    p5.background(255, 255, 255, 50);
-    const now = p5.millis();
-    const cutoff = now - 10000; // 10-second history
+  // Clear the background with slight transparency
+  p5.background(255, 255, 255, 50);
 
-    historyRef.current.forEach((pt) => {
-      // Map theta1 from [-PI, PI] to x position [0, p5.width]
-      const x = p5.map(pt.theta1, -Math.PI, Math.PI, 100, p5.width/1.5);
-      // Map theta2 from [-PI, PI] to y position [p5.height, 0] (inverting y-axis)
-      const y = p5.map(pt.theta2, -Math.PI, Math.PI, p5.height/1.5, 100);
-      
-      // Compute alpha based on age: older points are more transparent.
-      const alpha = p5.map(pt.time, cutoff, now, 50, 255);
-      
-      p5.noStroke();
-      p5.fill(0, 50, 200, alpha); // Blue color for phase points
-      p5.ellipse(x, y, 2, 2);
-    });
-  };
+  // Define margins and mapping ranges for θ1 and θ2
+  const margin = 50;
+  const xMin = -Math.PI, xMax = Math.PI; // for θ1
+  const yMin = -Math.PI, yMax = Math.PI; // for θ2
+
+  // Draw axes
+  p5.stroke(0);
+  p5.strokeWeight(1);
+  
+  // Horizontal axis for θ2 = 0
+  const yAxisHorizontal = p5.map(0, yMin, yMax, p5.height - margin, margin);
+  p5.line(margin, yAxisHorizontal, p5.width - margin, yAxisHorizontal);
+  
+  // Vertical axis for θ1 = 0
+  const xAxisVertical = p5.map(0, xMin, xMax, margin, p5.width - margin);
+  p5.line(xAxisVertical, margin, xAxisVertical, p5.height - margin);
+  
+  // Optional: Draw labels for the axes
+  p5.textSize(14);
+  p5.textFont('Verdana')
+  p5.textStyle('normal')
+  p5.fill(0);
+  p5.textAlign("right", "center");
+  p5.text("Angle 1", xAxisVertical - 5, margin);
+  p5.textAlign("center", "top");
+  p5.text("Angle 2", p5.width - margin, yAxisHorizontal + 5);
+  
+  // Draw the phase points (each point represents {theta1, theta2} at a given time)
+  const now = p5.millis();
+  const cutoff = now - 10000; // keep 10 seconds of history
+  
+  historyRef.current.forEach((pt) => {
+    // Map θ1 and θ2 values to canvas coordinates using the defined margins
+    const x = p5.map(pt.theta1, xMin, xMax, margin, p5.width - margin);
+    const y = p5.map(pt.theta2+Math.PI, yMin, yMax, p5.height - margin, margin);
+    // Determine alpha (transparency) based on the age of the point
+    const alpha = p5.map(pt.time, cutoff, now, 50, 255);
+    p5.noStroke();
+    p5.fill(0, 50, 100, alpha);
+    p5.ellipse(x, y, 2, 2);
+  });
+};
+
+
 
   // ===================== Mouse Interactions =====================
   const mousePressed = (p5) => {
@@ -169,108 +198,98 @@ export default function DoublePendulum() {
   };
 
   // ===================== Render =====================
-return (
-  <div className="max-w-5xl mx-auto text-center p-6">
-    <h1 className="text-2xl font-bold mb-4">
-      Double Pendulum Simulation with Phase Plot
-    </h1>
-    {/* Control Panel above canvases */}
-    <div className="flex justify-center mb-4">
-      <div className="space-y-4 max-w-md w-full">
-        <div>
-          <label>
-            Length 1:&nbsp;
-            <input
-              type="range"
-              min="50"
-              max="300"
-              value={l1}
-              onChange={(e) => setL1(parseFloat(e.target.value))}
-            />
-          </label>
-          <span> {l1}px</span>
-        </div>
-        <div>
-          <label>
-            Length 2:&nbsp;
-            <input
-              type="range"
-              min="50"
-              max="300"
-              value={l2}
-              onChange={(e) => setL2(parseFloat(e.target.value))}
-            />
-          </label>
-          <span> {l2}px</span>
-        </div>
-        <div>
-          <label>
-            Mass 1:&nbsp;
-            <input
-              type="range"
-              min="10"
-              max="50"
-              value={m1}
-              onChange={(e) => setM1(parseFloat(e.target.value))}
-            />
-          </label>
-          <span> {m1}</span>
-        </div>
-        <div>
-          <label>
-            Mass 2:&nbsp;
-            <input
-              type="range"
-              min="10"
-              max="50"
-              value={m2}
-              onChange={(e) => setM2(parseFloat(e.target.value))}
-            />
-          </label>
-          <span> {m2}</span>
-        </div>
-        <div>
-          <label>
-            Simulation Speed:&nbsp;
-            <input
-              type="range"
-              min="0.1"
-              max="5"
-              step="0.1"
-              value={simSpeed}
-              onChange={(e) => setSimSpeed(parseFloat(e.target.value))}
-            />
-          </label>
-          <span> {simSpeed}x</span>
+  return (
+    <div className="container">
+      <h1 className="title">Double Pendulum Simulation with Phase Plot</h1>
+      {/* Control Panel above canvases */}
+      <div className="control-panel">
+        <div className="slider-group">
+          <div>
+            <label>
+              Length 1:&nbsp;
+              <input
+                type="range"
+                min="50"
+                max="300"
+                value={l1}
+                onChange={(e) => setL1(parseFloat(e.target.value))}
+              />
+            </label>
+            <span> {l1}px</span>
+          </div>
+          <div>
+            <label>
+              Length 2:&nbsp;
+              <input
+                type="range"
+                min="50"
+                max="300"
+                value={l2}
+                onChange={(e) => setL2(parseFloat(e.target.value))}
+              />
+            </label>
+            <span> {l2}px</span>
+          </div>
+          <div>
+            <label>
+              Mass 1:&nbsp;
+              <input
+                type="range"
+                min="10"
+                max="50"
+                value={m1}
+                onChange={(e) => setM1(parseFloat(e.target.value))}
+              />
+            </label>
+            <span> {m1}</span>
+          </div>
+          <div>
+            <label>
+              Mass 2:&nbsp;
+              <input
+                type="range"
+                min="10"
+                max="50"
+                value={m2}
+                onChange={(e) => setM2(parseFloat(e.target.value))}
+              />
+            </label>
+            <span> {m2}</span>
+          </div>
+          <div>
+            <label>
+              Simulation Speed:&nbsp;
+              <input
+                type="range"
+                min="0.1"
+                max="5"
+                step="0.1"
+                value={simSpeed}
+                onChange={(e) => setSimSpeed(parseFloat(e.target.value))}
+              />
+            </label>
+            <span> {simSpeed}x</span>
+          </div>
         </div>
       </div>
-    </div>
-    {/* Canvases container */}
-    <div className="flex flex-row justify-center">
-      <div className="m-2">
-        <Sketch
-          setup={setupSim}
-          draw={drawSim}
-          mousePressed={mousePressed}
-          mouseDragged={mouseDragged}
-          mouseReleased={mouseReleased}
-        />
+      {/* Canvases container */}
+      <div className="canvases">
+        <div className="canvas">
+          <Sketch
+            setup={setupSim}
+            draw={drawSim}
+            mousePressed={mousePressed}
+            mouseDragged={mouseDragged}
+            mouseReleased={mouseReleased}
+          />
+        </div>
+        <div className="canvas">
+          <Sketch setup={setupPhasePlot} draw={drawPhasePlot} />
+        </div>
       </div>
-      <div className="m-2">
-        <Sketch
-          setup={setupPhasePlot}
-          draw={drawPhasePlot}
-        />
+      <div className="back-link">
+        <Link to="/">Back to Landing Page</Link>
       </div>
     </div>
-    <div className="mt-4">
-      <Link to="/" className="text-blue-500 hover:underline">
-        Back to Landing Page
-      </Link>
-    </div>
-  </div>
-);
-
-
-
+  );
 }

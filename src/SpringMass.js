@@ -2,6 +2,7 @@
 import React, { useState, useRef } from 'react';
 import Sketch from 'react-p5';
 import { Link } from 'react-router-dom';
+import './styles.css';  // Import your custom styles
 
 export default function SpringMass() {
   // Control panel state
@@ -116,13 +117,11 @@ export default function SpringMass() {
   };
 
   return (
-    <div className="max-w-5xl mx-auto text-center p-6">
-      <h1 className="text-2xl font-bold mb-4">
-        Spring-Mass Simulation with Real-Time Phase Plot
-      </h1>
+    <div className="container">
+      <h1>Spring-Mass Simulation with Real-Time Phase Plot</h1>
       {/* Control Panel */}
-      <div className="flex justify-center mb-4">
-        <div className="space-y-4 max-w-md w-full">
+      <div className="control-panel">
+        <div className="slider-group">
           <div>
             <label>
               Spring Constant (k): {k.toFixed(2)}
@@ -165,18 +164,16 @@ export default function SpringMass() {
         </div>
       </div>
       {/* Canvases: Simulation and Phase Plot Side by Side */}
-      <div className="flex flex-col md:flex-row justify-center">
-        <div className="m-2">
+      <div className="canvases">
+        <div className="canvas">
           <Sketch setup={setupSim} draw={drawSim} />
         </div>
-        <div className="m-2">
+        <div className="canvas">
           <Sketch setup={setupPhase} draw={drawPhase} />
         </div>
       </div>
-      <div className="mt-4">
-        <Link to="/" className="text-blue-500 hover:underline">
-          Back to Landing Page
-        </Link>
+      <div className="back-link">
+        <Link to="/">Back to Landing Page</Link>
       </div>
     </div>
   );

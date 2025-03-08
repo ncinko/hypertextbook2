@@ -1,5 +1,6 @@
 // src/index.js
 import React from 'react';
+import './styles.css';
 import ReactDOM from 'react-dom/client';
 import { HashRouter, Routes, Route, Link } from 'react-router-dom';
 import App from './App';
