@@ -16,6 +16,10 @@ export default function SpringMass() {
   // History for phase plot: array of { x, v, t }
   const historyRef = useRef([]);
   const prevTimeSim = useRef(0);
+  // For tracking dragging status
+  const draggingRef = useRef(false);
+  // Define the mass size (diameter) for both drawing and hit detection
+  const massSize = 30;
 
   // ===== Simulation Canvas (Spring Animation) =====
   const setupSim = (p5, canvasParentRef) => {
@@ -38,11 +42,12 @@ export default function SpringMass() {
     // Compute acceleration using Hooke's Law with damping: a = (-k*x - damping*v) / mass
     const a = (-k * x - damping * v) / mass;
 
-    // Update velocity and displacement using Euler integration
-    v += a * dt;
-    x += v * dt;
-    stateRef.current = { x, v };
-
+    // Only update physics when not dragging
+    if (!draggingRef.current) {
+      v += a * dt;
+      x += v * dt;
+      stateRef.current = { x, v };
+    }
     // Push the current state into history for the phase plot
     historyRef.current.push({ x, v, t: currentTime });
     // Keep only data from the last 10 seconds
@@ -75,15 +80,44 @@ export default function SpringMass() {
     p5.endShape();
 
     // Draw the mass as a red circle
-    p5.fill(200, 0, 0);
-    p5.noStroke();
-    const massSize = 30;
-    p5.ellipse(originX, massY, massSize, massSize);
+    p5.fill(127);
+    p5.ellipse(originX, massY, 20*Math.sqrt(mass), 20*Math.sqrt(mass));
+  };
+
+  // ===== Mouse Interactions for Dragging the Mass =====
+  const mousePressed = (p5) => {
+    const originX = 300;
+    const originY = 50;
+    const equilibriumY = originY + 200;
+    const { x } = stateRef.current;
+    const massY = equilibriumY + x;
+    // Check if the mouse is within half the mass's diameter (i.e. a circle radius)
+    const d = p5.dist(p5.mouseX, p5.mouseY, originX, massY);
+    if (d < massSize / 2) {
+      draggingRef.current = true;
+    }
+  };
+
+  const mouseDragged = (p5) => {
+    if (draggingRef.current) {
+      const originY = 50;
+      const equilibriumY = originY + 200;
+      // New displacement is mouseY minus equilibrium position
+      let newX = p5.mouseY - equilibriumY;
+      // Update the simulation state and reset velocity
+      stateRef.current.x = newX;
+      stateRef.current.v = 0;
+    }
+  };
+
+  const mouseReleased = () => {
+    draggingRef.current = false;
   };
 
   // ===== Phase Plot Canvas (Displacement vs. Velocity) =====
   const setupPhase = (p5, canvasParentRef) => {
     p5.createCanvas(400, 400).parent(canvasParentRef);
+    p5.loop(); // Ensure continuous redraw
   };
 
   const drawPhase = (p5) => {
@@ -166,7 +200,13 @@ export default function SpringMass() {
       {/* Canvases: Simulation and Phase Plot Side by Side */}
       <div className="canvases">
         <div className="canvas">
-          <Sketch setup={setupSim} draw={drawSim} />
+          <Sketch
+            setup={setupSim}
+            draw={drawSim}
+            mousePressed={mousePressed}
+            mouseDragged={mouseDragged}
+            mouseReleased={mouseReleased}
+          />
         </div>
         <div className="canvas">
           <Sketch setup={setupPhase} draw={drawPhase} />

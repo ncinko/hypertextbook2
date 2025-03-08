@@ -34,3 +34,10 @@
 .back-link {
   margin-top: 1rem;
 }
+
+/* When the screen width is 768px or less, stack the canvases */
+@media (max-width: 768px) {
+  .canvases {
+    flex-direction: column;
+  }
+}

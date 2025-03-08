@@ -104,6 +104,7 @@ export default function DoublePendulum() {
   // ===================== Phase Plot Canvas =====================
   const setupPhasePlot = (p5, canvasParentRef) => {
     p5.createCanvas(500, 500).parent(canvasParentRef);
+	p5.loop();
   };
 
   const drawPhasePlot = (p5) => {
