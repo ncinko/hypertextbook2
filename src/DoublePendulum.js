@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import Sketch from 'react-p5';
 import './styles.css';
 
@@ -13,9 +13,9 @@ export default function DoublePendulum() {
   // Simulation state: angles (theta) and angular velocities (omega)
   const stateRef = useRef({
     theta1: 0.1,
-    theta2: 2.5,
-    omega1: 0,
-    omega2: 0,
+    theta2: -2.5,
+    omega1: 0.01,
+    omega2: -0.01,
   });
 
   // History for phase plot: stores { time, theta1, theta2 }
@@ -27,6 +27,13 @@ export default function DoublePendulum() {
   // Gravitational constant and time-tracking
   const g = 1;
   const prevTimeRef = useRef(0);
+
+  // Initialize history with the current state
+  useEffect(() => {
+    const { theta1, theta2 } = stateRef.current;
+    const currentTime = prevTimeRef.current;
+    historyRef.current.push({ theta1, theta2, time: currentTime });
+  }, []);
 
   // ------------------ Responsive Simulation Sketch ------------------
   const setupSim = (p5, canvasParentRef) => {
@@ -79,6 +86,7 @@ export default function DoublePendulum() {
 
       stateRef.current = { theta1, theta2, omega1, omega2 };
     }
+
     // Ensure state is up to date
     stateRef.current = { theta1, theta2, omega1, omega2 };
 

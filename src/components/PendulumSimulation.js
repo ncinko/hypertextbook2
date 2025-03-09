@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import Sketch from "react-p5";
+import '../styles.css';
 
 const PendulumSimulation = () => {
   // Length is in meters now.
@@ -85,7 +86,7 @@ const PendulumSimulation = () => {
     const pixelLength = lengthRef.current * meterToPixel;
     const massX = origin.x + pixelLength * Math.sin(angleRef.current);
     const massY = origin.y + pixelLength * Math.cos(angleRef.current);
-    if (p5.dist(p5.mouseX, p5.mouseY, massX, massY) < 30) {
+    if (p5.dist(p5.mouseX, p5.mouseY, massX, massY) < 40) {
       draggingRef.current = true;
     }
   };
@@ -140,9 +141,11 @@ const PendulumSimulation = () => {
           mouseReleased={mouseReleased}
         />
       </div>
-      <div className="flex gap-4 mt-4">
-        <label>
-          Length (m):
+      <div className="control-panel w-full max-w-lg">
+        {/* Control Panel */}
+      <div className="slider-group">
+        <div className="slider-item">
+          <label>Length</label>
           <input
             type="range"
             min="0.5"
@@ -151,12 +154,10 @@ const PendulumSimulation = () => {
             value={length}
             onChange={(e) => setLength(parseFloat(e.target.value))}
           />
-        </label>
-        <span>{length} m</span>
-      </div>
-      <div className="flex gap-4 mt-2">
-        <label>
-          Gravity (m/s²):
+          <span>{length} m</span>
+        </div>
+        <div className="slider-item">
+          <label>Gravity</label>
           <input
             type="range"
             min="1"
@@ -165,8 +166,9 @@ const PendulumSimulation = () => {
             value={gravity}
             onChange={(e) => setGravity(parseFloat(e.target.value))}
           />
-        </label>
-        <span>{gravity} m/s²</span>
+          <span>{gravity} m/s²</span>
+          </div>
+        </div>
       </div>
       <h3 style={{ fontSize: "1.2rem", fontWeight: "600", marginTop: "1rem", color: "#222" }}>Angle vs Time Plot</h3>
       <div className="canvas-container mt-2">

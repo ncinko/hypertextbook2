@@ -9,7 +9,8 @@ body {
 .mathjax-list {
   list-style-type: disc;
   padding-left: 25px; /* Adjust indentation */
-  line-height: 1.8;
+  line-height: 1.9; /* Adjust line height */
+  text-align: left; /* Ensures left alignment */
 }
 
 .mathjax-list li {
@@ -131,7 +132,37 @@ body {
   justify-content: center;
   gap: 1rem;
   max-width: 400px;
-  width: 80%;
+  width: 90%;
+}
+
+
+.slider-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.slider-item label {
+  margin-bottom: 0.5rem;
+}
+
+.slider-item input[type="range"] {
+  width: 100%;
+}
+
+.slider-item span {
+  margin-top: 0.5rem;
+}
+.slider-group label {
+  display: row;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+}
+
+.slider-group input[type="range"] {
+  flex: 1;
+  margin-left: 1rem;
 }
 
 .canvases {
@@ -149,22 +180,7 @@ body {
   margin-bottom: 20px;
 }
 
-/* On smaller screens, stack the canvases vertically */
-@media (max-width: 768px) {
-  .canvases {
-    flex-direction: column;
-    align-items: center;
-  }
-  
-  .canvas {
-    width: 100%;
-	max-width: 100%;
-    flex: none;
-  }
-  .slider-group {
-    flex-wrap: wrap; /* allow wrapping when screen is too narrow */
-  }
-}
+
 /* Navbar */
 .navbar {
     background: #1a1a2e;
@@ -203,4 +219,21 @@ body {
 
 .nav-item:hover {
     color: #ffd700;
+}
+
+/* On smaller screens, stack the canvases vertically */
+@media (max-width: 768px) {
+  .canvases {
+    flex-direction: column;
+    align-items: center;
+  }
+  
+  .canvas {
+    width: 100%;
+	max-width: 100%;
+    flex: none;
+  }
+  .slider-group {
+    flex-wrap: wrap; /* allow wrapping when screen is too narrow */
+  }
 }

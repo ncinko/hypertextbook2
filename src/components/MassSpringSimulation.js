@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
 import Sketch from 'react-p5';
+import '../styles.css'; // Ensure this path is correct
 
 const MassSpringSimulation = ({ initialK = 0.5, initialMass = 1, initialDamping = 0.02 }) => {
   // State variables (using SI units)
@@ -117,6 +118,8 @@ const MassSpringSimulation = ({ initialK = 0.5, initialMass = 1, initialDamping 
     const massY = equilibriumY + x * meterToPixel;
     if (p5.dist(p5.mouseX, p5.mouseY, originX, massY) < massSize / 2) {
       draggingRef.current = true;
+    } else if (p5.mouseX < p5.width * 0.6) {
+      setShowTrace(!showTrace);
     }
   };
 
@@ -175,22 +178,21 @@ const MassSpringSimulation = ({ initialK = 0.5, initialMass = 1, initialDamping 
       {/* Control Panel */}
       <div className="control-panel w-full max-w-lg">
         <div className="slider-group">
-          <label>
-            Spring Constant: {k.toFixed(2)}
+          <div className="slider-item">
+            <label>Spring Constant</label>
             <input type="range" min="0.1" max="2" step="0.01" value={k} onChange={(e) => setK(parseFloat(e.target.value))} />
-          </label>
-          <label>
-            Mass: {mass.toFixed(2)}
+            <span>{k.toFixed(1)} N/m</span>
+          </div>
+          <div className="slider-item">
+            <label>Mass</label>
             <input type="range" min="0.5" max="5" step="0.1" value={mass} onChange={(e) => setMass(parseFloat(e.target.value))} />
-          </label>
-          <label>
-            Damping: {damping.toFixed(2)}
+            <span>{mass.toFixed(1)} kg</span>
+          </div>
+          <div className="slider-item">
+            <label>Damping</label>
             <input type="range" min="0" max="0.1" step="0.005" value={damping} onChange={(e) => setDamping(parseFloat(e.target.value))} />
-          </label>
-          <label>
-            Show Trace:
-            <input type="checkbox" checked={showTrace} onChange={(e) => setShowTrace(e.target.checked)} />
-          </label>
+            <span>{damping.toFixed(2)}</span>
+          </div>
         </div>
       </div>
 
