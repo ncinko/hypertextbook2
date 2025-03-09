@@ -3,6 +3,37 @@ body {
   margin: 0;
   padding: 0;
   min-height: 97vh;
+  font-family: 'Roboto', sans-serif;
+}
+
+.mathjax-list {
+  list-style-type: disc;
+  padding-left: 25px; /* Adjust indentation */
+  line-height: 1.8;
+}
+
+.mathjax-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px; /* Adjust spacing between bullet and text */
+  text-align: left;
+}
+
+.mathjax-align-left {
+  text-align: left !important; /* Ensures left alignment */
+  display: block !important; /* Forces block display */
+}
+
+.left-aligned-container {
+  text-align: left; /* Ensures text and MathJax content are left-aligned */
+}
+
+.left-aligned-container h2 {
+  text-align: left !important;
+}
+
+.left-aligned-container p {
+  text-align: left !important;
 }
 
 

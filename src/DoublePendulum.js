@@ -205,7 +205,7 @@ export default function DoublePendulum() {
   // ------------------ Render ------------------
   return (
     <div className="container">
-      <h1 className="title">Double Pendulum</h1>
+      <h1 style={{ fontSize: "2rem", fontWeight: "600", marginTop: "1rem", color: "#111" }}>Double Pendulum</h1>
       <div className="control-panel">
         <div className="slider-group">
           <div>

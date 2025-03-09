@@ -5,6 +5,7 @@ import LandingPage from './LandingPage';
 import DoublePendulum from './DoublePendulum';
 import SpringMass from './SpringMass';
 import IdealGas from './IdealGas';
+import Oscillations from "./pages/Oscillations";
 
 export default function App() {
     return (
@@ -14,7 +15,7 @@ export default function App() {
                     <Link to="/" className="nav-logo">Physics Nook</Link>
                     <div className="nav-links">
                         <Link to="/double-pendulum" className="nav-item">Chaos</Link>
-                        <Link to="/spring-mass" className="nav-item">Oscillation</Link>
+                        <Link to="/oscillations" className="nav-item">Oscillation</Link>
                         <Link to="/ideal-gas" className="nav-item">Thermo</Link>
                     </div>
                 </div>
@@ -24,6 +25,7 @@ export default function App() {
                 <Route path="/double-pendulum" element={<DoublePendulum />} />
                 <Route path="/spring-mass" element={<SpringMass />} />
                 <Route path="/ideal-gas" element={<IdealGas />} />
+				<Route path="/oscillations" element={<Oscillations />} />
             </Routes>
         </div>
     );

@@ -179,7 +179,7 @@ const setupSim = (p5, canvasParentRef) => {
 
   return (
     <div className="container">
-      <h1>2D Ideal Gas</h1>
+      <h1 style={{ fontSize: "2rem", fontWeight: "600", marginTop: "1rem", color: "#111" }}>2D Ideal Gas</h1>
       <div className="control-panel">
         <div className="slider-group">
           <div>

@@ -204,7 +204,7 @@ function updateStars() {
       <div className="hero-section">
         <h1 className="hero-title">Welcome to the Physics Nook</h1>
         <p className="hero-description">
-          Explore interactive simulations of various physics topics.
+          Explore interactive simulations for a variety of topics.
         </p>
       </div>
       
