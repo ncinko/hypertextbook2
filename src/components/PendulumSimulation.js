@@ -1,6 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
 import Sketch from "react-p5";
-import '../styles.css';
 
 const PendulumSimulation = () => {
   // Length is in meters now.
@@ -131,7 +130,7 @@ const PendulumSimulation = () => {
   };
 
   return (
-    <div className="flex flex-col items-center">
+    <div className="container flex flex-col items-center">
       <div className="canvas-container">
         <Sketch
           setup={setup}

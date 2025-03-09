@@ -1,11 +1,11 @@
 import React from 'react';
-import './styles.css';
 import { Routes, Route, Link } from 'react-router-dom';
 import LandingPage from './LandingPage';
 import DoublePendulum from './DoublePendulum';
 import SpringMass from './SpringMass';
 import IdealGas from './IdealGas';
 import Oscillations from "./pages/Oscillations";
+import './styles/main.css';
 
 export default function App() {
     return (

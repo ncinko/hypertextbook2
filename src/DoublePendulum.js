@@ -1,6 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
 import Sketch from 'react-p5';
-import './styles.css';
 
 export default function DoublePendulum() {
   // Simulation parameters

@@ -1,6 +1,5 @@
 import React, { useState, useRef } from 'react';
 import Sketch from 'react-p5';
-import '../styles.css'; // Ensure this path is correct
 
 const MassSpringSimulation = ({ initialK = 0.5, initialMass = 1, initialDamping = 0.02 }) => {
   // State variables (using SI units)

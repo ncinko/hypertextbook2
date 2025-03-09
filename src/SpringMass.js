@@ -2,7 +2,6 @@
 import React, { useState, useRef } from 'react';
 import Sketch from 'react-p5';
 import { Link } from 'react-router-dom';
-import './styles.css';  // Import your custom styles
 
 export default function SpringMass() {
   // Control panel state

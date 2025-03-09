@@ -1,0 +1,48 @@
+/* canvas.css - Styles for canvas elements and sliders */
+.control-panel {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 1rem;
+  }
+  
+  .slider-group {
+    display: flex;
+    flex-wrap: nowrap;
+    justify-content: center;
+    gap: 1rem;
+    max-width: 400px;
+    width: 90%;
+  }
+  
+  .slider-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  
+  .slider-item label {
+    margin-bottom: 0.5rem;
+  }
+  
+  .slider-item input[type="range"] {
+    width: 100%;
+  }
+  
+  .slider-item span {
+    margin-top: 0.5rem;
+  }
+  
+  .canvases {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+  }
+  
+  .canvas {
+    flex: 1 1 45%;
+    max-width: 45%;
+    box-sizing: border-box;
+    padding: 10px;
+    margin-bottom: 20px;
+  }
+  

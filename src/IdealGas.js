@@ -2,7 +2,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import Sketch from 'react-p5';
 import { Link } from 'react-router-dom';
-import './styles.css';
 
 export default function IdealGas() {
   const [temperature, setTemperature] = useState(50);

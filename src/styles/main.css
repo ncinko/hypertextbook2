@@ -1,0 +1,8 @@
+/* main.css - Import all stylesheets */
+@import url('global.css');
+@import url('navbar.css');
+@import url('landing.css');
+@import url('simulations.css');
+@import url('canvas.css');
+@import url('responsive.css');
+@import url('app.css')

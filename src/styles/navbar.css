@@ -1,0 +1,43 @@
+/* navbar.css - Styles for the navigation bar */
+.navbar {
+    background: #1a1a2e;  /* Your navbar background color */
+    padding: 1rem;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100vw; /* Ensures full viewport width */
+    position: relative; /* Ensures proper positioning */
+    left: 0;
+    top: 0;
+}
+
+.nav-container {
+    width: 80%;  /* Make sure the container inside takes up full space */
+    max-width: 1200px; /* Optional: Limit the width for inner content */
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.nav-logo {
+    font-size: 1.5rem;
+    font-weight: bold;
+    color: #ffd700;
+    text-decoration: none;
+}
+
+.nav-links {
+    display: flex;
+    gap: 1rem;
+}
+
+.nav-item {
+    color: white;
+    text-decoration: none;
+    font-size: 1.2rem;
+    transition: color 0.3s ease;
+}
+
+.nav-item:hover {
+    color: #ffd700;
+}

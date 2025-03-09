@@ -1,0 +1,36 @@
+/* simulations.css - Styles for simulation grid and cards */
+.simulation-grid {
+    display: grid;
+    gap: 1.5rem;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    width: 100%;
+    max-width: 800px;
+  }
+  
+  .simulation-card {
+    display: block;
+    background: white;
+    padding: 1.5rem;
+    border-radius: 8px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    text-decoration: none;
+    color: #333;
+    transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+  }
+  
+  .simulation-card:hover {
+    transform: scale(1.05);
+    box-shadow: 0 6px 10px rgba(0, 0, 0, 0.15);
+  }
+  
+  .simulation-title {
+    font-size: 1.5rem;
+    font-weight: bold;
+  }
+  
+  .simulation-text {
+    margin-top: 0.5rem;
+    font-size: 1rem;
+    color: #555;
+  }
+  
