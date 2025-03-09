@@ -144,33 +144,46 @@ const MassSpringSimulation = ({ initialK = 0.5, initialMass = 1, initialDamping 
 
   const drawPhase = (p5) => {
     p5.background(255);
+    
     // Draw axes (centered at zero for both displacement and velocity)
     p5.stroke(0);
     p5.strokeWeight(1);
-    // Horizontal axis for displacement
-    p5.line(0, p5.height/2, p5.width, p5.height/2);
-    // Vertical axis for velocity
-    p5.line(p5.width/2, 0, p5.width/2, p5.height);
+    p5.line(0, p5.height / 2, p5.width, p5.height / 2); // Displacement axis
+    p5.line(p5.width / 2, 0, p5.width / 2, p5.height); // Velocity axis
 
     // Set mapping ranges for displacement (x) and velocity (v)
-    const xMin = -1.5;  // in meters
-    const xMax = 1.5;
-    const vMin = -2;  // in m/s
-    const vMax = 2;
+    const xMin = -1.5, xMax = 1.5;
+    const vMin = -2, vMax = 2;
+    
+    // Get the current time for fade calculation
+    const currentTime = p5.millis();
+    const fadeDuration = 7000; // Time in ms over which traces fade out
 
-    // Plot the phase trajectory using history
+    // Plot the phase trajectory with fading effect
     p5.noFill();
-    p5.stroke(0, 0, 200);
     p5.strokeWeight(2);
-    p5.beginShape();
-    historyRef.current.forEach((pt) => {
-      const plotX = p5.map(pt.x, xMin, xMax, 0, p5.width);
-      // Invert the y-axis mapping so that higher velocity is upward
-      const plotY = p5.map(pt.v, vMin, vMax, p5.height, 0);
-      p5.vertex(plotX, plotY);
-    });
-    p5.endShape();
-  };
+    
+    for (let i = 1; i < historyRef.current.length; i++) {
+        const pt1 = historyRef.current[i - 1];
+        const pt2 = historyRef.current[i];
+
+        const plotX1 = p5.map(pt1.x, xMin, xMax, 0, p5.width);
+        const plotY1 = p5.map(pt1.v, vMin, vMax, p5.height, 0);
+        const plotX2 = p5.map(pt2.x, xMin, xMax, 0, p5.width);
+        const plotY2 = p5.map(pt2.v, vMin, vMax, p5.height, 0);
+
+        // Calculate fade based on how old the point is
+        const timeDelta = currentTime - pt1.t;
+        const alpha = p5.map(timeDelta, 0, fadeDuration, 255, 0, true); // Fade from full to transparent
+
+        if (alpha > 0) { // Only draw if still visible
+            p5.stroke(0, 150, 150, alpha); // Blue with fading opacity
+            p5.line(plotX1, plotY1, plotX2, plotY2); // Draw fading line segments
+        }
+    }
+};
+
+
 
   return (
     <div className="container flex flex-col items-center">

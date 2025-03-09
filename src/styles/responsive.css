@@ -16,7 +16,9 @@
     }
 
     .container {
-      width: 93%;
+      max-width: 95%;
+      margin: 0 auto; /* Centers it properly */
+      padding: 0 1rem; /* Prevents content from touching screen edges */
     }
   }
   
