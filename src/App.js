@@ -5,6 +5,7 @@ import DoublePendulum from './DoublePendulum';
 import SpringMass from './SpringMass';
 import IdealGas from './IdealGas';
 import Oscillations from "./pages/Oscillations";
+import ElectricFields from "./pages/ElectricFields";
 import './styles/main.css';
 
 export default function App() {
@@ -17,6 +18,7 @@ export default function App() {
                         <Link to="/double-pendulum" className="nav-item">Chaos</Link>
                         <Link to="/oscillations" className="nav-item">Oscillation</Link>
                         <Link to="/ideal-gas" className="nav-item">Thermo</Link>
+                        <Link to="/electric-fields" className="nav-item">Fields</Link>
                     </div>
                 </div>
             </nav>
@@ -26,6 +28,7 @@ export default function App() {
                 <Route path="/spring-mass" element={<SpringMass />} />
                 <Route path="/ideal-gas" element={<IdealGas />} />
 				<Route path="/oscillations" element={<Oscillations />} />
+                <Route path="/electric-fields" element={<ElectricFields/>} />
             </Routes>
         </div>
     );

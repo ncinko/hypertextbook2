@@ -161,7 +161,7 @@ export default function DoublePendulum() {
     if (draggingRef.current === 'mass1') {
       // Compute new θ₁ from mouse position relative to the origin
       const newTheta1 = p5.atan2(p5.mouseY - originY, p5.mouseX - originX) - p5.HALF_PI;
-      stateRef.current.theta1 = newTheta1;
+      stateRef.current.theta1 = -newTheta1;
       stateRef.current.omega1 = 0;
     } else if (draggingRef.current === 'mass2') {
       const { theta1 } = stateRef.current;
@@ -170,7 +170,7 @@ export default function DoublePendulum() {
       const y1 = originY + effectiveL1 * p5.cos(theta1);
       // Compute new θ₂ from mouse position relative to mass1
       const newTheta2 = p5.atan2(p5.mouseY - y1, p5.mouseX - x1) - p5.HALF_PI;
-      stateRef.current.theta2 = newTheta2;
+      stateRef.current.theta2 = -newTheta2;
       stateRef.current.omega2 = 0;
     }
   };
