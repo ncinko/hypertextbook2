@@ -14,7 +14,7 @@ export default function IdealGas() {
       const r = 1;
       const x = p5.random(r, width - r);
       const y = p5.random(r, height - r);
-      const speed = 50;
+      const speed = 70;
       const angle = p5.random(0, 2 * Math.PI);
       const vx = speed * Math.cos(angle);
       const vy = speed * Math.sin(angle);

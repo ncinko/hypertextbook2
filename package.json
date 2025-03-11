@@ -2,7 +2,7 @@
   "name": "new-app",
   "version": "0.1.0",
   "private": false,
-  "homepage": "https://ncinko.github.io/hypertextbook2/",
+  "homepage": "https://physicsnook.com",
   "dependencies": {
     "@testing-library/dom": "^10.4.0",
     "@testing-library/jest-dom": "^6.6.3",
@@ -22,7 +22,7 @@
     "test": "react-scripts test",
     "eject": "react-scripts eject",
     "predeploy": "npm run build",
-    "deploy": "gh-pages -d build --cname ww.physicsnook.com"
+    "deploy": "gh-pages -d build --cname www.physicsnook.com"
   },
   "eslintConfig": {
     "extends": [
