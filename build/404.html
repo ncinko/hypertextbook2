@@ -6,9 +6,19 @@
     <title>Redirecting...</title>
     <script>
         (function() {
-            var redirectPath = window.location.pathname;
-            var newUrl = window.location.origin + "/your-repo" + redirectPath;
-            window.location.replace(newUrl);
+            var path = window.location.pathname;
+            var origin = window.location.origin;
+
+            // If hosted on GitHub Pages (subpath scenario), adjust path
+            if (origin.includes("github.io")) {
+                var repoName = "/hypertextbook2"; // Replace with your GitHub repo name
+                if (!path.startsWith(repoName)) {
+                    window.location.replace(origin + repoName + path);
+                }
+            } else {
+                // Custom domain: Redirect to correct path without repo name
+                window.location.replace(origin + path);
+            }
         })();
     </script>
 </head>

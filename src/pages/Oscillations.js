@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { MathJax, MathJaxContext } from "better-react-mathjax";
 import MassSpringSimulation from "../components/MassSpringSimulation"; // Adjust path if needed
 import PendulumSimulation from "../components/PendulumSimulation"; // Adjust path if needed
+import PendulumDiskSimulation from "../components/PendulumDiskSimulation"; // Adjust path if needed
 
 const Oscillations = () => {
   const [showAnswer, setShowAnswer] = useState(false);
@@ -81,6 +82,17 @@ const Oscillations = () => {
         <MathJax inline>{"\\(\\qquad x(t) \\approx A \\sin(\\sqrt{\\frac{g}{L}} t + \\phi) \\)"}</MathJax>
         
         <PendulumSimulation />
+
+        <h3>Physical Pendulum</h3>
+
+            
+        <p>
+          The angular frequency of a physical pendulum is given by </p>
+          <MathJax >{"\\(\\qquad \\omega = \\sqrt{\\frac{mgd}{I}}\\)."}</MathJax>
+        <p>Here, <MathJax inline>{"\\( d \\)"}</MathJax> represents the distance between the pivot point and the pendulum's center of mass and <MathJax inline>{"\\( I \\)"}</MathJax> represents the moment of inertia (about the pivot point).
+        </p>
+        <PendulumDiskSimulation />
+
         
         <h2>Practice Problems</h2>
         <ol className="mathjax-list">
