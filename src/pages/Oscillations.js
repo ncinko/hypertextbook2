@@ -37,11 +37,10 @@ const Oscillations = () => {
 
         
         <p>A system that returns to the same state after regular intervals of time is said to exhibit <strong> periodic motion</strong>. 
-         This repetitive motion occurs in many physical systems: swinging pendulums, ocean tides, molecular vibrations, and more.
+         This repetitive motion occurs throughout the universe: swinging pendulums, ocean tides, molecular vibrations, and so on.
         It may be also be referred to as oscillatory motion, or more simply, <strong>oscillations</strong>.</p>
 
-        <p>The quintessential oscillation is <strong>simple harmonic motion (SHM)</strong>, which occurs when a restoring force is proportional to a system's displacement from an equilibrium position. 
-        This results in sinusoidal motion, described by key properties such as period, frequency, and amplitude.  Mathematically, we will describe it with the following function.</p>
+        <p>The quintessential oscillation is <strong>simple harmonic motion (SHM)</strong>. This requires a restoring force that is proportional to a system's displacement from its equilibrium position.  The resulting motion is sinusoidal and described with key properties such as period, frequency, and amplitude.  Mathematically, we will use the following function.</p>
 
         <SHMPlot />
 
@@ -79,7 +78,7 @@ const Oscillations = () => {
 
         <h3>Simple Pendulum</h3>
         
-        <p>The pendulum system is a bit more complicated, but it exhibits SHM for "small" oscillations.</p>
+        <p>The pendulum system is a bit more complicated.  Its frequency is dependent on the amplitude of oscillations; larger swings have slightly longer periods.  However, it exhibits SHM for "small" oscillations.</p>
        
         <p>When the angle is near the vertical, the horizontal position of the mass is approximately</p>
         <MathJax inline>{"\\(\\qquad x(t) \\approx A \\sin(\\sqrt{\\frac{g}{L}} t + \\phi) \\)"}</MathJax>
