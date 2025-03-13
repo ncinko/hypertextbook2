@@ -71,7 +71,7 @@ const SHMPlot = () => {
               <br />
               <input
                 type="range"
-                min="0.1"
+                min="0.5"
                 max="5"
                 step="0.1"
                 value={period}
@@ -86,8 +86,8 @@ const SHMPlot = () => {
               <br />
               <input
                 type="range"
-                min="-3.14"
-                max="3.14"
+                min="-6.3"
+                max="6.3"
                 step="0.1"
                 value={phase}
                 onChange={(e) => setPhase(parseFloat(e.target.value))}
