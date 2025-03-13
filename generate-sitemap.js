@@ -1,35 +1,35 @@
-// This script generates a sitemap.xml file for a website with dynamic content.
-// It uses the sitemap package to create a stream of URLs and writes them to a file.
-
 const { SitemapStream, streamToPromise } = require('sitemap');
 const { createWriteStream } = require('fs');
-const axios = require('axios');
 
 // Define your domain
 const BASE_URL = 'https://physicsnook.com';
 
-// Define pages manually or fetch dynamically if needed
-const pages = [
+// Define the list of routes manually
+const routes = [
     '/',
-    '/simulations',
+    '/double-pendulum',
     '/oscillations',
-    '/about', // Add more as needed
+    '/electric-fields',
+    '/ideal-gas',
 ];
 
-// Generate the sitemap
 async function generateSitemap() {
-    const stream = new SitemapStream({ hostname: BASE_URL });
-    const writeStream = createWriteStream('./public/sitemap.xml');
+    const writeStream = createWriteStream('./public/sitemap.xml'); // Ensure the public directory exists
+    const sitemapStream = new SitemapStream({ hostname: BASE_URL });
 
-    for (const page of pages) {
-        stream.write({ url: page, changefreq: 'weekly', priority: 0.8 });
+    // Pipe sitemap stream into the file
+    sitemapStream.pipe(writeStream);
+
+    for (const route of routes) {
+        sitemapStream.write({ url: route, changefreq: 'weekly', priority: 0.8 });
     }
 
-    stream.end();
+    sitemapStream.end(); // Close the stream properly
 
-    streamToPromise(stream).then(() => {
-        console.log('Sitemap generated successfully!');
-    }).catch(console.error);
+    streamToPromise(sitemapStream)
+        .then(() => console.log('Sitemap generated successfully!'))
+        .catch(console.error);
 }
 
+// Run the function
 generateSitemap();

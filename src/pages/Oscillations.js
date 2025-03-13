@@ -3,6 +3,7 @@ import { MathJax, MathJaxContext } from "better-react-mathjax";
 import MassSpringSimulation from "../components/MassSpringSimulation"; // Adjust path if needed
 import PendulumSimulation from "../components/PendulumSimulation"; // Adjust path if needed
 import PendulumDiskSimulation from "../components/PendulumDiskSimulation"; // Adjust path if needed
+import SHMPlot from "../components/SHMPlot"; // Adjust path if needed
 
 const Oscillations = () => {
   const [showAnswer, setShowAnswer] = useState(false);
@@ -36,11 +37,13 @@ const Oscillations = () => {
 
         
         <p>A system that returns to the same state after regular intervals of time is said to exhibit <strong> periodic motion</strong>. 
-         This repetitive motion occurs in many physical systems, from a swinging pendulum to vibrating molecules. 
+         This repetitive motion occurs in many physical systems: swinging pendulums, ocean tides, molecular vibrations, and more.
         It may be also be referred to as oscillatory motion, or more simply, <strong>oscillations</strong>.</p>
 
         <p>The quintessential oscillation is <strong>simple harmonic motion (SHM)</strong>, which occurs when a restoring force is proportional to a system's displacement from an equilibrium position. 
-        This results in sinusoidal motion, described by key properties such as period, frequency, and amplitude.</p>
+        This results in sinusoidal motion, described by key properties such as period, frequency, and amplitude.  Mathematically, we will describe it with the following function.</p>
+
+        <SHMPlot />
 
         <h2>Characteristics of Simple Harmonic Motion</h2>
         <ul className="mathjax-list">
