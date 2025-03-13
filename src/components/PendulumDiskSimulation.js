@@ -109,7 +109,7 @@ const CompoundPendulumSimulation = () => {
 
   return (
     <div className="container flex flex-col items-center">
-      <div className="canvas-container my-4">
+      <div className="canvas-container">
         <svg
           width="400"
           height="600"
@@ -154,26 +154,42 @@ const CompoundPendulumSimulation = () => {
           <circle cx={pivotX} cy={pivotY} r="5" fill="black" />
         </svg>
       </div>
+
+
+      <div className="container flex flex-col items-center">
+      {/* Control Panel */}
       <div className="control-panel w-full max-w-lg">
-        <div className="slider-group space-y-4">
-          <div className="slider-item flex items-center justify-between">
-            <label className="text-gray-700 font-medium">Rod</label>
-            <input
-              type="range"
-              min="0.1"
-              max="5"
-              step="0.1"
-              value={rodMass}
-              onChange={(e) => {
-                setRodMass(parseFloat(e.target.value));
-                setSimTime(0);
-              }}
-              className="w-full mx-2"
-            />
-            <span className="text-gray-700">{rodMass} (kg)</span>
+        <div className="slider-group">
+          <div className="slider-item">
+            <label>Spring Constant</label>
+            <input type="range" min="0.1" max="2" step="0.01" value={null} onChange={(e) => null} />
+            <span> N/m</span>
           </div>
-          <div className="slider-item flex items-center justify-between">
-            <label className="text-gray-700 font-medium">Disk</label>
+          <div className="slider-item">
+            <label>Mass</label>
+            <input type="range" min="0.5" max="5" step="0.1" value={null} onChange={(e) => null} />
+            <span>kg</span>
+          </div>
+          <div className="slider-item">
+            <label>Damping</label>
+            <input type="range" min="0" max="0.1" step="0.005" value={null} onChange={(e) => null} />
+            <span></span>
+          </div>
+        </div>
+      </div>
+      </div>
+
+      <div className="container flex flex-col items-center">
+      {/* Control Panel */}
+      <div className="control-panel w-full max-w-lg">
+        <div className="slider-group">
+          <div className="slider-item">
+            <label>Rod</label>
+            <input type="range" min="0.1" max="5" step="0.1" value={rodMass} onChange={(e) => {setRodMass(parseFloat(e.target.value)); setSimTime(0);}}/>
+            <span >{rodMass} (kg)</span>
+          </div>
+          <div className="slider-item">
+            <label>Disk</label>
             <input
               type="range"
               min="0.1"
@@ -204,22 +220,7 @@ const CompoundPendulumSimulation = () => {
             />
             <span className="text-gray-700 whitespace-nowrap">{rodLength} (m)</span>
           </div>
-          <div className="slider-item flex items-center justify-between">
-            <label className="text-gray-700 font-medium">Disk</label>
-            <input
-              type="range"
-              min="0.1"
-              max="2"
-              step="0.1"
-              value={diskRadius}
-              onChange={(e) => {
-                setDiskRadius(parseFloat(e.target.value));
-                setSimTime(0);
-              }}
-              className="w-full mx-2"
-            />
-            <span className="text-gray-700 whitespace-nowrap">{diskRadius} (m)</span>
-          </div>
+          
           <div className="slider-item flex items-center justify-between">
             <label className="text-gray-700 font-medium">Mounting Mode</label>
             <select
@@ -249,6 +250,7 @@ const CompoundPendulumSimulation = () => {
           <strong>Frequency (f):</strong> {frequency.toFixed(2)} Hz
         </p>
       </div>
+    </div>
     </div>
   );
 };
