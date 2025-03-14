@@ -44,15 +44,33 @@ const Oscillations = () => {
 
         <SHMPlot />
 
-        <h2>Characteristics of Simple Harmonic Motion</h2>
-        <ul className="mathjax-list">
-          <li><strong>Equilibrium Position:</strong> The point where the net force is zero.</li>
-          <li><strong>Restoring Force:</strong> A force that always acts toward equilibrium.</li>
-          <li><strong>Amplitude (A):</strong> The maximum displacement from equilibrium.</li>
-          <li><strong>Period (T):</strong> The time taken for one complete cycle.</li>
-          <li><strong>Frequency (f):</strong> The number of cycles per second, given by <MathJax inline>{"\\( f = \\frac{1}{T} \\)"}</MathJax>.</li>
-        </ul>
-        
+        <h2>Key Concepts</h2>
+        <ul className="card-list">
+  <li>
+    <strong>Equilibrium </strong>
+    <span>The state where the net force is zero.</span>
+  </li>
+  <li>
+    <strong>Restoring Force</strong>
+    <span>A force that always acts toward equilibrium.</span>
+  </li>
+  <li>
+    <strong>Amplitude (A)</strong>
+    <span>The maximum displacement from equilibrium.</span>
+  </li>
+  <li>
+    <strong>Period (T)</strong>
+    <span>The time taken for one complete cycle.</span>
+  </li>
+  <li>
+    <strong>Frequency (f)</strong>
+    <span>
+      The number of cycles per second, given by{' '}
+      <MathJax inline>{"\\( f = \\frac{1}{T} \\)"}</MathJax>.
+    </span>
+  </li>
+</ul>
+
         <h2>Examples of SHM</h2>
         
         <div className="mathjax-container">

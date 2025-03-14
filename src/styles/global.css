@@ -50,6 +50,18 @@ body {
     align-items: center;
     gap: 8px;
   }
+
+  
+  .mathjax-list li strong {
+    display: inline-block;
+    width: 150px; /* adjust as needed */
+    vertical-align: top;
+  }
+  
+  .mathjax-list li span {
+    display: inline-block;
+    width: calc(100% - 150px); /* ensures text wraps with an indent */
+  }
   
   .mathjax-align-left,
   .left-aligned-container {
@@ -65,4 +77,35 @@ body {
 code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
     monospace;
+}
+
+.card-list {
+  list-style: none;
+  margin: 10px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem; /* space between cards */
+}
+
+.card-list li {
+  background-color: #fff;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 1rem;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* Fixed width for the strong text so the description wraps nicely */
+.card-list li strong {
+  display: inline-block;
+  width: 150px; /* adjust as needed */
+  vertical-align: top;
+  font-weight: bold;
+}
+
+/* The span will take the remaining width and wrap as needed */
+.card-list li span {
+  display: inline-block;
+  width: calc(100% - 150px);
 }

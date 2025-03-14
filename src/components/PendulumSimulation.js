@@ -45,7 +45,7 @@ const PendulumSimulation = () => {
   };
 
   const draw = (p5) => {
-    p5.background(255);
+    p5.background("#f8f9fa");
     let dt = (p5.millis() - prevTimeRef.current) / 1000;
     prevTimeRef.current = p5.millis();
     if (dt > 0.05) dt = 0.05;
@@ -111,7 +111,7 @@ const PendulumSimulation = () => {
   };
 
   const drawPlot = (p5) => {
-    p5.background(255);
+    p5.background("#f8f9fa");
     p5.stroke(0);
     p5.noFill();
     // Draw a horizontal midline (angle = 0 reference).
@@ -169,7 +169,6 @@ const PendulumSimulation = () => {
           </div>
         </div>
       </div>
-      <h3 style={{ fontSize: "1.2rem", fontWeight: "600", marginTop: "1rem", color: "#222" }}>Angle vs Time Plot</h3>
       <div className="canvas-container mt-2">
         <Sketch setup={setupPlot} draw={drawPlot} />
       </div>

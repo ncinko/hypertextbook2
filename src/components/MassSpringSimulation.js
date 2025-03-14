@@ -38,7 +38,7 @@ const MassSpringSimulation = ({ initialK = 0.5, initialMass = 1, initialDamping 
   };
 
   const drawSim = (p5) => {
-    p5.background(255);
+    p5.background("#f8f9fa");
     let currentTime = p5.millis();
     let dt = (currentTime - prevTimeSim.current) / 1000;
     if (dt > 0.05) dt = 0.05;
@@ -143,7 +143,7 @@ const MassSpringSimulation = ({ initialK = 0.5, initialMass = 1, initialDamping 
   };
 
   const drawPhase = (p5) => {
-    p5.background(255);
+    p5.background("#f8f9fa");
     
     // Draw axes (centered at zero for both displacement and velocity)
     p5.stroke(0);
