@@ -161,29 +161,6 @@ const CompoundPendulumSimulation = () => {
       <div className="control-panel w-full max-w-lg">
         <div className="slider-group">
           <div className="slider-item">
-            <label>Spring Constant</label>
-            <input type="range" min="0.1" max="2" step="0.01" value={null} onChange={(e) => null} />
-            <span> N/m</span>
-          </div>
-          <div className="slider-item">
-            <label>Mass</label>
-            <input type="range" min="0.5" max="5" step="0.1" value={null} onChange={(e) => null} />
-            <span>kg</span>
-          </div>
-          <div className="slider-item">
-            <label>Damping</label>
-            <input type="range" min="0" max="0.1" step="0.005" value={null} onChange={(e) => null} />
-            <span></span>
-          </div>
-        </div>
-      </div>
-      </div>
-
-      <div className="container flex flex-col items-center">
-      {/* Control Panel */}
-      <div className="control-panel w-full max-w-lg">
-        <div className="slider-group">
-          <div className="slider-item">
             <label>Rod</label>
             <input type="range" min="0.1" max="5" step="0.1" value={rodMass} onChange={(e) => {setRodMass(parseFloat(e.target.value)); setSimTime(0);}}/>
             <span >{rodMass} (kg)</span>
