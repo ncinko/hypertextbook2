@@ -8,6 +8,8 @@ import Oscillations from "./pages/Oscillations";
 import ElectricFields from "./pages/ElectricFields";
 import RotationalDynamics from "./pages/RotationalDynamics"
 import Chaos from "./pages/Chaos"
+import Momentum from "./pages/Momentum"
+import Sound from "./pages/Sound"
 import './styles/main.css';
 
 export default function App() {
@@ -20,7 +22,8 @@ export default function App() {
                         <Link to="/chaos" className="nav-item">Chaos</Link>
                         <Link to="/oscillations" className="nav-item">Oscillation</Link>
                         <Link to="/electric-fields" className="nav-item">Fields</Link>
-                        <Link to="/ideal-gas" className="nav-item">Thermo</Link>
+                        <Link to="/momentum" className="nav-item">Momentum</Link>
+                        <Link to="/sound" className="nav-item">Sound</Link>
                     </div>
                 </div>
             </nav>
@@ -33,6 +36,8 @@ export default function App() {
                 <Route path="/electric-fields" element={<ElectricFields/>} />
                 <Route path="/rotational-dynamics" element={<RotationalDynamics/>} />
                 <Route path="/chaos" element={<Chaos/>} />
+                <Route path="/momentum" element={<Momentum/>} />
+                <Route path="/sound" element={<Sound/>} />
             </Routes>
         </div>
     );
