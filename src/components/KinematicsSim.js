@@ -50,7 +50,7 @@ const DEFAULTS = {
   SHRINK_FACTOR: 0.93,        // multiply zone half-width after each success
   V_THRESH: 0.35,             // m/s required for a valid stop
   HOLD_TIME: 0.6,             // seconds of dwell while slow inside zone
-  ZONE_TIME_START: 5.0,       // seconds on first zone
+  ZONE_TIME_START: 10.0,       // seconds on first zone
   ZONE_TIME_INCREMENT: 2.0,   // add 5s after each successful stop
   WIN_STOPS: 15,
 };
@@ -137,6 +137,7 @@ export default function KinematicsSim() {
   // Keyboard
   useEffect(() => {
     function onKeyDown(e) {
+      if (document.activeElement.type === 'range') return;
       if (e.repeat) return;
       if (e.key === "ArrowLeft") { keys.current.left = true; }
       if (e.key === "ArrowRight") { keys.current.right = true; }
@@ -210,7 +211,7 @@ export default function KinematicsSim() {
     setPlotTick((k) => k + 1);
   }, []);
 
-  const newZone = useCallback((stopsCount) => {
+  const newZone = useCallback(() => {
     // place new zone somewhere not too close to current x to encourage travel
     const half = DEFAULTS.WORLD_HALF_WIDTH_M;
     let z;
@@ -221,10 +222,8 @@ export default function KinematicsSim() {
     }
     setZoneCenter(z);
     setDwell(0);
-    // deadline grows with successes achieved so far
-    const now = performance.now() / 1000;
-    const extra = DEFAULTS.ZONE_TIME_START + DEFAULTS.ZONE_TIME_INCREMENT * stopsCount;
-    zoneDeadlineAbs.current = now + extra;
+    // Add increment to the current deadline, carrying over remaining time
+    zoneDeadlineAbs.current += DEFAULTS.ZONE_TIME_INCREMENT;
   }, [state.x]);
 
   // Integrate motion + game logic
@@ -274,8 +273,8 @@ export default function KinematicsSim() {
             setStops(nextStops);
             // shrink difficulty
             setZoneHalfWidth((w) => Math.max(DEFAULTS.MIN_ZONE_HALF, w * DEFAULTS.SHRINK_FACTOR));
-            // spawn new zone & reset timer using nextStops
-            newZone(nextStops);
+            // spawn new zone & reset timer
+            newZone();
             // win condition
             if (nextStops >= DEFAULTS.WIN_STOPS) {
               setGameOver(true);
@@ -326,19 +325,26 @@ export default function KinematicsSim() {
     ctx.lineTo(cssW - 16, midY);
     ctx.stroke();
 
+    const pxPerMeter = scale;
+    let originX = Math.round(cssW / 2);
+    if (!wrapWorld) {
+      originX -= state.x * pxPerMeter;
+    }
+
     // Tick marks (every meter)
     const metersPerTick = 1;
-    const pxPerMeter = scale;
-    const originX = Math.round(cssW / 2);
     ctx.strokeStyle = COLORS.grid;
-    for (let m = -DEFAULTS.WORLD_HALF_WIDTH_M; m <= DEFAULTS.WORLD_HALF_WIDTH_M; m += metersPerTick) {
-      const xPx = originX + m * pxPerMeter;
-      if (xPx < 8 || xPx > cssW - 8) continue;
-      ctx.beginPath();
-      ctx.moveTo(xPx, midY - 12);
-      ctx.lineTo(xPx, midY + 12);
-      ctx.stroke();
+    const viewMinM = - (originX / pxPerMeter);
+    const viewMaxM = (cssW - originX) / pxPerMeter;
+
+    for (let m = Math.floor(viewMinM); m <= Math.ceil(viewMaxM); m += metersPerTick) {
+        const xPx = originX + m * pxPerMeter;
+        ctx.beginPath();
+        ctx.moveTo(xPx, midY - 12);
+        ctx.lineTo(xPx, midY + 12);
+        ctx.stroke();
     }
+
 
     // Zone (only when game on)
     if (gameOn) {
@@ -370,11 +376,11 @@ export default function KinematicsSim() {
     drawArrow(ctx, originX, posY, originX + state.x * pxPerMeter, posY, COLORS.x);
 
     // velocity arrow
-    const vPx = Math.max(-60, Math.min(60, state.v * 10));
+    const vPx = Math.max(-300, Math.min(300, state.v * 10));
     drawArrow(ctx, cartX, cartY - cartH * 0.9, cartX + vPx, cartY - cartH * 0.9, COLORS.v);
 
     // acceleration arrow
-    const aPx = Math.max(-60, Math.min(60, state.a * 15));
+    const aPx = Math.max(-100, Math.min(100, state.a * 10));
     drawArrow(ctx, cartX, cartY - cartH * 1.65, cartX + aPx, cartY - cartH * 1.65, COLORS.a);
 
     // Labels
@@ -383,13 +389,15 @@ export default function KinematicsSim() {
     ctx.fillText("position", originX - 30, posY - 5);
     ctx.fillText("velocity", cartX - 24, cartY - cartH * 0.9 - 8);
     ctx.fillText("acceleration", cartX - 32, cartY - cartH * 1.55 - 8);
-  }, [state, scale, zoneCenter, zoneHalfWidth, gameOn]);
+  }, [state, scale, zoneCenter, zoneHalfWidth, gameOn, wrapWorld]);
 
   // Derived readouts
   const readouts = useMemo(
     () => ({ x: niceNumber(state.x), v: niceNumber(state.v), a: niceNumber(state.a) }),
     [state]
   );
+
+  const autoScale = !gameOn && !wrapWorld;
 
   // --- Render ---
   return (
@@ -408,7 +416,7 @@ export default function KinematicsSim() {
         <button onClick={restart} style={{ ...btnStyle, background: "#e5e7eb", color: COLORS.text }}>Restart (R)</button>
 
         <LabeledSlider
-          label={`Amax: ${A_MAX.toFixed(1)} m/s²`}
+          label={`a: ${A_MAX.toFixed(1)} m/s²`}
           min={0}
           max={10}
           step={0.1}
@@ -424,6 +432,7 @@ export default function KinematicsSim() {
               const v = e.target.checked;
               setGameOn(v);
               if (v) {
+                setWrapWorld(true);
                 restart();
               } else {
                 setGameOver(false);
@@ -436,7 +445,7 @@ export default function KinematicsSim() {
         </label>
 
         <label style={{ display: "flex", alignItems: "center", gap: 8, color: COLORS.subtext, marginLeft: "auto" }}>
-          <input type="checkbox" checked={wrapWorld} onChange={(e) => setWrapWorld(e.target.checked)} />
+          <input type="checkbox" checked={wrapWorld} onChange={(e) => setWrapWorld(e.target.checked)} disabled={gameOn} />
           wrap world
         </label>
       </div>
@@ -448,7 +457,6 @@ export default function KinematicsSim() {
           background: COLORS.panel, border: `1px solid ${COLORS.panelBorder}`, borderRadius: 12, padding: "10px 12px"
         }}>
           <div><strong>stops</strong>: {stops} / {DEFAULTS.WIN_STOPS}</div>
-          <div>| <strong>zone width</strong>: {(zoneHalfWidth*2).toFixed(2)} m</div>
           <div>| <strong>time left</strong>: {Math.max(0, zoneDeadlineAbs.current - performance.now() / 1000).toFixed(2)} s</div>
           <div style={{ marginLeft: "auto", color: COLORS.subtext }}>
             total time: {(performance.now() / 1000 - gameStartAbs.current).toFixed(2)} s
@@ -468,7 +476,7 @@ export default function KinematicsSim() {
           fontWeight: 700,
           textAlign: "center",
         }}>
-          {win ? `You won! 15 stops in ${(performance.now() / 1000 - gameStartAbs.current).toFixed(1)} s` : "Time's up! Toggle game to try again."}
+          {win ? `You won! 15 stops in ${(performance.now() / 1000 - gameStartAbs.current).toFixed(1)} s` : "Time's up! Press R to try again."}
         </div>
       )}
 
@@ -498,8 +506,8 @@ export default function KinematicsSim() {
           color={COLORS.x}
           label="x(t) [m]"
           heightPx={140}
-          yMin={-DEFAULTS.WORLD_HALF_WIDTH_M}
-          yMax={DEFAULTS.WORLD_HALF_WIDTH_M}
+          yMin={autoScale ? null : -DEFAULTS.WORLD_HALF_WIDTH_M}
+          yMax={autoScale ? null : DEFAULTS.WORLD_HALF_WIDTH_M}
           tick={plotTick}
         />
         <MiniPlot
@@ -507,8 +515,8 @@ export default function KinematicsSim() {
           color={COLORS.v}
           label="v(t) [m/s]"
           heightPx={140}
-          yMin={-3 * A_MAX}
-          yMax={3 * A_MAX}
+          yMin={autoScale ? null : -3 * A_MAX}
+          yMax={autoScale ? null : 3 * A_MAX}
           tick={plotTick}
         />
         <MiniPlot
@@ -582,9 +590,9 @@ function MiniPlot({ historyRef, color, label, tick, heightPx = 90, yMin = null, 
 
   const padding = { l: 40, r: 10, t: 10, b: 24 };
 
-  const pathD = useMemo(() => {
+  const { pathD, zeroY } = useMemo(() => {
     const data = historyRef.current;
-    if (!data.length || width === 0) return "";
+    if (!data.length || width === 0) return { pathD: "", zeroY: null };
 
     const tMin = Math.max(0, data[data.length - 1].t - DEFAULTS.HISTORY_SECONDS);
     const tMax = data[data.length - 1].t;
@@ -599,7 +607,7 @@ function MiniPlot({ historyRef, color, label, tick, heightPx = 90, yMin = null, 
         if (y < ymin) ymin = y;
         if (y > ymax) ymax = y;
       }
-      if (!isFinite(ymin) || !isFinite(ymax)) return "";
+      if (!isFinite(ymin) || !isFinite(ymax)) return { pathD: "", zeroY: null };
       if (ymin === ymax) { ymin -= 1; ymax += 1; }
     }
 
@@ -616,7 +624,9 @@ function MiniPlot({ historyRef, color, label, tick, heightPx = 90, yMin = null, 
       if (!started) { dStr += `M ${x},${y}`; started = true; }
       else { dStr += ` L ${x},${y}`; }
     }
-    return dStr;
+    
+    const zeroY = (ymin < 0 && ymax > 0) ? mapY(0) : null;
+    return { pathD: dStr, zeroY };
   }, [historyRef, label, width, tick, heightPx, yMin, yMax]);
 
   return (
@@ -629,6 +639,16 @@ function MiniPlot({ historyRef, color, label, tick, heightPx = 90, yMin = null, 
       <div style={{ fontSize: 12, color: COLORS.subtext, marginBottom: 6 }}>{label}</div>
       <svg ref={svgRef} width="100%" height={heightPx}>
         <rect x={0} y={0} width={width} height={heightPx} fill={COLORS.panel} rx={10} />
+        {zeroY !== null && (
+          <line
+            x1={padding.l}
+            y1={zeroY}
+            x2={width - padding.r}
+            y2={zeroY}
+            stroke={COLORS.grid}
+            strokeWidth={1}
+          />
+        )}
         <path d={pathD} fill="none" stroke={color} strokeWidth={2} />
       </svg>
     </div>

@@ -12,6 +12,9 @@ import KinematicsSim from "../components/KinematicsSim";
 
 const Kinematics = () => {
   const [showAnswer, setShowAnswer] = useState(false);
+  const [showVectorAnswer, setShowVectorAnswer] = useState(false);
+  const [showAnswer3, setShowAnswer3] = useState(false);
+
 
   return (
     <div className="mathjax-container">
@@ -68,6 +71,24 @@ const Kinematics = () => {
           {/* Embedded simulation component */}
           <KinematicsSim />
 
+          
+
+          <div style={{ marginTop: "1rem", textAlign: "center" }}>
+            <p
+              onClick={() => setShowVectorAnswer(s => !s)}
+              style={{ cursor: "pointer", color: "#222", fontWeight: 600 }}
+            >
+              Describe the motion of the object when position is positive and velocity is negative.
+            </p>
+            {showVectorAnswer && (
+              <>
+                <p>
+                  Negative velocity means the object is moving left. Since the position is positive, the object is moving back toward the origin.
+                </p>
+              </>
+            )}
+          </div>
+
           <div style={{ marginTop: "1rem", textAlign: "center" }}>
             <p
               onClick={() => setShowAnswer(s => !s)}
@@ -78,7 +99,23 @@ const Kinematics = () => {
             {showAnswer && (
               <>
                 <p>
-                  Negative acceleration means the velocity is decreasing. Since the velocity is still positive, the object is moving forward but slowing down.
+                  Negative acceleration means the velocity is decreasing. Since the velocity is still positive, the object is moving to the right but slowing down.
+                </p>
+              </>
+            )}
+          </div>
+
+          <div style={{ marginTop: "1rem", textAlign: "center" }}>
+            <p
+              onClick={() => setShowAnswer3(s => !s)}
+              style={{ cursor: "pointer", color: "#222", fontWeight: 600 }}
+            >
+              Describe the shape of the position and velocity traces when acceleration is constant (non-zero).
+            </p>
+            {showAnswer3 && (
+              <>
+                <p>
+                  Under constant accleration, the velocity trace is a straight line. The position trace appears curved; in fact, it is a parabola.
                 </p>
               </>
             )}
