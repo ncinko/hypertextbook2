@@ -1,35 +1,44 @@
-const { SitemapStream, streamToPromise } = require('sitemap');
+const { SitemapStream } = require('sitemap');
 const { createWriteStream } = require('fs');
+const { resolve } = require('path');
 
-// Define your domain
 const BASE_URL = 'https://physicsnook.com';
 
-// Define the list of routes manually
+// Use path-based routes only (no hashes). Keep these in sync with your Router.
 const routes = [
-    '/',
-    '/double-pendulum',
-    '/oscillations',
-    '/electric-fields',
-    '/ideal-gas',
+  '/',                // homepage
+  '/chaos',
+  '/oscillations',
+  '/electric-fields',
+  '/momentum',
+  '/sound',
+  '/kinematics',
 ];
 
-async function generateSitemap() {
-    const writeStream = createWriteStream('./public/sitemap.xml'); // Ensure the public directory exists
-    const sitemapStream = new SitemapStream({ hostname: BASE_URL });
+(async function generate() {
+  const outPath = resolve(__dirname, 'public', 'sitemap.xml');
+  const sitemap = new SitemapStream({ hostname: BASE_URL });
+  const writeStream = createWriteStream(outPath);
 
-    // Pipe sitemap stream into the file
-    sitemapStream.pipe(writeStream);
+  sitemap.pipe(writeStream);
 
-    for (const route of routes) {
-        sitemapStream.write({ url: route, changefreq: 'weekly', priority: 0.8 });
-    }
+  // Add URLs. You can tweak changefreq/priority, and add lastmod if you want.
+  const nowISO = new Date().toISOString();
+  routes.forEach((url, i) => {
+    sitemap.write({
+      url,
+      changefreq: 'weekly',
+      priority: url === '/' ? 1.0 : 0.8,
+      lastmod: nowISO,
+    });
+  });
 
-    sitemapStream.end(); // Close the stream properly
+  sitemap.end();
 
-    streamToPromise(sitemapStream)
-        .then(() => console.log('Sitemap generated successfully!'))
-        .catch(console.error);
-}
+  await new Promise((res, rej) => {
+    writeStream.on('finish', res);
+    writeStream.on('error', rej);
+  });
 
-// Run the function
-generateSitemap();
+  console.log(`✅ sitemap.xml written to ${outPath}`);
+})();

@@ -1,26 +1,20 @@
 <!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<html>
+  <head>
+    <meta charset="utf-8">
     <title>Redirecting...</title>
-    <script>
-        (function() {
-            var path = window.location.pathname;
-            var origin = window.location.origin;
-
-            // If the path is not the root ("/"), redirect with a hash
-            if (path !== "/" && !path.startsWith("/#/")) {
-                // Construct the new URL with the hash
-                var newUrl = origin + "/#"+ path;
-                
-                // Redirect to the new URL
-                window.location.replace(newUrl);
-            }
-        })();
+    <script type="text/javascript">
+      var segmentCount = 0;
+      var l = window.location;
+      l.replace(
+        l.protocol + '//' + l.hostname + (l.port ? ':' + l.port : '') +
+        l.pathname.split('/').slice(0, 1 + segmentCount).join('/') + '/?p=/' +
+        l.pathname.slice(1).split('/').slice(segmentCount).join('/').replace(/&/g, '~and~') +
+        (l.search ? '&q=' + l.search.slice(1).replace(/&/g, '~and~') : '') +
+        l.hash
+      );
     </script>
-</head>
-<body>
-    Redirecting...
-</body>
+  </head>
+  <body>
+  </body>
 </html>
