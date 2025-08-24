@@ -7,10 +7,10 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
  *   STOP-IN-ZONES CHALLENGE
  *   • Toggle game on/off (off by default).
  *   • A highlighted zone appears on the track.
- *   • You have a per-zone time limit (starts at 5s, +5s each successful stop).
+ *   • You have a per-zone time limit (starts at 5s, +2s each successful stop).
  *   • Stop inside the zone with |v| ≤ V_THRESH and hold for HOLD_TIME.
  *   • Each success shrinks the zone width and spawns a new one elsewhere.
- *   • 30 successful stops = WIN. Shows total time from game start.
+ *   • 15 successful stops = WIN. Shows total time from game start.
  *
  * Controls: ←/→ accelerate, Space pause, R restart.
  * Clean, low-contrast palette; traces are below the animation.
@@ -41,16 +41,16 @@ const COLORS = {
 const DEFAULTS = {
   A_MAX: 4,               // m/s^2
   SCALE: 80,              // px per meter (internal only)
-  HISTORY_SECONDS: 10,    // seconds of traces
+  HISTORY_SECONDS: 12,    // seconds of traces
   WORLD_HALF_WIDTH_M: 6,  // meters to either side of origin (render ramp)
 
   // Game tuning
   START_ZONE_HALF: 1.2,       // meters (starts easy)
   MIN_ZONE_HALF: 0.25,        // meters (difficulty floor)
-  SHRINK_FACTOR: 0.05,        // multiply zone half-width after each success
+  SHRINK_FACTOR: 0.93,        // multiply zone half-width after each success
   V_THRESH: 0.35,             // m/s required for a valid stop
   HOLD_TIME: 0.6,             // seconds of dwell while slow inside zone
-  ZONE_TIME_START: 8.0,       // seconds on first zone
+  ZONE_TIME_START: 5.0,       // seconds on first zone
   ZONE_TIME_INCREMENT: 2.0,   // add 5s after each successful stop
   WIN_STOPS: 15,
 };
@@ -126,7 +126,6 @@ export default function KinematicsSim() {
       t0.current += delta;
       zoneDeadlineAbs.current += delta; // push the zone deadline forward by the paused duration
       gameStartAbs.current += delta;    // exclude paused time from total elapsed
-
       pauseAbsRef.current = null;
     }
     wasPausedRef.current = paused;
@@ -156,6 +155,43 @@ export default function KinematicsSim() {
     };
   }, []);
 
+  // Touch controls
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const onTouchStart = (e) => {
+      e.preventDefault();
+      const touch = e.touches[0];
+      const rect = canvas.getBoundingClientRect();
+      const touchX = touch.clientX - rect.left;
+      
+      if (touchX < canvas.clientWidth / 2) {
+        keys.current.left = true;
+        keys.current.right = false;
+      } else {
+        keys.current.right = true;
+        keys.current.left = false;
+      }
+    };
+
+    const onTouchEnd = (e) => {
+      e.preventDefault();
+      keys.current.left = false;
+      keys.current.right = false;
+    };
+
+    canvas.addEventListener('touchstart', onTouchStart, { passive: false });
+    canvas.addEventListener('touchend', onTouchEnd, { passive: false });
+    canvas.addEventListener('touchcancel', onTouchEnd, { passive: false });
+
+    return () => {
+      canvas.removeEventListener('touchstart', onTouchStart);
+      canvas.removeEventListener('touchend', onTouchEnd);
+      canvas.removeEventListener('touchcancel', onTouchEnd);
+    };
+  }, []);
+
   const restart = useCallback(() => {
     // Reset simulation + game; start a fresh run
     setState({ ...INITIAL_STATE });
@@ -174,7 +210,7 @@ export default function KinematicsSim() {
     setPlotTick((k) => k + 1);
   }, []);
 
-  const newZone = useCallback((stopsCount = stops) => {
+  const newZone = useCallback((stopsCount) => {
     // place new zone somewhere not too close to current x to encourage travel
     const half = DEFAULTS.WORLD_HALF_WIDTH_M;
     let z;
@@ -187,9 +223,9 @@ export default function KinematicsSim() {
     setDwell(0);
     // deadline grows with successes achieved so far
     const now = performance.now() / 1000;
-    const extra = DEFAULTS.ZONE_TIME_START + stopsCount * DEFAULTS.ZONE_TIME_INCREMENT;
+    const extra = DEFAULTS.ZONE_TIME_START + DEFAULTS.ZONE_TIME_INCREMENT * stopsCount;
     zoneDeadlineAbs.current = now + extra;
-  }, [state.x, stops]);
+  }, [state.x]);
 
   // Integrate motion + game logic
   useAnimationFrame(
@@ -237,7 +273,7 @@ export default function KinematicsSim() {
             const nextStops = stops + 1;
             setStops(nextStops);
             // shrink difficulty
-            setZoneHalfWidth((w) => Math.max(DEFAULTS.MIN_ZONE_HALF, w - DEFAULTS.SHRINK_FACTOR));
+            setZoneHalfWidth((w) => Math.max(DEFAULTS.MIN_ZONE_HALF, w * DEFAULTS.SHRINK_FACTOR));
             // spawn new zone & reset timer using nextStops
             newZone(nextStops);
             // win condition
@@ -329,17 +365,22 @@ export default function KinematicsSim() {
     ctx.fill();
     ctx.stroke();
 
+    // position vector
+    const posY = midY + 28;
+    drawArrow(ctx, originX, posY, originX + state.x * pxPerMeter, posY, COLORS.x);
+
     // velocity arrow
     const vPx = Math.max(-60, Math.min(60, state.v * 10));
-    drawArrow(ctx, cartX, cartY - cartH * 0.9, cartX + vPx, cartY - cartH * 0.9, COLORS.accent);
+    drawArrow(ctx, cartX, cartY - cartH * 0.9, cartX + vPx, cartY - cartH * 0.9, COLORS.v);
 
     // acceleration arrow
     const aPx = Math.max(-60, Math.min(60, state.a * 15));
-    drawArrow(ctx, cartX, cartY - cartH * 1.55, cartX + aPx, cartY - cartH * 1.55, COLORS.accentSoft);
+    drawArrow(ctx, cartX, cartY - cartH * 1.65, cartX + aPx, cartY - cartH * 1.65, COLORS.a);
 
     // Labels
     ctx.fillStyle = COLORS.subtext;
     ctx.font = "500 12px ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto";
+    ctx.fillText("position", originX - 30, posY - 5);
     ctx.fillText("velocity", cartX - 24, cartY - cartH * 0.9 - 8);
     ctx.fillText("acceleration", cartX - 32, cartY - cartH * 1.55 - 8);
   }, [state, scale, zoneCenter, zoneHalfWidth, gameOn]);
@@ -367,7 +408,7 @@ export default function KinematicsSim() {
         <button onClick={restart} style={{ ...btnStyle, background: "#e5e7eb", color: COLORS.text }}>Restart (R)</button>
 
         <LabeledSlider
-          label={`a: ${A_MAX.toFixed(1)} m/s²`}
+          label={`Amax: ${A_MAX.toFixed(1)} m/s²`}
           min={0}
           max={10}
           step={0.1}
@@ -408,9 +449,9 @@ export default function KinematicsSim() {
         }}>
           <div><strong>stops</strong>: {stops} / {DEFAULTS.WIN_STOPS}</div>
           <div>| <strong>zone width</strong>: {(zoneHalfWidth*2).toFixed(2)} m</div>
-          <div>| <strong>time left</strong>: {Math.max(0, zoneDeadlineAbs.current - performance.now() / 1000).toFixed(1)} s</div>
+          <div>| <strong>time left</strong>: {Math.max(0, zoneDeadlineAbs.current - performance.now() / 1000).toFixed(2)} s</div>
           <div style={{ marginLeft: "auto", color: COLORS.subtext }}>
-            total time: {(performance.now() / 1000 - gameStartAbs.current).toFixed(1)} s
+            total time: {(performance.now() / 1000 - gameStartAbs.current).toFixed(2)} s
           </div>
         </div>
       )}
