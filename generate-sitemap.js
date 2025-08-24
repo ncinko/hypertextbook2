@@ -7,11 +7,6 @@ const BASE_URL = 'https://physicsnook.com';
 // Use path-based routes only (no hashes). Keep these in sync with your Router.
 const routes = [
   '/',                // homepage
-  '/chaos',
-  '/oscillations',
-  '/electric-fields',
-  '/momentum',
-  '/sound',
   '/kinematics',
 ];
 
