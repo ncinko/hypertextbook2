@@ -2,6 +2,8 @@ import React, { useState } from "react";
 import { MathJax, MathJaxContext } from "better-react-mathjax";
 import ElectricFieldSimulation from "../components/ElectricFieldSimulation"; // Adjust path if needed
 import EquipotentialSimulation from "../components/EquipotentialSimulation"; // Adjust path if needed
+import PointChargeUnitVectorDemo from "../components/PointChargeField";
+
 
 const ElectricFields = () => {
   const [showAnswer, setShowAnswer] = useState(false);
@@ -28,38 +30,52 @@ const ElectricFields = () => {
 
           <h2>Introduction</h2>
           <p>
-            An <strong>electric field</strong> is a region around a charged particle where other charges experience a force. 
-            It is a vector field defined as the force per unit charge. </p>
-            <p>Mathematically, the electric field <MathJax inline>{"\\( \\vec{E} \\) "}</MathJax> is defined by </p>
-             <MathJax inline>{" \\( \\qquad \\vec{E} = \\frac{\\vec{F}}{q} \\),"}</MathJax>
-             <p>where <MathJax inline>{"\\( \\vec{F} \\)"}</MathJax> is the force acting on a test charge <MathJax inline>{"\\( q \\)"}</MathJax>.
+            An <strong>electric field</strong> is a region around a charged particle where other charges experience a force. </p>
+            <p>Mathematically, the electric field <MathJax inline>{"\\( \\vec{\\mathbf E} \\) "}</MathJax> is defined by </p>
+             <MathJax inline>{" \\( \\qquad \\vec{\\mathbf E} = \\frac{\\vec{\\mathbf F}}{q} \\),"}</MathJax>
+             <p>where <MathJax inline>{"\\( \\vec{\\mathbf F} \\)"}</MathJax> is the force acting on a test charge <MathJax inline>{"\\( q \\)"}</MathJax>.  In other words, if we can measure the force on a small test charge, we can determine the value of the electric field at that point.
           </p>
 
           <h2>Electric Field Due to a Point Charge</h2>
           <p>
-            For a point charge, Coulomb's law provides the electric field:
+            In the presence of a single point charge, the electric field is
           </p>
-          <MathJax inline>{"\\(\\qquad \\vec{E} = k \\frac{q}{r^2} \\hat{r} \\)"}</MathJax>
+          <MathJax inline>{"\\(\\qquad \\vec{\\mathbf E}= k \\frac{q}{r^2} \\hat{\\mathbf r} \\)"}</MathJax>
           <p>
             where <MathJax inline>{"\\( k \\)"}</MathJax> is Coulomb's constant and <MathJax inline>{"\\( q \\)"}</MathJax> is the charge (in Coulombs).</p>
-            <p>  The vector <MathJax inline>{"\\( \\vec{r} \\)"}</MathJax> is directed from the charge's position to the "location of interest" where we are computing the field.</p>
+            <p>  The vector <MathJax inline>{"\\( \\vec{\\mathbf r} \\)"}</MathJax> is directed from the charge's position to the "location of interest" where we are computing the field.</p>
             <p>  This means the magnitude
-            <MathJax inline>{" \\( r \\)"}</MathJax> is the distance (in meters) from the charge, and <MathJax inline>{"\\( \\hat{r} \\)"}</MathJax> is the corresponding unit vector.
+            <MathJax inline>{" \\( r = \\lVert \\vec{\\mathbf r} \\rVert \\)"}</MathJax> is the distance (in meters) from the charge.
           </p>
+          {/* Point-charge unit vector demo */}
+<div className="mathjax-container" style={{ marginTop: "0.75rem" }}>
+  <p>
+    The direction of <MathJax inline>{"\\( \\vec{\\mathbf E} \\)"}</MathJax> comes from the unit vector
+    <MathJax inline>{" \\( \\hat{\\mathbf r} = \\dfrac{\\vec{\\mathbf r}}{\\lVert \\vec{\\mathbf r} \\rVert} \\)"}</MathJax>,
+    which points from the source charge to the location of interest.
+  </p>
+  <p></p>
+  <PointChargeUnitVectorDemo />
+</div>
 
           <h2>Superposition Principle</h2>
-          <p>
-            When multiple charges are present, the net electric field is the vector sum of the individual fields:
-          </p>
-          <MathJax inline>{"\\(\\qquad \\vec{E}_{\\text{net}} = \\sum_i \\vec{E}_i \\)"}</MathJax>
-          <p>
-            This means that electric fields from different charges add together, taking into account both magnitude and direction.
-          </p>
+<p>
+  When multiple charges are present, the net electric field is the vector sum of the individual fields:
+</p>
+<MathJax inline>{"\\(\\qquad \\vec{\\mathbf{E}}_{\\text{net}} = \\sum_i \\vec{\\mathbf{E}}_i \\)"}</MathJax>
+<p>
+  We often begin by speaking of <em>the electric field due to a single charge</em> so that the connection with Coulomb’s law is clear. 
+  It is better to imagine that space is filled with a single electric field. 
+  That field is determined by the contributions of <strong>all charges present</strong>, combined by superposition.
+  This perspective emphasizes that the field is a property of space itself, shaped by the configuration of charges, 
+  rather than a set of separate “mini-fields” that coexist.
+</p>
+
 
           <div className="mathjax-container">
             <p>
             The <span style={{ color: "green", fontWeight: "bold" }}>test charge</span> below experience a net force </p>
-            <MathJax inline>{"\\(\\qquad \\vec{F}_{\\text{net}} = \\color{green}q_{\\text{test}}\\color{black}\\vec{E}_{\\text{net}}\\)"}</MathJax>
+            <MathJax inline>{"\\(\\qquad \\vec{\\mathbf{F}}_{\\text{net}} = \\color{green}q_{\\text{test}}\\color{black}\\vec{\\mathbf{E}}_{\\text{net}}\\)"}</MathJax>
             <p>
               This simulation displays the electric field lines around point charges. You can interact with the charges to see how the field changes.
             </p>
@@ -87,7 +103,7 @@ const ElectricFields = () => {
             {showAnswer1 && (
               <p>
                 At the midpoint, the contributions from each charge are equal in magnitude but opposite in direction (if the charges are like-signed), resulting in a net electric field of 
-                <MathJax inline>{"\\( 0 \\)"}</MathJax> N/C.
+                <MathJax inline>{" \\( 0 \\)"}</MathJax> N/C.
               </p>
             )}
 
@@ -97,7 +113,7 @@ const ElectricFields = () => {
             {showAnswer2 && (
               <p>
                 In electrostatic equilibrium, free charges within a conductor redistribute themselves so that the internal electric field cancels out, ensuring that 
-                <MathJax inline>{"\\( \\vec{E} = 0 \\)"}</MathJax> inside the conductor.
+                <MathJax inline>{" \\( \\vec{E} = 0 \\)"}</MathJax> inside the conductor.
               </p>
             )}
           </ol>

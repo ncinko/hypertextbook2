@@ -2,137 +2,207 @@ import React, { useState, useEffect, useRef } from "react";
 
 const ElectricFieldSimulation = () => {
   const canvasRef = useRef(null);
-  const width = 500;
-  const height = 300;
   const k = 9e9; // Coulomb's constant
 
-  // Pre-defined configurations
-  const dipoleConfig = [
-    { x: 150, y: 150, q: 1e-6 },
-    { x: 350, y: 150, q: -1e-6 }
+  // -------- Responsive sizing --------
+  const computeSize = () => {
+    const w = Math.min(900, Math.max(320, window.innerWidth - 48)); // margins
+    const h = Math.min(600, Math.max(240, Math.round(w * 0.6)));
+    return { width: w, height: h };
+  };
+  const [size, setSize] = useState(computeSize());
+  const prevSizeRef = useRef(size);
+
+  const scaleSceneToNewSize = (oldSize, newSize) => {
+    const sx = newSize.width / oldSize.width;
+    const sy = newSize.height / oldSize.height;
+    setCharges(prev => prev.map(c => ({ ...c, x: c.x * sx, y: c.y * sy })));
+    const t = testChargeRef.current;
+    testChargeRef.current = { ...t, x: t.x * sx, y: t.y * sy };
+  };
+
+  useEffect(() => {
+    const onResize = () => {
+      const newSize = computeSize();
+      const old = prevSizeRef.current;
+      if (newSize.width !== old.width || newSize.height !== old.height) {
+        setSize(newSize);
+        scaleSceneToNewSize(old, newSize);
+        prevSizeRef.current = newSize;
+      }
+    };
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
+  // -------- Presets relative to size --------
+  const monopoleConfig = (W, H) => [
+    { x: 0.5 * W, y: 0.5 * H, q: 1e-6 }
   ];
-  const capacitorConfig = () => {
-    const plateYs = [50, 100, 150, 200, 250];
-    const leftPlate = plateYs.map((y) => ({ x: 100, y, q: 1e-6 }));
-    const rightPlate = plateYs.map((y) => ({ x: 400, y, q: -1e-6 }));
+  const dipoleConfig = (W, H) => [
+    { x: 0.3 * W, y: 0.5 * H, q: 1e-6 },
+    { x: 0.7 * W, y: 0.5 * H, q: -1e-6 }
+  ];
+  const capacitorConfig = (W, H) => {
+    const rows = 5;
+    const ys = Array.from({ length: rows }, (_, i) => ((i + 1) / (rows + 1)) * H);
+    const leftX = 0.2 * W, rightX = 0.8 * W;
+    const leftPlate = ys.map(y => ({ x: leftX, y, q: 1e-6 }));
+    const rightPlate = ys.map(y => ({ x: rightX, y, q: -1e-6 }));
     return [...leftPlate, ...rightPlate];
   };
 
-  // State for the currently selected configuration.
+  // -------- State --------
   const [configuration, setConfiguration] = useState("dipole");
-  // Charges state.
-  const [charges, setCharges] = useState(dipoleConfig);
-  // For dragging a charge.
+  const [charges, setCharges] = useState(() => dipoleConfig(size.width, size.height));
   const [draggingChargeIndex, setDraggingChargeIndex] = useState(null);
-  // For dragging the test charge.
   const [draggingTestCharge, setDraggingTestCharge] = useState(false);
-  // Controls whether the test charge animation is active.
   const [animateTestCharge, setAnimateTestCharge] = useState(false);
 
-  // Initial test charge properties.
-  const initialTestCharge = { x: 250, y: 100, vx: 0, vy: 0, q: 1e-8, m: 1e-6 };
-  // We'll store the test charge in a ref so that its state updates without re-rendering.
-  const testChargeRef = useRef({ ...initialTestCharge });
+  // Field lines UI
+  const [showFieldLines, setShowFieldLines] = useState(false);
+  const [linesPerMicroC, setLinesPerMicroC] = useState(12); // 4..24 is a nice range
 
-  // Acceleration scale factor to amplify the test charge motion.
+  const initialTestChargeFromSize = (W, H) => ({ x: 0.5 * W, y: 0.33 * H, vx: 0, vy: 0, q: 1e-8, m: 1e-6 });
+  const testChargeRef = useRef(initialTestChargeFromSize(size.width, size.height));
+
   const accelerationScale = 10000;
 
-  // Helper: Get mouse position relative to canvas.
+  // Helpers
   const getMousePos = (canvas, evt) => {
     const rect = canvas.getBoundingClientRect();
-    return {
-      x: evt.clientX - rect.left,
-      y: evt.clientY - rect.top
-    };
+    return { x: evt.clientX - rect.left, y: evt.clientY - rect.top };
   };
 
-  // Compute the net electric field at (x, y) from all charges.
   const computeField = (x, y, localCharges = charges) => {
-    let Ex = 0;
-    let Ey = 0;
-    for (const charge of localCharges) {
-      const dx = x - charge.x;
-      const dy = y - charge.y;
-      const rSquared = dx * dx + dy * dy;
-      const r = Math.sqrt(rSquared);
-      if (r < 5) continue; // avoid singularity near the charge
-      const E = k * charge.q / rSquared;
+    let Ex = 0, Ey = 0;
+    for (const c of localCharges) {
+      const dx = x - c.x, dy = y - c.y;
+      const r2 = dx*dx + dy*dy + 25; // soften singularity (5 px core)
+      const r = Math.sqrt(r2);
+      const E = k * c.q / r2;
       Ex += E * (dx / r);
       Ey += E * (dy / r);
     }
     return { Ex, Ey };
   };
 
-  // Updated drawArrow: fixed length arrow with opacity determined by field strength.
   const drawArrow = (ctx, fromX, fromY, toX, toY, opacity) => {
-    const headLength = 8; // Increased arrowhead size
-    const dx = toX - fromX;
-    const dy = toY - fromY;
+    const headLength = 8;
+    const dx = toX - fromX, dy = toY - fromY;
     const angle = Math.atan2(dy, dx);
     ctx.lineWidth = 2;
-    // Set stroke and fill with the desired opacity.
-    ctx.strokeStyle = `rgba(0, 0, 0, ${opacity})`;
-    ctx.fillStyle = `rgba(0, 0, 0, ${opacity})`;
-    // Draw the main line.
+    ctx.strokeStyle = `rgba(0,0,0,${opacity})`;
+    ctx.fillStyle   = `rgba(0,0,0,${opacity})`;
     ctx.beginPath();
     ctx.moveTo(fromX, fromY);
     ctx.lineTo(toX, toY);
     ctx.stroke();
-    // Draw the arrowhead.
     ctx.beginPath();
     ctx.moveTo(toX, toY);
-    ctx.lineTo(
-      toX - headLength * Math.cos(angle - Math.PI / 6),
-      toY - headLength * Math.sin(angle - Math.PI / 6)
-    );
-    ctx.lineTo(
-      toX - headLength * Math.cos(angle + Math.PI / 6),
-      toY - headLength * Math.sin(angle + Math.PI / 6)
-    );
+    ctx.lineTo(toX - headLength * Math.cos(angle - Math.PI / 6),
+               toY - headLength * Math.sin(angle - Math.PI / 6));
+    ctx.lineTo(toX - headLength * Math.cos(angle + Math.PI / 6),
+               toY - headLength * Math.sin(angle + Math.PI / 6));
     ctx.closePath();
     ctx.fill();
     ctx.stroke();
   };
 
-  // Handle configuration change via dropdown.
+  // --- Field lines helpers ---
+  const norm2 = (x, y) => {
+    const m = Math.hypot(x, y) || 1e-12;
+    return [x / m, y / m];
+  };
+  const distToAnyCharge = (x, y, localCharges = charges) =>
+    localCharges.reduce((d, c) => Math.min(d, Math.hypot(x - c.x, y - c.y)), Infinity);
+
+  const traceFieldLine = (ctx, x0, y0, dir, stepPx, maxSteps) => {
+    let x = x0, y = y0;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    for (let i = 0; i < maxSteps; i++) {
+      const { Ex, Ey } = computeField(x, y);
+      let [ux, uy] = norm2(Ex, Ey);
+      ux *= dir; uy *= dir;
+      // Heun (improved Euler)
+      const xE = x + ux * stepPx, yE = y + uy * stepPx;
+      const { Ex: Ex2, Ey: Ey2 } = computeField(xE, yE);
+      let [ux2, uy2] = norm2(Ex2, Ey2);
+      ux2 *= dir; uy2 *= dir;
+      x += 0.5 * stepPx * (ux + ux2);
+      y += 0.5 * stepPx * (uy + uy2);
+
+      if (x < 0 || x > size.width || y < 0 || y > size.height) break;
+      if (distToAnyCharge(x, y) < 10) break;
+      ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  };
+
+  const drawFieldLines = (ctx) => {
+    if (!showFieldLines) return;
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = "rgba(0,0,0,0.5)";
+    const stepPx = Math.max(0.75, Math.min(size.width, size.height) / 500);
+    const maxSteps = 2000;
+    const r0 = 12; // seed circle radius around charges
+
+    for (const c of charges) {
+      const muC = Math.abs(c.q) / 1e-6;
+      const N = Math.max(4, Math.min(24, Math.round(linesPerMicroC * muC)));
+      for (let k = 0; k < N; k++) {
+        const theta = (2 * Math.PI * k) / N;
+        const sx = c.x + r0 * Math.cos(theta);
+        const sy = c.y + r0 * Math.sin(theta);
+        const dir = c.q >= 0 ? +1 : -1; // from +q outward, into –q
+        traceFieldLine(ctx, sx, sy, dir, stepPx, maxSteps);
+      }
+    }
+  };
+
+  // Config change
   const handleConfigurationChange = (e) => {
     const newConfig = e.target.value;
     setConfiguration(newConfig);
+    const { width: W, height: H } = size;
     if (newConfig === "dipole") {
-      setCharges(dipoleConfig);
+      setCharges(dipoleConfig(W, H));
     } else if (newConfig === "capacitor") {
-      setCharges(capacitorConfig());
+      setCharges(capacitorConfig(W, H));
+    } else if (newConfig === "monopole") {
+      setCharges(monopoleConfig(W, H));
     }
-    // Reset test charge.
-    testChargeRef.current = { ...initialTestCharge };
+    testChargeRef.current = initialTestChargeFromSize(W, H);
+    setAnimateTestCharge(false);
   };
 
-  // Mouse event handlers.
+  // Mouse handlers (with Ctrl-click delete)
   const handleMouseDown = (e) => {
     const canvas = canvasRef.current;
     const { x, y } = getMousePos(canvas, e);
 
-    // First, check if the click is near the test charge.
-    const dxTest = x - testChargeRef.current.x;
-    const dyTest = y - testChargeRef.current.y;
-    if (Math.sqrt(dxTest * dxTest + dyTest * dyTest) < 8) {
+    // Never delete the test charge; prioritize dragging it
+    const dxT = x - testChargeRef.current.x;
+    const dyT = y - testChargeRef.current.y;
+    if (Math.hypot(dxT, dyT) < 8) {
       setDraggingTestCharge(true);
       return;
     }
 
-    // Then check if the click is near an existing charge.
-    const index = charges.findIndex((charge) => {
-      const dx = x - charge.x;
-      const dy = y - charge.y;
-      return Math.sqrt(dx * dx + dy * dy) < 10;
-    });
+    const idx = charges.findIndex(c => Math.hypot(x - c.x, y - c.y) < 10);
 
-    if (index !== -1) {
-      setDraggingChargeIndex(index);
+    // Ctrl-click (or Cmd on Mac) deletes a source charge
+    if (idx !== -1 && (e.ctrlKey || e.metaKey)) {
+      setCharges(prev => prev.filter((_, i) => i !== idx));
+      return;
+    }
+
+    if (idx !== -1) {
+      setDraggingChargeIndex(idx);
     } else {
-      // If no charge was clicked, add a new charge.
       const newCharge = { x, y, q: e.shiftKey ? -1e-6 : 1e-6 };
-      setCharges((prev) => [...prev, newCharge]);
+      setCharges(prev => [...prev, newCharge]);
     }
   };
 
@@ -140,13 +210,12 @@ const ElectricFieldSimulation = () => {
     const canvas = canvasRef.current;
     const { x, y } = getMousePos(canvas, e);
     if (draggingTestCharge) {
-      // Update test charge position and reset velocity.
       testChargeRef.current = { ...testChargeRef.current, x, y, vx: 0, vy: 0 };
     } else if (draggingChargeIndex !== null) {
-      setCharges((prev) => {
-        const newCharges = [...prev];
-        newCharges[draggingChargeIndex] = { ...newCharges[draggingChargeIndex], x, y };
-        return newCharges;
+      setCharges(prev => {
+        const next = [...prev];
+        next[draggingChargeIndex] = { ...next[draggingChargeIndex], x, y };
+        return next;
       });
     }
   };
@@ -156,19 +225,20 @@ const ElectricFieldSimulation = () => {
     setDraggingChargeIndex(null);
   };
 
-  // Reset simulation: clear charges and reset test charge.
   const resetSimulation = () => {
-    // Reset based on current configuration.
+    const { width: W, height: H } = size;
     if (configuration === "dipole") {
-      setCharges(dipoleConfig);
+      setCharges(dipoleConfig(W, H));
     } else if (configuration === "capacitor") {
-      setCharges(capacitorConfig());
+      setCharges(capacitorConfig(W, H));
+    } else if (configuration === "monopole") {
+      setCharges(monopoleConfig(W, H));
     }
-    testChargeRef.current = { ...initialTestCharge };
+    testChargeRef.current = initialTestChargeFromSize(W, H);
     setAnimateTestCharge(false);
   };
 
-  // Attach mouse event listeners to the canvas.
+  // Bind events to canvas
   useEffect(() => {
     const canvas = canvasRef.current;
     canvas.addEventListener("mousedown", handleMouseDown);
@@ -183,118 +253,150 @@ const ElectricFieldSimulation = () => {
     };
   }, [draggingTestCharge, draggingChargeIndex, charges]);
 
-  // Animation loop: update the test charge (if enabled) and redraw the simulation.
- // Inside your component's useEffect for animation:
-useEffect(() => {
+  // Animation
+  useEffect(() => {
     let animationFrameId;
     let lastTime = performance.now();
-    let mounted = true; // flag to track if component is still mounted
-  
+    let mounted = true;
+
     const animate = (time) => {
-      if (!mounted) return; // if the component has unmounted, exit the loop
-  
+      if (!mounted) return;
       const canvas = canvasRef.current;
-      // Check if canvas is available; if not, skip drawing.
       if (!canvas) {
         animationFrameId = requestAnimationFrame(animate);
         return;
       }
-      const dt = (time - lastTime) / 1000; // dt in seconds
+
+      // dt with cap
+      const rawDt = (time - lastTime) / 1000;
+      const dt = Math.min(rawDt, 0.033);
       lastTime = time;
+
+      const { width, height } = size;
+
+      // HiDPI/crisp
+      if (canvas.width !== width || canvas.height !== height) {
+        const dpr = window.devicePixelRatio || 1;
+        canvas.width = Math.round(width * dpr);
+        canvas.height = Math.round(height * dpr);
+        canvas.style.width = `${width}px`;
+        canvas.style.height = `${height}px`;
+      }
       const ctx = canvas.getContext("2d");
+      const dpr = window.devicePixelRatio || 1;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, width, height);
-  
-      // Draw electric field arrows on a grid.
-      const spacing = 30;
-      const arrowLength = 15; // fixed arrow length
-      const opacityScale = 0.01; // scale factor to map field magnitude to opacity
+
+      // Field arrows
+      const spacing = Math.max(20, Math.round(Math.min(width, height) / 20));
+      const arrowLength = 15;
+      const opacityScale = 0.01;
       for (let x = spacing; x < width; x += spacing) {
         for (let y = spacing; y < height; y += spacing) {
           const { Ex, Ey } = computeField(x, y);
-          const E_mag = Math.sqrt(Ex * Ex + Ey * Ey);
+          const E_mag = Math.hypot(Ex, Ey);
           const angle = Math.atan2(Ey, Ex);
           const toX = x + arrowLength * Math.cos(angle);
           const toY = y + arrowLength * Math.sin(angle);
-          const arrowOpacity = Math.min(1, E_mag * opacityScale);
-          drawArrow(ctx, x, y, toX, toY, arrowOpacity);
+          drawArrow(ctx, x, y, toX, toY, Math.min(1, E_mag * opacityScale));
         }
       }
-  
-      // Draw each user-placed charge.
-      charges.forEach((charge) => {
+
+      // Optional field lines overlay
+      drawFieldLines(ctx);
+
+      // Charges
+      charges.forEach(c => {
         ctx.beginPath();
-        ctx.arc(charge.x, charge.y, 8, 0, 2 * Math.PI);
-        ctx.fillStyle = charge.q > 0 ? "red" : "blue";
+        ctx.arc(c.x, c.y, 8, 0, 2 * Math.PI);
+        ctx.fillStyle = c.q > 0 ? "red" : "blue";
         ctx.fill();
         ctx.strokeStyle = "#000";
         ctx.stroke();
       });
-  
-      // Update and draw the test charge.
+
+      // Test charge
       let { x, y, vx, vy, q, m } = testChargeRef.current;
       if (animateTestCharge && !draggingTestCharge) {
         const { Ex, Ey } = computeField(x, y);
         const ax = (q / m) * Ex * accelerationScale;
         const ay = (q / m) * Ey * accelerationScale;
-        vx = vx + ax * dt;
-        vy = vy + ay * dt;
-        x = x + vx * dt;
-        y = y + vy * dt;
-        testChargeRef.current = { x, y, vx, vy, q, m };
+        vx += ax * dt;
+        vy += ay * dt;
+        x += vx * dt;
+        y += vy * dt;
+
+        if (x < 0 || x > size.width || y < 0 || y > size.height) {
+          setAnimateTestCharge(false);
+        } else {
+          testChargeRef.current = { x, y, vx, vy, q, m };
+        }
       }
       ctx.beginPath();
-      ctx.arc(x, y, 6, 0, 2 * Math.PI);
+      ctx.arc(testChargeRef.current.x, testChargeRef.current.y, 6, 0, 2 * Math.PI);
       ctx.fillStyle = "green";
       ctx.fill();
       ctx.strokeStyle = "#000";
       ctx.stroke();
-  
+
       animationFrameId = requestAnimationFrame(animate);
     };
-  
+
     animationFrameId = requestAnimationFrame(animate);
     return () => {
-      mounted = false; // signal that the component is unmounting
+      mounted = false;
       cancelAnimationFrame(animationFrameId);
     };
-  }, [charges, animateTestCharge, draggingTestCharge]);
-  
+  }, [charges, animateTestCharge, draggingTestCharge, showFieldLines, linesPerMicroC, size]);
 
   return (
     <div style={{ textAlign: "center" }}>
       <div style={{ marginBottom: "0.5rem" }}>
         <label htmlFor="configuration">Select Configuration: </label>
-        <select
-          id="configuration"
-          value={configuration}
-          onChange={handleConfigurationChange}
-        >
+        <select id="configuration" value={configuration} onChange={handleConfigurationChange}>
+          <option value="monopole">Monopole</option>
           <option value="dipole">Dipole</option>
           <option value="capacitor">Capacitor Plates</option>
         </select>
+
+        <label style={{ marginLeft: 12 }}>
+          <input
+            type="checkbox"
+            checked={showFieldLines}
+            onChange={e => setShowFieldLines(e.target.checked)}
+          />
+          {" "}Show field lines
+        </label>
+
+        <label style={{ marginLeft: 8, opacity: showFieldLines ? 1 : 0.5 }}>
+          Density:
+          <input
+            type="range"
+            min="4"
+            max="24"
+            value={linesPerMicroC}
+            onChange={e => setLinesPerMicroC(+e.target.value)}
+            disabled={!showFieldLines}
+          />
+        </label>
       </div>
+
       <canvas
         ref={canvasRef}
-        width={width}
-        height={height}
-        style={{ border: "1px solid #ccc", cursor: "pointer" }}
+        // width/height are set dynamically for crisp HiDPI rendering
+        style={{ border: "1px solid #ccc", cursor: "pointer", maxWidth: "100%" }}
       />
+
       <div style={{ marginTop: "0.5rem" }}>
         <button onClick={resetSimulation}>Reset Simulation</button>
-      </div>
-      <div style={{ marginTop: "0.5rem" }}>
-        <button
-          onClick={() => setAnimateTestCharge(true)}
-          disabled={animateTestCharge}
-        >
-          {animateTestCharge
-            ? "Test Charge Animating"
-            : "Start Test Charge Animation"}
+        <button onClick={() => setAnimateTestCharge(true)} disabled={animateTestCharge} style={{ marginLeft: 8 }}>
+          {animateTestCharge ? "Test Charge Animating" : "Start Test Charge Animation"}
         </button>
       </div>
+
       <p style={{ marginTop: "0.5rem" }}>
-        Click on a charge and drag to move it. Click on an empty space to add a new charge
-        (hold <strong>Shift</strong> for a negative charge).<br />
+        Click to add a charge (Shift = negative). Drag to move. <strong>Ctrl-click</strong> (or ⌘-click on Mac)
+        a charge to remove it. Drag the green test charge to reposition it.
       </p>
     </div>
   );
