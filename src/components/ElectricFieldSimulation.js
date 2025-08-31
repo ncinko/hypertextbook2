@@ -117,36 +117,80 @@ const ElectricFieldSimulation = () => {
   const distToAnyCharge = (x, y, localCharges = charges) =>
     localCharges.reduce((d, c) => Math.min(d, Math.hypot(x - c.x, y - c.y)), Infinity);
 
-  const traceFieldLine = (ctx, x0, y0, dir, stepPx, maxSteps) => {
-    let x = x0, y = y0;
-    ctx.beginPath();
-    ctx.moveTo(x, y);
-    for (let i = 0; i < maxSteps; i++) {
-      const { Ex, Ey } = computeField(x, y);
-      let [ux, uy] = norm2(Ex, Ey);
-      ux *= dir; uy *= dir;
-      // Heun (improved Euler)
-      const xE = x + ux * stepPx, yE = y + uy * stepPx;
-      const { Ex: Ex2, Ey: Ey2 } = computeField(xE, yE);
-      let [ux2, uy2] = norm2(Ex2, Ey2);
-      ux2 *= dir; uy2 *= dir;
-      x += 0.5 * stepPx * (ux + ux2);
-      y += 0.5 * stepPx * (uy + uy2);
+  // --- RK4 streamline integrator with adaptive step on curvature ---
+const traceFieldLine = (ctx, x0, y0, dir, baseStepPx, maxSteps) => {
+  let x = x0, y = y0;
+  ctx.beginPath();
+  ctx.moveTo(x, y);
 
-      if (x < 0 || x > size.width || y < 0 || y > size.height) break;
-      if (distToAnyCharge(x, y) < 10) break;
-      ctx.lineTo(x, y);
-    }
-    ctx.stroke();
+  const fieldUnit = (X, Y) => {
+    const { Ex, Ey } = computeField(X, Y);
+    let [ux, uy] = norm2(Ex, Ey);
+    return [ux * dir, uy * dir];
   };
+
+  const turnAngle = (ax, ay, bx, by) => {
+    const dot = Math.max(-1, Math.min(1, ax * bx + ay * by));
+    return Math.acos(dot);
+  };
+
+  // initialize previous direction from local field
+  let [uxPrev, uyPrev] = fieldUnit(x, y);
+
+  for (let i = 0; i < maxSteps; i++) {
+    // distance-based step shrink near charges
+    const dNear = distToAnyCharge(x, y);
+    const nearFactor = Math.max(0.25, Math.min(1, (dNear - 8) / 40)); // 0.25..1
+    let h = baseStepPx * nearFactor;
+
+    // RK4 in the unit direction field
+    const [k1x, k1y] = fieldUnit(x, y);
+    const [k2x, k2y] = fieldUnit(x + 0.5 * h * k1x, y + 0.5 * h * k1y);
+    const [k3x, k3y] = fieldUnit(x + 0.5 * h * k2x, y + 0.5 * h * k2y);
+    const [k4x, k4y] = fieldUnit(x + h * k3x, y + h * k3y);
+
+    let dx = (h / 6) * (k1x + 2 * k2x + 2 * k3x + k4x);
+    let dy = (h / 6) * (k1y + 2 * k2y + 2 * k3y + k4y);
+
+    // anti-backtracking: if we flipped  > 90°, reduce step and retry once
+    let [uxCurr, uyCurr] = norm2(dx, dy);
+    if (uxCurr * uxPrev + uyCurr * uyPrev < 0) {
+      h *= 0.5;
+      const [k1x2, k1y2] = fieldUnit(x, y);
+      const [k2x2, k2y2] = fieldUnit(x + 0.5 * h * k1x2, y + 0.5 * h * k1y2);
+      const [k3x2, k3y2] = fieldUnit(x + 0.5 * h * k2x2, y + 0.5 * h * k2y2);
+      const [k4x2, k4y2] = fieldUnit(x + h * k3x2, y + h * k3y2);
+      dx = (h / 6) * (k1x2 + 2 * k2x2 + 2 * k3x2 + k4x2);
+      dy = (h / 6) * (k1y2 + 2 * k2y2 + 2 * k3y2 + k4y2);
+      [uxCurr, uyCurr] = norm2(dx, dy);
+    }
+
+    // curvature limiter: if turn > 30°, take a half-step
+    const dTheta = turnAngle(uxPrev, uyPrev, uxCurr, uyCurr);
+    if (dTheta > Math.PI / 6) { dx *= 0.5; dy *= 0.5; }
+
+    x += dx; y += dy;
+    ctx.lineTo(x, y);
+    [uxPrev, uyPrev] = [uxCurr, uyCurr];
+
+    // termination
+    if (x < 0 || x > size.width || y < 0 || y > size.height) break;
+    if (distToAnyCharge(x, y) < 10) break;
+  }
+  ctx.stroke();
+};
+
 
   const drawFieldLines = (ctx) => {
     if (!showFieldLines) return;
     ctx.lineWidth = 1;
     ctx.strokeStyle = "rgba(0,0,0,0.5)";
-    const stepPx = Math.max(0.75, Math.min(size.width, size.height) / 500);
+
+    const baseStepPx = Math.max(0.75, Math.min(size.width, size.height) / 500);
     const maxSteps = 2000;
-    const r0 = 12; // seed circle radius around charges
+
+    // ↑ modestly larger to get outside the highest-curvature core
+    const r0 = 10; // was 12
 
     for (const c of charges) {
       const muC = Math.abs(c.q) / 1e-6;
@@ -156,10 +200,11 @@ const ElectricFieldSimulation = () => {
         const sx = c.x + r0 * Math.cos(theta);
         const sy = c.y + r0 * Math.sin(theta);
         const dir = c.q >= 0 ? +1 : -1; // from +q outward, into –q
-        traceFieldLine(ctx, sx, sy, dir, stepPx, maxSteps);
+        traceFieldLine(ctx, sx, sy, dir, baseStepPx, maxSteps);
       }
     }
   };
+
 
   // Config change
   const handleConfigurationChange = (e) => {

@@ -26,7 +26,10 @@ body {
   h4 { font-size: 1.5rem; }
   h5 { font-size: 1.25rem; }
   h6 { font-size: 1rem; }
-
+  p {
+    line-height: 1.5;  /* more vertical spacing */
+    margin-bottom: 0.7rem; /* extra gap after each paragraph */
+  }
   .container {
     max-width: 1200px; /* Restricts content width */
     margin: 0 auto; /* Centers content horizontally */
