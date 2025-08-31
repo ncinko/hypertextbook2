@@ -4,6 +4,7 @@ import ElectricFieldSimulation from "../components/ElectricFieldSimulation"; // 
 import EquipotentialSimulation from "../components/EquipotentialSimulation"; // Adjust path if needed
 import PointChargeUnitVectorDemo from "../components/PointChargeField";
 import TwoPointChargeSuperposition from "../components/TwoPointChargeSimulation";
+import HiddenExposition from "../components/HiddenExposition";
 
 const chipStyle = {
   display: "inline-block",
@@ -41,12 +42,14 @@ const ElectricFields = () => {
 
           <h2>Introduction</h2>
           <p>
-            An <strong>electric field</strong> is the force per unit charge at a point in space. It describes what force a small positive test charge would feel if placed there. We define the electric field by
+            An <strong>electric field</strong> is the force per unit charge at a point in space.  We define the electric field by
           </p>
           <MathJax inline>{" \\( \\qquad \\vec{\\mathbf E} = \\frac{\\vec{\\mathbf F}}{q_{\\text{test}}} \\),"}</MathJax>
           <p>
-            where <MathJax inline>{"\\( \\vec{\\mathbf F} \\)"}</MathJax> is the force acting on a test charge <MathJax inline>{"\\( q_{\\text{test}} \\)"}</MathJax>.
+            where <MathJax inline>{"\\( \\vec{\\mathbf F} \\)"}</MathJax> is the electric force acting on a test charge <MathJax inline>{"\\( q_{\\text{test}} \\)"}</MathJax>.  
+            </p><p>In other words, this field describes the force a small, positive test charge would experience if placed at a particular location.
           </p>
+
 
           <h2>Point Charge</h2>
           <p>In the presence of a single point charge, the electric field is</p>
@@ -55,20 +58,8 @@ const ElectricFields = () => {
             where <MathJax inline>{"\\( k \\)"}</MathJax> is Coulomb's constant and <MathJax inline>{"\\( q \\)"}</MathJax> is the charge (in Coulombs).
           </p>
 
-{/* Collapsible check-understanding (details/summary), centered */}
-<details style={{ textAlign: "center", marginTop: 8 }}>
-  <summary
-    style={{
-      cursor: "pointer",
-      fontWeight: 600,
-      display: "inline-block",
-      outline: "none",
-    }}
-  >
-    Check understanding: do these two definitions of the electric field agree with Coulomb’s law?
-  </summary>
+      <HiddenExposition title="Do these two definitions of the electric field agree with Coulomb’s law?">
 
-  <div style={{ maxWidth: 720, margin: "12px auto 0", textAlign: "left" }}>
     <p style={{ marginTop: 0 }}>
       Start from Coulomb’s law for the force on a test charge, in the presence of a point charge:
     </p>
@@ -80,10 +71,13 @@ const ElectricFields = () => {
     <div style={{ textAlign: "center", margin: "6px 0" }}>
       <MathJax>{"\\(\\vec{\\mathbf E}=\\dfrac{\\vec{\\mathbf F}}{q_{\\text{test}}}=k\\,\\dfrac{q}{r^2}\\,\\hat{\\mathbf r}\\)"}</MathJax>
     </div>
+          </HiddenExposition>
 
-    
-  </div>
-</details>
+
+
+
+
+
 
 
           <p>
@@ -135,13 +129,72 @@ const ElectricFields = () => {
             <span style={chipStyle}>Make a dipole (+q, −q) → describe the field shape</span>
           </div>
 
+          <HiddenExposition title="Is there one electric field or many?">
           <p>
-            We often speak of <em>individual electric fields</em> due to each point charge. This makes the connection to Coulomb's law clearer, as we can compute the field from each charge separately and then add them up.
-            In the long run, it is better to imagine that space is filled with a single electric field. This perspective emphasizes that the field is a property of space itself, shaped by the configuration of charges,
-            rather than a set of separate “mini-fields” that coexist.
+            We often speak of <em>individual electric fields</em> due to each point charge.  
+            This is a useful mental model for making the connection to Coulomb's law and applying the superposition principle.
+          </p>
+          <p>  
+            In the long run, it is better to imagine that space is filled with a single, unified electric field <MathJax inline>{"\\(\\vec{\\mathbf{E}}_{\\text{net}} \\)"}</MathJax>.
+            This perspective emphasizes that the field is a property of space itself, shaped by the configuration of charges, rather than a set of separate “mini-fields” that coexist.  
+            The field then determines the force on charges within that space, which predicts the subsequent motion according to Newton's laws, which changes the field...
           </p>
 
-          <h2>Electrodynamics</h2>
+<div style={{ display: "flex", justifyContent: "center", margin: "20px 0" }}>
+  <svg viewBox="0 0 400 400" style={{ maxWidth: 320 }}>
+    {/* Light gray loop */}
+    <circle cx="200" cy="200" r="150" fill="none" stroke="#ccc" strokeWidth="2" />
+
+    {/* Pill boxes */}
+    <g fontSize="15" textAnchor="middle">
+      {/* Top */}
+      <rect x="115" y="40" rx="18" ry="18" width="170" height="36" fill="#f0f7ff" stroke="#ccc" />
+      <text x="200" y="64">charge configuration</text>
+
+      {/* Right */}
+      <rect x="280" y="180" rx="18" ry="18" width="100" height="36" fill="#f0f7ff" stroke="#ccc" />
+      <text x="330" y="204">electric field</text>
+
+      {/* Bottom */}
+      <rect x="115" y="324" rx="18" ry="18" width="170" height="36" fill="#f0f7ff" stroke="#ccc" />
+      <text x="200" y="348">forces on charges</text>
+
+      {/* Left */}
+      <rect x="20" y="180" rx="18" ry="18" width="160" height="36" fill="#f0f7ff" stroke="#ccc" />
+      <text x="100" y="204">motion of charges</text>
+    </g>
+
+    {/* Arrowheads placed on the circle at 45°, 135°, 225°, 315° */}
+    {/* Each group translates to the point on the circle, then rotates so the triangle points along the tangent */}
+    {/* Geometry: center (200,200), r=150. 
+       45° point: (200+150/√2, 200+150/√2) = (306.066, 306.066); tangent angle = 45°+90° = 135°
+       135°: (93.934, 306.066); tangent = 225°
+       225°: (93.934, 93.934); tangent = 315°
+       315°: (306.066, 93.934); tangent = 45°
+    */}
+    <g transform="translate(306.066,306.066) rotate(135)">
+      {/* Triangle pointing along +x in local coords */}
+      <path d="M0,-5 L10,0 L0,5 Z" fill="#888" />
+    </g>
+    <g transform="translate(93.934,306.066) rotate(225)">
+      <path d="M0,-5 L10,0 L0,5 Z" fill="#888" />
+    </g>
+    <g transform="translate(93.934,93.934) rotate(315)">
+      <path d="M0,-5 L10,0 L0,5 Z" fill="#888" />
+    </g>
+    <g transform="translate(306.066,93.934) rotate(45)">
+      <path d="M0,-5 L10,0 L0,5 Z" fill="#888" />
+    </g>
+  </svg>
+</div>
+
+
+
+
+          </HiddenExposition>
+
+
+          <h2>Electric Force</h2>
 
           <div className="mathjax-container">
             <p>
@@ -155,23 +208,39 @@ const ElectricFields = () => {
 
           </div>
 
+           <HiddenExposition title="Did we add anything new?">
+          <p>
+            We have not introduced any new physics yet.  At the moment, the electric field is just a way to organize our thinking about forces between charges.</p>
+            <p>  
+            You may have noticed that this field is implicitly a function of position (and time) since the force on a test charge depends on where it is placed:</p>
+            <center>
+            <MathJax inline>{" \\( \\vec{\\mathbf{E}} = \\vec{\\mathbf{E}}(\\vec{\\mathbf{r}}, t) \\)"}</MathJax>  </center>
+            <p>
+            In the above simulations, the field updates "instantaneously" as charges move around.  This is not the case in reality, and the field concept will become more powerful in time-dependent situations.
+          </p>
+          <p>
+            A deeper exploration of electrodynamics will reveal that the electric field is a fundamental entity in its own right, with its own dynamics and energy.  
+            Changing electric fields can generate magnetic fields, and vice versa, leading to the rich phenomena of electromagnetism. 
+          </p>
+          </HiddenExposition>
+
           <h2>Practice Problems</h2>
           <ol className="mathjax-list">
             <li onClick={handleToggleAnswer} style={{ cursor: "pointer", color: "#222", fontWeight: "600" }}>
-              Calculate the electric field 0.5 m away from a point charge of 2 µC.
+              Calculate the magnitude of the electric field 0.5 m away from a 2 µC point charge.
             </li>
             {showAnswer && (
               <p>
                 Using Coulomb's law <MathJax inline>{"\\( E = k \\frac{|q|}{r^2} \\)"}</MathJax>, with
-                <MathJax inline>{"\\( k \\approx 9 \\times 10^9 \\)"}</MathJax> N·m²/C², <MathJax inline>{"\\( q = 2 \\times 10^{-6} \\)"}</MathJax> C,
+                <MathJax inline>{" \\( k \\approx 9 \\times 10^9 \\)"}</MathJax> N·m²/C², <MathJax inline>{"\\( q = 2 \\times 10^{-6} \\)"}</MathJax> C,
                 and <MathJax inline>{"\\( r = 0.5 \\)"}</MathJax> m, we find:
-                <MathJax inline>{"\\( E \\approx 9 \\times 10^9 \\times \\frac{2 \\times 10^{-6}}{(0.5)^2} \\)"}</MathJax>,
+                <MathJax inline>{" \\( E \\approx 9 \\times 10^9 \\times \\frac{2 \\times 10^{-6}}{(0.5)^2} \\)"}</MathJax>,
                 which simplifies to approximately <MathJax inline>{"\\( 72,000 \\)"}</MathJax> N/C.
               </p>
             )}
 
             <li onClick={handleToggleAnswer1} style={{ cursor: "pointer", color: "#222", fontWeight: "600" }}>
-              For two identical point charges of 1 µC placed 1 m apart, determine the net electric field at the midpoint.
+              Two identical 1 µC point charges are placed 1 m apart.  Determine the net electric field at the midpoint.
             </li>
             {showAnswer1 && (
               <p>
@@ -181,12 +250,11 @@ const ElectricFields = () => {
             )}
 
             <li onClick={handleToggleAnswer2} style={{ cursor: "pointer", color: "#222", fontWeight: "600" }}>
-              Why is the electric field inside a conductor at electrostatic equilibrium zero?
+              In electrostatic equilibrium (no motion of free charges), why must the electric field be zero inside a conductor?
             </li>
             {showAnswer2 && (
               <p>
-                In electrostatic equilibrium, free charges within a conductor redistribute themselves so that the internal electric field cancels out, ensuring that
-                <MathJax inline>{" \\( \\vec{E} = 0 \\)"}</MathJax> inside the conductor.
+                If the electric field was non-zero, free charges within a conductor would experience a net force.  A net force implies acceleration and motion, which is not equilibrium. The charges will continue to move until they reach a configuration in which the internal electric field is zero.
               </p>
             )}
           </ol>

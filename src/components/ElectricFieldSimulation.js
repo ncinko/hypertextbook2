@@ -116,6 +116,7 @@ const ElectricFieldSimulation = () => {
   };
   const distToAnyCharge = (x, y, localCharges = charges) =>
     localCharges.reduce((d, c) => Math.min(d, Math.hypot(x - c.x, y - c.y)), Infinity);
+  
 
   // --- RK4 streamline integrator with adaptive step on curvature ---
 const traceFieldLine = (ctx, x0, y0, dir, baseStepPx, maxSteps) => {
