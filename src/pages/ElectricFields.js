@@ -3,6 +3,7 @@ import { MathJax, MathJaxContext } from "better-react-mathjax";
 import ElectricFieldSimulation from "../components/ElectricFieldSimulation"; // Adjust path if needed
 import EquipotentialSimulation from "../components/EquipotentialSimulation"; // Adjust path if needed
 import PointChargeUnitVectorDemo from "../components/PointChargeField";
+import TwoPointChargeSuperposition from "../components/TwoPointChargeSimulation";
 
 
 const ElectricFields = () => {
@@ -36,11 +37,11 @@ const ElectricFields = () => {
              <p>where <MathJax inline>{"\\( \\vec{\\mathbf F} \\)"}</MathJax> is the force acting on a test charge <MathJax inline>{"\\( q \\)"}</MathJax>.  In other words, if we can measure the force on a small test charge, we can determine the value of the electric field at that point.
           </p>
 
-          <h2>Electric Field Due to a Point Charge</h2>
+          <h2>Point Charge</h2>
           <p>
             In the presence of a single point charge, the electric field is
           </p>
-          <MathJax inline>{"\\(\\qquad \\vec{\\mathbf E}= k \\frac{q}{r^2} \\hat{\\mathbf r} \\)"}</MathJax>
+          <MathJax inline>{"\\(\\qquad \\vec{\\mathbf E}= k \\frac{q}{r^2} \\hat{\\mathbf r} \\),"}</MathJax>
           <p>
             where <MathJax inline>{"\\( k \\)"}</MathJax> is Coulomb's constant and <MathJax inline>{"\\( q \\)"}</MathJax> is the charge (in Coulombs).</p>
             <p>  The vector <MathJax inline>{"\\( \\vec{\\mathbf r} \\)"}</MathJax> is directed from the charge's position to the "location of interest" where we are computing the field.</p>
@@ -63,13 +64,18 @@ const ElectricFields = () => {
   When multiple charges are present, the net electric field is the vector sum of the individual fields:
 </p>
 <MathJax inline>{"\\(\\qquad \\vec{\\mathbf{E}}_{\\text{net}} = \\sum_i \\vec{\\mathbf{E}}_i \\)"}</MathJax>
-<p>
-  We often begin by speaking of <em>the electric field due to a single charge</em> so that the connection with Coulomb’s law is clear. 
-  It is better to imagine that space is filled with a single electric field. 
-  That field is determined by the contributions of <strong>all charges present</strong>, combined by superposition.
-  This perspective emphasizes that the field is a property of space itself, shaped by the configuration of charges, 
+          <p>
+With two point charges, the net field is</p>
+<MathJax inline>{"\\(\\qquad \\vec{\\mathbf{E}}_{\\text{net}} =  \\vec{\\mathbf{E}}_1 + \\vec{\\mathbf{E}}_2 \\)"}</MathJax>
+<p></p>
+          <TwoPointChargeSuperposition />
+          <p>
+  We often speak of <em>individual electric fields</em> due to each point charge.  This makes the connection to Coulomb's law clearer, as we can compute the field from each charge separately and then add them up.
+  In the long run, it is better to imagine that space is filled with a single electric field.  This perspective emphasizes that the field is a property of space itself, shaped by the configuration of charges, 
   rather than a set of separate “mini-fields” that coexist.
 </p>
+          <h2>Electrodynamics</h2>
+
 
 
           <div className="mathjax-container">

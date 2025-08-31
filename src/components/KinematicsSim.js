@@ -49,9 +49,9 @@ const DEFAULTS = {
   MIN_ZONE_HALF: 0.25,        // meters (difficulty floor)
   SHRINK_FACTOR: 0.93,        // multiply zone half-width after each success
   V_THRESH: 0.35,             // m/s required for a valid stop
-  HOLD_TIME: 0.6,             // seconds of dwell while slow inside zone
+  HOLD_TIME: 0.5,             // seconds of dwell while slow inside zone
   ZONE_TIME_START: 10.0,       // seconds on first zone
-  ZONE_TIME_INCREMENT: 2.0,   // add 5s after each successful stop
+  ZONE_TIME_INCREMENT: 3.0,   // add 3s after each successful stop
   WIN_STOPS: 15,
 };
 
