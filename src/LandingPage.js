@@ -18,11 +18,6 @@ export default function LandingPage() {
   const hawkSpawnRef = useRef({ nextAt: 0 });
   const spriteRef = useRef({ img: null, loaded: false, fw: 0, fh: 0, frames: 9, cols: 3, rows: 3 });
 
-  // Title-suck state
-  const bhFormedRef = useRef(false);
-  const bhCenterRef = useRef({ x: 0, y: 0 });
-  const textSuckProgressRef = useRef(0);
-
   // Mouse-grow star
   const growingStarRef = useRef(null);
   const holdStartRef = useRef(null);
@@ -124,8 +119,6 @@ export default function LandingPage() {
       updateHawks(dt);
       drawHawks(ctx);
 
-      if (bhFormedRef.current) advanceTitleSuck();
-
       animationRef.current = requestAnimationFrame(animate);
     };
 
@@ -165,7 +158,32 @@ export default function LandingPage() {
         ctx.stroke();
     }
   }
-  function drawCollapsing(ctx,s){ drawStar(ctx,s); ctx.strokeStyle='rgba(255,200,120,0.25)'; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(s.x,s.y,s.size*1.12,0,Math.PI*2); ctx.stroke(); }
+  function drawCollapsing(ctx, s) {
+    // Draw the expanding supernova shell
+    if (s.collapseProgress < 1) {
+        const p = s.collapseProgress;
+        const easeOutQuint = t => 1 - Math.pow(1 - t, 5);
+        const currentRadius = s.initialSize * 2.5 * easeOutQuint(p); // Expand dramatically
+        const opacity = 1 - p*p; // Fade out
+
+        // A brighter, more fiery color
+        ctx.strokeStyle = `rgba(255, 220, 180, ${opacity * 0.9})`;
+        ctx.lineWidth = 1 + (1 - opacity) * 15; // Get very thick then thin
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, currentRadius, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // Add a second, faster, thinner ring
+        ctx.strokeStyle = `rgba(255, 255, 255, ${opacity * 0.5})`;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, currentRadius * 1.5, 0, Math.PI * 2);
+        ctx.stroke();
+    }
+
+    // Draw the shrinking core
+    drawStar(ctx, s);
+  }
 
   function updateBodies(){
     // merge pass
@@ -177,7 +195,7 @@ export default function LandingPage() {
               merged.add(i); merged.add(j); did=true; break;
             } else if(A.type!=='bh'&&B.type!=='bh'){
               const m=A.mass+B.mass; const x=(A.x*A.mass+B.x*B.mass)/m; const y=(A.y*A.mass+B.y*B.mass)/m; const vx=(A.vx*A.mass+B.vx*B.mass)/m; const vy=(A.vy*A.mass+B.vy*B.mass)/m; const size=Math.sqrt((A.size??A.initialSize)**2+(B.size??B.initialSize)**2);
-              if(m>=BH_THRESHOLD_MASS){ const fixed=Math.max(10,size*0.6); bodies.push({x,y,vx,vy,mass:m,type:'collapsing',initialSize:size,size, targetSize:fixed,color:'#222',collapseProgress:0}); if(!bhFormedRef.current){ bhCenterRef.current={x,y}; bhFormedRef.current=true; textSuckProgressRef.current=0; } }
+              if(m>=BH_THRESHOLD_MASS){ const fixed=Math.max(10,size*0.6); bodies.push({x,y,vx,vy,mass:m,type:'collapsing',initialSize:size,size, targetSize:fixed,color:'#222',collapseProgress:0}); }
               else { bodies.push({x,y,size,color:getStarColor(size),vx,vy,mass:m,type:'star'}); }
               merged.add(i); merged.add(j); did=true; break;
             }
@@ -287,7 +305,6 @@ function drawHawks(ctx) {
     ctx.restore();
   }
 }
-  function advanceTitleSuck(){ const title=titleRef.current, canvas=canvasRef.current; if(!title||!canvas) return; const tr=title.getBoundingClientRect(), cr=canvas.getBoundingClientRect(); const c=bhCenterRef.current; const bx=cr.left+c.x, by=cr.top+c.y; const cx=tr.left+tr.width/2, cy=tr.top+tr.height/2; const p=Math.min(1, textSuckProgressRef.current+0.01); textSuckProgressRef.current=p; const x=lerp(cx,bx,p), y=lerp(cy,by,p); const scale=Math.max(0.1,1-p); const rotate=p*540; const opacity=Math.max(0,1-p*1.2); title.style.transform=`translate(${x-cx}px, ${y-cy}px) scale(${scale}) rotate(${rotate}deg)`; title.style.opacity=String(opacity); }
 
   // --- star color helper ---
   function getStarColor(size){ const min=5,max=20; const t=Math.max(0,Math.min(1,(size-min)/(max-min))); const mix=(a,b,t)=>a.map((v,i)=>Math.round(v+t*(b[i]-v))); const blue=[173,216,230], yellow=[255,240,200], red=[240,80,0]; const c = t<0.5?mix(blue,yellow,t*2):mix(yellow,red,(t-0.5)*2); return `rgb(${c[0]},${c[1]},${c[2]})`; }
