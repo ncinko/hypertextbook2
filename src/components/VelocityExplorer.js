@@ -422,10 +422,13 @@ useEffect(() => {
 
   function clampT(t) { return Math.max(tMin, Math.min(tMax, t)); }
 
-  function mouseToT(evt) {
+  function eventToT(evt) {
     const rect = canvasRef.current.getBoundingClientRect();
-    const mx = (evt.clientX - rect.left);
-    const my = (evt.clientY - rect.top);
+    const touch = evt.touches && evt.touches[0];
+    const clientX = touch ? touch.clientX : evt.clientX;
+    const clientY = touch ? touch.clientY : evt.clientY;
+    const mx = (clientX - rect.left);
+    const my = (clientY - rect.top);
     const t = tMin + ((mx - PAD_L) / (size.w - PAD_L - PAD_R)) * (tMax - tMin);
     return { t: clampT(t), mx, my };
   }
@@ -435,15 +438,13 @@ useEffect(() => {
     if (!canvas) return;
 
     const onDown = (e) => {
-      const rect = canvas.getBoundingClientRect();
-      const mx = e.clientX - rect.left;
-      const my = e.clientY - rect.top;
+      const { mx, my } = eventToT(e);
       const key = whichHandle(mx, my);
       draggingRef.current = key;
     };
     const onMove = (e) => {
       if (!draggingRef.current) return;
-      const { t } = mouseToT(e);
+      const { t } = eventToT(e);
       if (draggingRef.current === "t1") setT1(Math.min(t, t2 - 0.0001));
       if (draggingRef.current === "t2") setT2(Math.max(t, t1 + 0.0001));
       if (draggingRef.current === "t0") setT0(t);
@@ -453,11 +454,17 @@ useEffect(() => {
     canvas.addEventListener("mousedown", onDown);
     window.addEventListener("mousemove", onMove);
     window.addEventListener("mouseup", onUp);
+    canvas.addEventListener("touchstart", onDown, { passive: true });
+    window.addEventListener("touchmove", onMove, { passive: true });
+    window.addEventListener("touchend", onUp);
 
     return () => {
       canvas.removeEventListener("mousedown", onDown);
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
+      canvas.removeEventListener("touchstart", onDown);
+      window.removeEventListener("touchmove", onMove);
+      window.removeEventListener("touchend", onUp);
     };
   }, [t1, t2, t0, size.w]);
 
@@ -466,7 +473,6 @@ useEffect(() => {
     return (
       <button
         type="button"
-        onClick={onClick}
         aria-pressed={playing}
         aria-label={playing ? "Pause motion" : "Show motion"}
         style={{
@@ -486,7 +492,10 @@ useEffect(() => {
           transition: "transform 120ms ease, filter 120ms ease, box-shadow 120ms ease",
         }}
         onMouseDown={(e) => (e.currentTarget.style.transform = "translateY(1px)")}
-        onMouseUp={(e) => (e.currentTarget.style.transform = "translateY(0)")}
+        onMouseUp={(e) => {
+          e.currentTarget.style.transform = "translateY(0)";
+          if (onClick) onClick(e);
+        }}
         onMouseEnter={(e) => (e.currentTarget.style.filter = "brightness(1.05)")}
         onMouseLeave={(e) => {
           e.currentTarget.style.filter = "none";

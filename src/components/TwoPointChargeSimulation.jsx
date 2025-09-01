@@ -1,30 +1,48 @@
-// DraggableTwoChargeSuperposition_Snap.jsx
+// TwoPointChargeSimulation.jsx
 import React, { useRef, useEffect, useState } from "react";
 
 export default function DraggableTwoChargeSuperposition_Snap() {
   const canvasRef = useRef(null);
 
-  // --- Responsive sizing ---
+  // --- Responsive sizing using parent container ---
+  const ASPECT = 0.55; // height = aspect * width
+  const clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
+
   const computeSize = () => {
-    const w = Math.min(900, Math.max(320, window.innerWidth - 48));
-    const h = Math.min(520, Math.max(260, Math.round(w * 0.55)));
-    return { width: w, height: h };
+    const parent = canvasRef.current?.parentElement;
+    const parentWidth = parent
+      ? parent.getBoundingClientRect().width
+      : window.innerWidth - 48;
+    const w = clamp(parentWidth, 320, 900);
+    return { width: Math.round(w), height: Math.round(w * ASPECT) };
   };
+
   const [size, setSize] = useState(computeSize());
+
   useEffect(() => {
-    const onResize = () => setSize(computeSize());
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
+    const update = () => setSize(computeSize());
+    update();
+    const parent = canvasRef.current?.parentElement;
+    let ro;
+    if (parent && "ResizeObserver" in window) {
+      ro = new ResizeObserver(update);
+      ro.observe(parent);
+    }
+    window.addEventListener("resize", update);
+    return () => {
+      window.removeEventListener("resize", update);
+      if (ro) ro.disconnect();
+    };
   }, []);
 
   // --- Units / constants ---
-  const PIXEL_TO_MICROMETER = 1;   // 1 px = 1 µm
-  const UM_TO_M = 1e-6;            // µm → m
-  const GRID_SPACING_UM = 50;      // every 50 µm
-  const k = 9e9;                   // N·m^2/C^2
+  const PIXEL_TO_MICROMETER = 1;
+  const UM_TO_M = 1e-6;
+  const GRID_SPACING_UM = 50;
+  const k = 9e9;
 
-  const E_PIXELS_PER_SI = 6.5e-8;  // px per (N/C)
-  const E_LEN_MAX = 260;           // px cap
+  const E_PIXELS_PER_SI = 6.5e-8;
+  const E_LEN_MAX = 260;
 
   // --- Charges (nC) ---
   const [q1NanoC, setQ1NanoC] = useState(5.0);
@@ -33,28 +51,39 @@ export default function DraggableTwoChargeSuperposition_Snap() {
   const q2 = q2NanoC * 1e-9;
 
   // Positions (draggable)
-  const [charge1, setCharge1] = useState({ x: size.width * 0.35, y: size.height * 0.55 });
-  const [charge2, setCharge2] = useState({ x: size.width * 0.65, y: size.height * 0.55 });
-  const [probe,   setProbe]   = useState({ x: size.width * 0.50, y: size.height * 0.30 });
+  const [charge1, setCharge1] = useState({
+    x: size.width * 0.35,
+    y: size.height * 0.55,
+  });
+  const [charge2, setCharge2] = useState({
+    x: size.width * 0.65,
+    y: size.height * 0.55,
+  });
+  const [probe, setProbe] = useState({
+    x: size.width * 0.5,
+    y: size.height * 0.3,
+  });
 
   // Snap toggle
   const [snap, setSnap] = useState(false);
 
-  // Grid origin (keep in sync with draw loop so snapping matches visible grid)
-  const getOrigin = () => ({ x: Math.round(size.width / 2), y: Math.round(size.height / 2) });
+  const getOrigin = () => ({
+    x: Math.round(size.width / 2),
+    y: Math.round(size.height / 2),
+  });
   const gridStepPx = GRID_SPACING_UM / PIXEL_TO_MICROMETER;
 
-  // Clamp to canvas bounds on-grid (so we never snap outside)
   const snapPoint = (p) => {
-    if (!snap) return {
-      x: Math.max(0, Math.min(size.width,  p.x)),
-      y: Math.max(0, Math.min(size.height, p.y)),
-    };
+    if (!snap)
+      return {
+        x: Math.max(0, Math.min(size.width, p.x)),
+        y: Math.max(0, Math.min(size.height, p.y)),
+      };
     const { x: ox, y: oy } = getOrigin();
     const ix = Math.round((p.x - ox) / gridStepPx);
     const iy = Math.round((p.y - oy) / gridStepPx);
     const ixMin = Math.ceil((0 - ox) / gridStepPx);
-    const ixMax = Math.floor((size.width  - ox) / gridStepPx);
+    const ixMax = Math.floor((size.width - ox) / gridStepPx);
     const iyMin = Math.ceil((0 - oy) / gridStepPx);
     const iyMax = Math.floor((size.height - oy) / gridStepPx);
     const clampedIx = Math.max(ixMin, Math.min(ixMax, ix));
@@ -62,30 +91,28 @@ export default function DraggableTwoChargeSuperposition_Snap() {
     return { x: ox + clampedIx * gridStepPx, y: oy + clampedIy * gridStepPx };
   };
 
-  // Keep layout responsive; if snapping is enabled, re-snap after scaling
+  // Keep layout responsive
   const prevSize = useRef(size);
   useEffect(() => {
     const sx = size.width / prevSize.current.width;
     const sy = size.height / prevSize.current.height;
-    setCharge1(p => ({ x: p.x * sx, y: p.y * sy }));
-    setCharge2(p => ({ x: p.x * sx, y: p.y * sy }));
-    setProbe  (p => ({ x: p.x * sx, y: p.y * sy }));
+    setCharge1((p) => ({ x: p.x * sx, y: p.y * sy }));
+    setCharge2((p) => ({ x: p.x * sx, y: p.y * sy }));
+    setProbe((p) => ({ x: p.x * sx, y: p.y * sy }));
     prevSize.current = size;
   }, [size]);
   useEffect(() => {
     if (snap) {
-      setCharge1(p => snapPoint(p));
-      setCharge2(p => snapPoint(p));
-      setProbe  (p => snapPoint(p));
+      setCharge1((p) => snapPoint(p));
+      setCharge2((p) => snapPoint(p));
+      setProbe((p) => snapPoint(p));
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [snap, size.width, size.height]);
 
   // --- Drag state ---
   const HIT_R = 16;
-  const dragRef = useRef({ type: null }); // 'probe' | 'c1' | 'c2' | null
+  const dragRef = useRef({ type: null });
 
-  // Pointer helpers
   const getMousePos = (evt) => {
     const rect = canvasRef.current.getBoundingClientRect();
     return { x: evt.clientX - rect.left, y: evt.clientY - rect.top };
@@ -106,29 +133,35 @@ export default function DraggableTwoChargeSuperposition_Snap() {
   const v1 = vecAndUnit(charge1, probe);
   const v2 = vecAndUnit(charge2, probe);
 
-  // --- Physics (SI) ---
+  // --- Physics ---
   const soft_um = 5;
-  const soft_m  = soft_um * UM_TO_M;
+  const soft_m = soft_um * UM_TO_M;
 
   function fieldAt(vec, qC) {
     const r_um = vec.r * PIXEL_TO_MICROMETER;
-    const r_m  = Math.max(r_um * UM_TO_M, soft_m);
+    const r_m = Math.max(r_um * UM_TO_M, soft_m);
     const Emag = k * Math.abs(qC) / (r_m * r_m);
-    return { Ex: Emag * vec.ux * Math.sign(qC), Ey: Emag * vec.uy * Math.sign(qC), Emag };
+    return {
+      Ex: Emag * vec.ux * Math.sign(qC),
+      Ey: Emag * vec.uy * Math.sign(qC),
+      Emag,
+    };
   }
 
-  const E1   = fieldAt(v1, q1);
-  const E2   = fieldAt(v2, q2);
+  const E1 = fieldAt(v1, q1);
+  const E2 = fieldAt(v2, q2);
   const Esum = { Ex: E1.Ex + E2.Ex, Ey: E1.Ey + E2.Ey };
 
-  // --- Drawing ---
+// --- Drawing ---
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const dpr = window.devicePixelRatio || 1;
-    const W = Math.round(size.width * dpr), H = Math.round(size.height * dpr);
+    const W = Math.round(size.width * dpr),
+      H = Math.round(size.height * dpr);
     if (canvas.width !== W || canvas.height !== H) {
-      canvas.width = W; canvas.height = H;
+      canvas.width = W;
+      canvas.height = H;
       canvas.style.width = `${size.width}px`;
       canvas.style.height = `${size.height}px`;
     }
@@ -346,9 +379,17 @@ export default function DraggableTwoChargeSuperposition_Snap() {
         </label>
       </div>
 
-      <canvas
+            <canvas
         ref={canvasRef}
-        style={{ border: "1px solid #ccc", maxWidth: "100%", cursor: "pointer" }}
+        style={{
+          border: "1px solid #ccc",
+          maxWidth: "100%",
+          height: "auto",
+          display: "block",
+          marginInline: "auto",
+          cursor: "pointer",
+          touchAction: "none",
+        }}
       />
 
       <p style={{ marginTop: 8, maxWidth: 800, marginInline: "auto" }}>

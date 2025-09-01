@@ -4,17 +4,43 @@ import React, { useRef, useEffect, useState } from "react";
 export default function PointChargeUnitVectorDemo() {
   const canvasRef = useRef(null);
 
-  // --- Responsive sizing ---
-  const computeSize = () => {
-    const w = Math.min(900, Math.max(320, window.innerWidth - 48));
-    const h = Math.min(520, Math.max(260, Math.round(w * 0.55)));
-    return { width: w, height: h };
+  // --- Responsive sizing (based on parent container) ---
+  const ASPECT = 0.55; // height = ASPECT * width
+  const clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
+
+  const getParentWidth = () => {
+    const parent = canvasRef.current?.parentElement;
+    if (!parent) return undefined;
+    const w = parent.getBoundingClientRect().width;
+    // Keep within sensible bounds for layout and labels
+    return clamp(w, 280, 900);
   };
+
+  const computeSize = () => {
+    const w = getParentWidth() ?? clamp(window.innerWidth - 48, 280, 900);
+    return { width: Math.round(w), height: Math.round(w * ASPECT) };
+  };
+
   const [size, setSize] = useState(computeSize());
+
   useEffect(() => {
-    const onResize = () => setSize(computeSize());
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
+    const update = () => setSize(computeSize());
+    update(); // initial
+
+    // Observe the parent for container-based resizes (reflows, grid changes, etc.)
+    const parent = canvasRef.current?.parentElement;
+    let ro;
+    if (parent && "ResizeObserver" in window) {
+      ro = new ResizeObserver(update);
+      ro.observe(parent);
+    }
+    // Fallback: watch window resizes
+    window.addEventListener("resize", update);
+
+    return () => {
+      window.removeEventListener("resize", update);
+      if (ro) ro.disconnect();
+    };
   }, []);
 
   // --- Units / constants ---
@@ -42,11 +68,11 @@ export default function PointChargeUnitVectorDemo() {
 
   // Snap helper (kept in bounds and aligned to visible grid)
   const snapPoint = (p) => {
-    const clamp = (x, y) => ({
+    const clampPt = (x, y) => ({
       x: Math.max(0, Math.min(size.width,  x)),
       y: Math.max(0, Math.min(size.height, y)),
     });
-    if (!snap) return clamp(p.x, p.y);
+    if (!snap) return clampPt(p.x, p.y);
     const { x: ox, y: oy } = getOrigin();
     const ix = Math.round((p.x - ox) / gridStepPx);
     const iy = Math.round((p.y - oy) / gridStepPx);
@@ -282,9 +308,17 @@ export default function PointChargeUnitVectorDemo() {
         </label>
       </div>
 
+      {/* Centered, fluid canvas */}
       <canvas
         ref={canvasRef}
-        style={{ border: "1px solid #ccc", maxWidth: "100%", cursor: "pointer" }}
+        style={{
+          border: "1px solid #ccc",
+          maxWidth: "100%",
+          height: "auto",
+          display: "block",
+          marginInline: "auto",
+          cursor: "pointer"
+        }}
       />
 
       {/* Info panel (responsive 2-column grid like the two-charge sim) */}
@@ -336,23 +370,23 @@ export default function PointChargeUnitVectorDemo() {
 
 // ---------- Canvas helpers ----------
 function drawArrow(ctx, x1, y1, x2, y2, color = "#000", width = 2) {
-      const head = 15;
-      const dx = x2 - x1, dy = y2 - y1;
-      const ang = Math.atan2(dy, dx);
-      ctx.lineWidth = width;
-      ctx.strokeStyle = color;
-      ctx.fillStyle = color;
-      ctx.beginPath();
-      ctx.moveTo(x1, y1);
-      ctx.lineTo(x2, y2);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(x2 + 5 * Math.cos(ang), y2 + 5 * Math.sin(ang));
-      ctx.lineTo(x2 - head * Math.cos(ang - Math.PI / 6), y2 - head * Math.sin(ang - Math.PI / 6));
-      ctx.lineTo(x2 - head * Math.cos(ang + Math.PI / 6), y2 - head * Math.sin(ang + Math.PI / 6));
-      ctx.closePath();
-      ctx.fill();
-    }
+  const head = 15;
+  const dx = x2 - x1, dy = y2 - y1;
+  const ang = Math.atan2(dy, dx);
+  ctx.lineWidth = width;
+  ctx.strokeStyle = color;
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.moveTo(x1, y1);
+  ctx.lineTo(x2, y2);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(x2 + 5 * Math.cos(ang), y2 + 5 * Math.sin(ang));
+  ctx.lineTo(x2 - head * Math.cos(ang - Math.PI / 6), y2 - head * Math.sin(ang - Math.PI / 6));
+  ctx.lineTo(x2 - head * Math.cos(ang + Math.PI / 6), y2 - head * Math.sin(ang + Math.PI / 6));
+  ctx.closePath();
+  ctx.fill();
+}
 
 function drawLabel(ctx, text, x, y, dx, dy, color, fontPx = 15) {
   const mag = Math.hypot(dx, dy) || 1;
@@ -374,7 +408,6 @@ const MONO_NUM_STYLE = {
   fontVariantNumeric: 'tabular-nums' // stable digit widths
 };
 
-// Signed fixed-decimal with explicit +/− (U+2212) sign, for aligned columns
 function SignedFixed({ value, decimals = 0 }) {
   const sign = value < 0 ? '−' : '+'; // U+2212 minus
   const mant = Math.abs(value).toFixed(decimals);
@@ -386,12 +419,10 @@ function SignedFixed({ value, decimals = 0 }) {
   );
 }
 
-// Unsigned fixed-decimal (no leading sign), e.g., for magnitudes
 function Fixed({ value, decimals = 0 }) {
   return <span style={MONO_NUM_STYLE}>{Math.abs(value).toFixed(decimals)}</span>;
 }
 
-// Vector with fixed decimals and fixed-width signs
 function VecFixed({ x, y, decimals = 0 }) {
   return (
     <span style={MONO_NUM_STYLE}>
@@ -400,7 +431,6 @@ function VecFixed({ x, y, decimals = 0 }) {
   );
 }
 
-// Scientific with superscript exponent, to hundredths place
 function Sci2({ value }) {
   if (!isFinite(value) || value === 0) return <span style={MONO_NUM_STYLE}>0</span>;
   const exp = Math.floor(Math.log10(Math.abs(value)));
@@ -413,7 +443,6 @@ function Sci2({ value }) {
   );
 }
 
-// Vector scientific with a shared exponent outside the bracket
 function VecSci2({ vec }) {
   const ax = Math.abs(vec.x);
   const ay = Math.abs(vec.y);

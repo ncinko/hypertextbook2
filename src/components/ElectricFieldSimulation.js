@@ -1,3 +1,4 @@
+// ElectricFieldSimulation.js
 import React, { useState, useEffect, useRef } from "react";
 
 const ElectricFieldSimulation = () => {
@@ -5,24 +6,33 @@ const ElectricFieldSimulation = () => {
   const k = 9e9; // Coulomb's constant
 
   // -------- Responsive sizing --------
+  const ASPECT = 0.6; // height = aspect * width
+  const clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
+
   const computeSize = () => {
-    const w = Math.min(900, Math.max(320, window.innerWidth - 48)); // margins
-    const h = Math.min(600, Math.max(240, Math.round(w * 0.6)));
-    return { width: w, height: h };
+    const parent = canvasRef.current?.parentElement;
+    const parentWidth = parent
+      ? parent.getBoundingClientRect().width
+      : window.innerWidth - 48;
+    const w = clamp(parentWidth, 320, 900);
+    return { width: Math.round(w), height: Math.round(w * ASPECT) };
   };
+
   const [size, setSize] = useState(computeSize());
   const prevSizeRef = useRef(size);
 
   const scaleSceneToNewSize = (oldSize, newSize) => {
     const sx = newSize.width / oldSize.width;
     const sy = newSize.height / oldSize.height;
-    setCharges(prev => prev.map(c => ({ ...c, x: c.x * sx, y: c.y * sy })));
+    setCharges((prev) =>
+      prev.map((c) => ({ ...c, x: c.x * sx, y: c.y * sy }))
+    );
     const t = testChargeRef.current;
     testChargeRef.current = { ...t, x: t.x * sx, y: t.y * sy };
   };
 
   useEffect(() => {
-    const onResize = () => {
+    const update = () => {
       const newSize = computeSize();
       const old = prevSizeRef.current;
       if (newSize.width !== old.width || newSize.height !== old.height) {
@@ -31,42 +41,66 @@ const ElectricFieldSimulation = () => {
         prevSizeRef.current = newSize;
       }
     };
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
+    update();
+    const parent = canvasRef.current?.parentElement;
+    let ro;
+    if (parent && "ResizeObserver" in window) {
+      ro = new ResizeObserver(update);
+      ro.observe(parent);
+    }
+    window.addEventListener("resize", update);
+    return () => {
+      window.removeEventListener("resize", update);
+      if (ro) ro.disconnect();
+    };
   }, []);
 
   // -------- Presets relative to size --------
-  const monopoleConfig = (W, H) => [
-    { x: 0.5 * W, y: 0.5 * H, q: 1e-6 }
-  ];
+  const monopoleConfig = (W, H) => [{ x: 0.5 * W, y: 0.5 * H, q: 1e-6 }];
   const dipoleConfig = (W, H) => [
     { x: 0.3 * W, y: 0.5 * H, q: 1e-6 },
-    { x: 0.7 * W, y: 0.5 * H, q: -1e-6 }
+    { x: 0.7 * W, y: 0.5 * H, q: -1e-6 },
   ];
   const capacitorConfig = (W, H) => {
     const rows = 5;
-    const ys = Array.from({ length: rows }, (_, i) => ((i + 1) / (rows + 1)) * H);
-    const leftX = 0.2 * W, rightX = 0.8 * W;
-    const leftPlate = ys.map(y => ({ x: leftX, y, q: 1e-6 }));
-    const rightPlate = ys.map(y => ({ x: rightX, y, q: -1e-6 }));
+    const ys = Array.from(
+      { length: rows },
+      (_, i) => ((i + 1) / (rows + 1)) * H
+    );
+    const leftX = 0.2 * W,
+      rightX = 0.8 * W;
+    const leftPlate = ys.map((y) => ({ x: leftX, y, q: 1e-6 }));
+    const rightPlate = ys.map((y) => ({ x: rightX, y, q: -1e-6 }));
     return [...leftPlate, ...rightPlate];
   };
 
   // -------- State --------
   const [configuration, setConfiguration] = useState("dipole");
-  const [charges, setCharges] = useState(() => dipoleConfig(size.width, size.height));
+  const [charges, setCharges] = useState(() =>
+    dipoleConfig(size.width, size.height)
+  );
   const [draggingChargeIndex, setDraggingChargeIndex] = useState(null);
   const [draggingTestCharge, setDraggingTestCharge] = useState(false);
   const [animateTestCharge, setAnimateTestCharge] = useState(false);
 
   // Field lines UI
   const [showFieldLines, setShowFieldLines] = useState(false);
-  const [linesPerMicroC, setLinesPerMicroC] = useState(12); // 4..24 is a nice range
+  const [linesPerMicroC, setLinesPerMicroC] = useState(12);
 
-  const initialTestChargeFromSize = (W, H) => ({ x: 0.5 * W, y: 0.33 * H, vx: 0, vy: 0, q: 1e-8, m: 1e-6 });
-  const testChargeRef = useRef(initialTestChargeFromSize(size.width, size.height));
+  const initialTestChargeFromSize = (W, H) => ({
+    x: 0.5 * W,
+    y: 0.33 * H,
+    vx: 0,
+    vy: 0,
+    q: 1e-8,
+    m: 1e-6,
+  });
+  const testChargeRef = useRef(
+    initialTestChargeFromSize(size.width, size.height)
+  );
 
   const accelerationScale = 10000;
+
 
   // Helpers
   const getMousePos = (canvas, evt) => {
@@ -399,7 +433,11 @@ const traceFieldLine = (ctx, x0, y0, dir, baseStepPx, maxSteps) => {
     <div style={{ textAlign: "center" }}>
       <div style={{ marginBottom: "0.5rem" }}>
         <label htmlFor="configuration">Select Configuration: </label>
-        <select id="configuration" value={configuration} onChange={handleConfigurationChange}>
+        <select
+          id="configuration"
+          value={configuration}
+          onChange={handleConfigurationChange}
+        >
           <option value="monopole">Monopole</option>
           <option value="dipole">Dipole</option>
           <option value="capacitor">Capacitor Plates</option>
@@ -409,40 +447,57 @@ const traceFieldLine = (ctx, x0, y0, dir, baseStepPx, maxSteps) => {
           <input
             type="checkbox"
             checked={showFieldLines}
-            onChange={e => setShowFieldLines(e.target.checked)}
-          />
-          {" "}Show field lines
+            onChange={(e) => setShowFieldLines(e.target.checked)}
+          />{" "}
+          Show field lines
         </label>
 
-        <label style={{ marginLeft: 8, opacity: showFieldLines ? 1 : 0.5 }}>
+        <label
+          style={{ marginLeft: 8, opacity: showFieldLines ? 1 : 0.5 }}
+        >
           Density:
           <input
             type="range"
             min="4"
             max="24"
             value={linesPerMicroC}
-            onChange={e => setLinesPerMicroC(+e.target.value)}
+            onChange={(e) => setLinesPerMicroC(+e.target.value)}
             disabled={!showFieldLines}
           />
         </label>
       </div>
 
+      {/* Responsive, centered canvas */}
       <canvas
         ref={canvasRef}
-        // width/height are set dynamically for crisp HiDPI rendering
-        style={{ border: "1px solid #ccc", cursor: "pointer", maxWidth: "100%" }}
+        style={{
+          border: "1px solid #ccc",
+          cursor: "pointer",
+          maxWidth: "100%",
+          height: "auto",
+          display: "block",
+          marginInline: "auto",
+          touchAction: "none",
+        }}
       />
 
       <div style={{ marginTop: "0.5rem" }}>
         <button onClick={resetSimulation}>Reset Simulation</button>
-        <button onClick={() => setAnimateTestCharge(true)} disabled={animateTestCharge} style={{ marginLeft: 8 }}>
-          {animateTestCharge ? "Test Charge Animating" : "Start Test Charge Animation"}
+        <button
+          onClick={() => setAnimateTestCharge(true)}
+          disabled={animateTestCharge}
+          style={{ marginLeft: 8 }}
+        >
+          {animateTestCharge
+            ? "Test Charge Animating"
+            : "Start Test Charge Animation"}
         </button>
       </div>
 
       <p style={{ marginTop: "0.5rem" }}>
-        Click to add a charge (Shift = negative). Drag to move. <strong>Ctrl-click</strong> (or ⌘-click on Mac)
-        a charge to remove it. Drag the green test charge to reposition it.
+        Click to add a charge (Shift = negative). Drag to move.{" "}
+        <strong>Ctrl-click</strong> (or ⌘-click on Mac) a charge to remove
+        it. Drag the green test charge to reposition it.
       </p>
     </div>
   );
