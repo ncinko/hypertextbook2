@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { MathJax, MathJaxContext } from "better-react-mathjax";
 // Simulation lives in a separate component file, e.g. src/components/KinematicsSim.jsx
 import KinematicsSim from "../components/KinematicsSim";
+import VelocityExplorer from "../components/VelocityExplorer";  
 
 /**
  * Kinematics.js
@@ -14,6 +15,7 @@ const Kinematics = () => {
   const [showAnswer, setShowAnswer] = useState(false);
   const [showVectorAnswer, setShowVectorAnswer] = useState(false);
   const [showAnswer3, setShowAnswer3] = useState(false);
+
 
 
   return (
@@ -59,7 +61,7 @@ const Kinematics = () => {
             </li>
             
           </ul>
-
+          <VelocityExplorer />
           <h2>Try It</h2>
           <p>
             Use the simulation below to explore 1D motion. Hold the left/right arrow keys to apply negative/positive

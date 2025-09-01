@@ -3,7 +3,8 @@
 // Each hawk rotates to match its velocity so it “faces” its flight direction.
 
 import React, { useEffect, useRef } from "react";
-import { Link } from "react-router-dom";
+import { Link } from "react-router-dom";    
+
 
 export default function LandingPage() {
   const canvasRef = useRef(null);
@@ -46,7 +47,7 @@ export default function LandingPage() {
   useEffect(() => {
     // Preload 3x3 sprite sheet
     const img = new Image();
-    img.src = process.env.PUBLIC_URL + "/assets/hawks.png";
+    img.src = process.env.PUBLIC_URL + '/assets/hawks.png';
     img.onload = () => {
       spriteRef.current = {
         img,
