@@ -84,8 +84,8 @@ export default function LandingPage() {
     const rect = canvas.getBoundingClientRect();
     const cx = rect.width / 2; const cy = rect.height / 2;
     bodiesRef.current = [
-      { x: cx - 60, y: cy - 10, size: 10, color: "#bde5f4", vx: 0.05, vy: 0.12, mass: 6, type: "star" },
-      { x: cx + 60, y: cy + 10, size: 16, color: "#f5957a", vx: -0.04, vy: -0.08, mass: 9, type: "star" },
+      { x: cx - 60, y: cy - 10, size: 10, color: "#bde5f4", vx: 0.1, vy: 0.2, mass: 6, type: "star" },
+      { x: cx + 60, y: cy + 10, size: 16, color: "#f5957a", vx: -0.05, vy: -0.1, mass: 12, type: "star" },
     ];
 
     const ro = new ResizeObserver(throttledResize);
