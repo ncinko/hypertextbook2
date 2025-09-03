@@ -47,7 +47,7 @@ export default function LandingPage() {
   useEffect(() => {
     // Preload 3x3 sprite sheet
     const img = new Image();
-    img.src = process.env.PUBLIC_URL + '/assets/hawks.png';
+    img.src = '/assets/hawks.png';
     img.onload = () => {
       spriteRef.current = {
         img,

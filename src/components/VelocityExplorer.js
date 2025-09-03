@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 
 export default function VelocityExplorer() {
   // ----------- Model -----------
-  const a = 0.05, b = -0.6, c = 2.0, d = 0.0;
+  const a = 0.06, b = -0.8, c = 3.0, d = 0.0;
   const sOfT = ({ t }) => a * t * t * t + b * t * t + c * t + d;
   const vOfT = (t) => 3 * a * t * t + 2 * b * t + c; // analytic derivative
 
@@ -12,9 +12,10 @@ export default function VelocityExplorer() {
 
   // Secant & tangent handles
   const [t1, setT1] = useState(2);
-  const [t2, setT2] = useState(8);
+  const [t2, setT2] = useState(9);
   const [t0, setT0] = useState(5);
-  const dt = 0.30;
+  const [dragEndTrigger, setDragEndTrigger] = useState(0);
+  const dt = 0.01;
 
   // Motion playback
   const [isPlaying, setIsPlaying] = useState(false);
@@ -33,7 +34,7 @@ export default function VelocityExplorer() {
 
   // Typography
   const FONT_FAMILY = "system-ui, -apple-system, Segoe UI, Roboto, sans-serif";
-  const FONT_AXIS = 15, FONT_TICK = 14, FONT_ANNOT = 14;
+  const FONT_AXIS = 16, FONT_TICK = 16, FONT_ANNOT = 16;
 
   // Responsive sizing
   useEffect(() => {
@@ -128,11 +129,12 @@ export default function VelocityExplorer() {
     drawSecant(ctx);
     drawTangent(ctx);
     drawHandles(ctx);
+    drawAxisDragLabels(ctx);
     drawMotionOverlay(ctx);
 
     // draw on-canvas Play/Pause button
     drawPlayButton(ctx);
-  }, [t1, t2, t0, dpr, size, tMotion, isPlaying]);
+  }, [t1, t2, t0, dpr, size, tMotion, isPlaying, dragEndTrigger]);
 
   function drawGrid(ctx) {
     ctx.save(); ctx.strokeStyle = "#eee"; ctx.lineWidth = 1;
@@ -186,10 +188,13 @@ export default function VelocityExplorer() {
     ctx.strokeStyle = "#e53935"; ctx.lineWidth = 2; ctx.setLineDash([6, 6]);
     ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
     ctx.setLineDash([]); ctx.fillStyle = "#e53935"; ctx.font = `${FONT_ANNOT}px ${FONT_FAMILY}`;
-    ctx.fillText(`v̄ = ${Number.isFinite(avgV) ? avgV.toFixed(2) : "—"} m/s`, (x1 + x2) / 2 - 15, (y1 + y2) / 2 - 30);
+    const label = `v̄ = ${Number.isFinite(avgV) ? avgV.toFixed(2) : "—"} m/s`;
+    const textWidth = ctx.measureText(label).width;
+    const slope = avgV;
+    const xOffset = -textWidth / 2 + Math.tanh(slope * 2) * (textWidth / 2 + 8);
+    ctx.fillText(label, (x1 + x2) / 2 + xOffset, (y1 + y2) / 2 + 30);
     ctx.globalAlpha = 0.6; ctx.strokeStyle = "#e57373"; ctx.setLineDash([4, 6]);
-    ctx.beginPath(); ctx.moveTo(x1, size.h - PAD_B); ctx.lineTo(x1, y1);
-    ctx.moveTo(x2, size.h - PAD_B); ctx.lineTo(x2, y2); ctx.stroke();
+    ctx.moveTo(x2, size.h - PAD_B); ctx.lineTo(x2, y2); 
     ctx.restore();
   }
 
@@ -215,7 +220,63 @@ export default function VelocityExplorer() {
 
     // label near the point
     ctx.font = `${FONT_ANNOT}px ${FONT_FAMILY}`; ctx.fillStyle = "#1b5e20";
-    ctx.fillText(`v(t) ≈ ${Number.isFinite(instV) ? instV.toFixed(2) : "—"} m/s`, xPix(t0) + 8, yPix(s0) +30);
+    const label = `v(t) ≈ ${Number.isFinite(instV) ? instV.toFixed(2) : "—"} m/s`;
+    const textWidth = ctx.measureText(label).width;
+    const xOffset = -textWidth / 2 - Math.tanh(slope * 2) * (textWidth / 2 + 8);
+    ctx.fillText(label, xPix(t0) + xOffset, yPix(s0) - 30);
+    ctx.restore();
+  }
+
+  function drawAxisDragLabels(ctx) {
+    if (!draggingRef.current || draggingRef.current === 'playbtn') return;
+
+    let t, s, color;
+
+    if (draggingRef.current === "t1") {
+        t = t1;
+        s = sOfT({ t: t1 });
+        color = "#e53935";
+    } else if (draggingRef.current === "t2") {
+        t = t2;
+        s = sOfT({ t: t2 });
+        color = "#e53935";
+    } else if (draggingRef.current === "t0") {
+        t = t0;
+        s = sOfT({ t: t0 });
+        color = "#43a047";
+    } else {
+        return;
+    }
+
+    const xPos = xPix(t);
+    const yPos = yPix(s);
+
+    ctx.save();
+    ctx.font = `italic ${FONT_TICK}px ${FONT_FAMILY}`;
+    ctx.fillStyle = color;
+    ctx.globalAlpha = 0.6;
+
+    // Time label (interior, near x-axis)
+    const timeLabel = t.toFixed(2);
+    ctx.textAlign = "center";
+    ctx.fillText(timeLabel, xPos, size.h - PAD_B - 8);
+
+    // Position label (interior, near y-axis)
+    const posLabel = s.toFixed(2);
+    ctx.textAlign = "left";
+    ctx.fillText(posLabel, PAD_L + 8, yPos + 4);
+
+    // Also draw faint lines to the axes
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 0.8;
+    ctx.setLineDash([2, 4]);
+    ctx.beginPath();
+    ctx.moveTo(xPos, yPos);
+    ctx.lineTo(xPos, size.h - PAD_B);
+    ctx.moveTo(xPos, yPos);
+    ctx.lineTo(PAD_L, yPos);
+    ctx.stroke();
+
     ctx.restore();
   }
 
@@ -312,9 +373,10 @@ export default function VelocityExplorer() {
       const x = xMap(t);
       ctx.beginPath(); ctx.moveTo(x, pT); ctx.lineTo(x, H - pB); ctx.stroke();
     }
+    ctx.strokeStyle = "#8c8c8cff"; ctx.lineWidth = 1;
     const zy = yMap(0);
     ctx.beginPath(); ctx.moveTo(pL, zy); ctx.lineTo(W - pR, zy);
-    ctx.strokeStyle = "#e5e7eb"; ctx.stroke();
+    ctx.strokeStyle = "#9c9c9cff"; ctx.stroke();
 
     // axes
     ctx.strokeStyle = "#222"; ctx.lineWidth = 1.6;
@@ -410,7 +472,10 @@ export default function VelocityExplorer() {
         if (draggingRef.current === "t0") setT0(t);
       }
     };
-    const onUp = () => { draggingRef.current = null; };
+    const onUp = () => {
+      draggingRef.current = null;
+      setDragEndTrigger(c => c + 1);
+    };
 
     canvas.addEventListener("mousedown", onDown);
     window.addEventListener("mousemove", onMove);
