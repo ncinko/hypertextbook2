@@ -497,7 +497,7 @@ export default function PolarAccelerationSimple() {
             label="Arrow scale"
             value={arrowScale}
             setValue={setArrowScale}
-            min={0.4}
+            min={0.01}
             max={3}
             step={0.01}
             fmt={(x) => x.toFixed(2) + "×"}
