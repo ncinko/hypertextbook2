@@ -176,7 +176,7 @@ export default function PolarAccelerationSimple() {
 
   // track canvas size to keep 'r' slider max in sync with drawable radius
   const [canvasSize, setCanvasSize] = useState(600);
-  const dynamicRMax = Math.max(20, canvasSize * 0.45);
+  const dynamicRMax = Math.max(1, canvasSize * 0.45);
 
   // ---- EFFECTIVE VALUES (locks => accelerations go to zero) ----
   const effRdot = lockRdot ? 0 : rdot.current;
@@ -300,7 +300,7 @@ export default function PolarAccelerationSimple() {
       const newSize = Math.min(rect.width, 1400);
       p5.resizeCanvas(newSize, newSize);
       setCanvasSize(newSize);
-      r.current = clamp(r.current, 20, Math.max(20, newSize * 0.45));
+      r.current = clamp(r.current, 1, Math.max(1, newSize * 0.45));
     };
   };
 
@@ -316,7 +316,7 @@ export default function PolarAccelerationSimple() {
       const nextRdot = lockRdot ? 0 : rdot.current + rddot * dt;
       const nextThetadot = lockThetadot ? 0 : thetadot.current + thetaddot * dt;
 
-      r.current = clamp(r.current + nextRdot * dt, 20, Math.max(20, p5.width * 0.45));
+      r.current = clamp(r.current + nextRdot * dt, 1, Math.max(1, p5.width * 0.45));
 
       let th = theta.current + nextThetadot * dt;
       const twoPi = 2 * Math.PI;
@@ -519,7 +519,7 @@ export default function PolarAccelerationSimple() {
             label="r (px)"
             value={r.current}
             setValue={(v) => { r.current = v; forceUpdate((c) => c + 1); }}
-            min={20}
+            min={1}
             max={dynamicRMax}
             step={1}
             fmt={(x) => x.toFixed(0)}
