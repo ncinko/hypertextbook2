@@ -190,6 +190,22 @@ export default function RotatingShip2D() {
     };
   }, [frame, omega, dpiScale]);
 
+  // ---------- clear trail when switching reference frame ----------
+useEffect(() => {
+  // reset trail on Star↔Ship toggle
+  trailRef.current = [];
+
+  // seed with the current displayed point so the new trail starts anchored
+  if (state.current.placed) {
+    const theta = omega * tRef.current;
+    const [wx, wy] =
+      frame === "ship"
+        ? rot(state.current.x, state.current.y, -theta)
+        : [state.current.x, state.current.y];
+    trailRef.current.push({ x: wx, y: wy });
+  }
+}, [frame]);
+
   // ---------- physics (inertial) ----------
   function stepInertial(dt) {
     const s = state.current;
@@ -340,6 +356,7 @@ export default function RotatingShip2D() {
     ctx.restore();
   }
 
+
   // ---------- main draw ----------
   function draw(dt) {
     const canvas = canvasRef.current;
@@ -373,10 +390,12 @@ export default function RotatingShip2D() {
 
     // trail
     if (running && s.placed) {
-      const L = 2400;
+      const L = 3600;
       trailRef.current.push({ x: wx, y: wy });
       if (trailRef.current.length > L) trailRef.current.shift();
     }
+
+    
 
     // object + vectors
     if (s.placed) {
