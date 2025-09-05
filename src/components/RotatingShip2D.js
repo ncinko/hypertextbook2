@@ -30,6 +30,7 @@ export default function RotatingShip2D() {
   const [showTrail, setShowTrail] = useState(true);
   const [showFloor, setShowFloor] = useState(true);
   const [showGrid, setShowGrid] = useState(true);
+  const [largeShip, setLargeShip] = useState(false);
 
   // angular speed ω (rad/s)
   const [omega, setOmega] = useState(1.0); // ~0.5 rev/s
@@ -64,6 +65,8 @@ export default function RotatingShip2D() {
   const rafRef = useRef(null);
   const lastStampRef = useRef(null);
 
+  const blueDotPosition = largeShip ? 0.9 : 0.55;
+
   // ---------- helpers ----------
   const cross2 = (wz, vx, vy) => [-wz * vy, wz * vx]; // Ω×v
   const dot2 = (ax, ay, bx, by) => ax * bx + ay * by;
@@ -91,7 +94,7 @@ export default function RotatingShip2D() {
     const theta = omega * tRef.current;
     // Blue window point is fixed in the ship frame at +x: (0.55 R, 0)
     const rx0 = 0;
-    const ry0 = -ship.current.R * 0.55;
+    const ry0 = -ship.current.R * blueDotPosition;
     // If there is no object yet, spawn it at the blue point's *current inertial* position
     if (!state.current.placed || state.current.placed) {
       const [x0, y0] = rot(rx0, ry0, +theta); // rotate ship→inertial
@@ -138,14 +141,14 @@ export default function RotatingShip2D() {
       const h = Math.floor(maxH);
       setSize({ w, h });
       setDpiScale(window.devicePixelRatio || 1);
-      ship.current.R = 0.4 * Math.min(w, h);
+      ship.current.R = (largeShip ? 0.8 : 0.4) * Math.min(w, h);
       initStars();
     }
     handleResize();
     const ro = new ResizeObserver(handleResize);
     ro.observe(document.body);
     return () => ro.disconnect();
-  }, []);
+  }, [largeShip]);
 
   // ---------- input ----------
   function handleCanvasDown(e) {
@@ -417,7 +420,7 @@ export default function RotatingShip2D() {
     }
     ctx.fillStyle = "rgba(120,180,255,0.9)";
     ctx.beginPath();
-    ctx.arc(0, +ship.current.R * 0.55, 12 / zoom, 0, 2 * Math.PI);
+    ctx.arc(0, +ship.current.R * blueDotPosition, 12 / zoom, 0, 2 * Math.PI);
     ctx.fill();
 
     ctx.restore();
@@ -783,11 +786,17 @@ export default function RotatingShip2D() {
               </Btn>
               <Btn onClick={reset}>Reset</Btn>
             </Row>
+            <Check
+              label="Large Ship"
+              checked={largeShip}
+              onChange={setLargeShip}
+            />
             <div style={{ fontSize: 12, opacity: 0.9, marginTop: 8 }}>
               Click inside the ship to place the object, then drag to set its
               initial velocity.
             </div>
           </Card>
+
 
         </div>
 
