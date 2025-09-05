@@ -33,7 +33,7 @@ export default function RotatingShip2D() {
   const [largeShip, setLargeShip] = useState(false);
 
   // angular speed ω (rad/s)
-  const [omega, setOmega] = useState(1.0); // ~0.5 rev/s
+  const [omega, setOmega] = useState(0.5);
 
   // time
   const tRef = useRef(0);
