@@ -89,7 +89,7 @@ export default function Kinematics2DGame() {
       url.searchParams.set("token", SCORE_API.token);
       url.searchParams.set("sheet", SCORE_API.sheet);
       url.searchParams.set("limit", String(limit));
-      const res = await fetch(url.toString(), { method: "GET", headers: { Accept: "application/json" } });
+      const res = await fetch(url.toString()); // keep it simple
       const data = await res.json();
       if (data?.ok && Array.isArray(data.scores)) setCloudScores(data.scores);
     } catch (e) {
@@ -117,11 +117,23 @@ export default function Kinematics2DGame() {
         mode,
       };
 
-      const resp = await fetch(SCORE_API.writeUrl, {
-        method: "POST",
-        headers: { "Content-Type": "text/plain;charset=UTF-8" }, // simple => no OPTIONS
-        body: JSON.stringify(payload),                            // JSON string as text/plain
-      });
+      // ✅ preflight-free
+await fetch(SCORE_API.writeUrl, {
+  method: "POST",
+  headers: { "Content-Type": "text/plain;charset=UTF-8" }, // simple → no OPTIONS
+  body: JSON.stringify({
+    token: SCORE_API.token,
+    sheet: SCORE_API.sheet,
+    name: (playerName || "anon").trim(),
+    score,
+    goldenHits,
+    normalHits,
+    timeSec: GAME_TIME,      // your round time (or GAME_TIME + bonuses if you track them)
+    version: "2D-v1",
+    mode: "GoalRush",
+  }),
+});
+
 
       // Parse without assuming JSON to aid debugging
       const text = await resp.text();
