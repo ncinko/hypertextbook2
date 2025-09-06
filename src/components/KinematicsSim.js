@@ -59,6 +59,7 @@ const SCORE_API = {
 };
 
 
+
 async function submitScoreToSheet({ name, timeSec, stops }) {
   try {
     const payload = {
@@ -159,6 +160,9 @@ function niceNumber(n, sig = 2) {
 
 // component: KinematicsSim (cloud leaderboard enabled)
 export default function KinematicsSim() {
+  const submittedRef = useRef(false);
+  // identify a single run attempt (optional but handy if you later want server upserts)
+  const runIdRef = useRef(null);
   const [state, setState] = useState(INITIAL_STATE);
   const [paused, setPaused] = useState(false);
   const [A_MAX, setAMax] = useState(DEFAULTS.A_MAX);
@@ -180,7 +184,7 @@ export default function KinematicsSim() {
   // Leaderboard UI
   const [cloudScores, setCloudScores] = useState([]); // fetched from Sheet
   const [leaderboard, setLeaderboard] = useState(() => loadLB()); // local fallback (hidden by default)
-  const [showLB, setShowLB] = useState(true);
+  const [showLB, setShowLB] = useState(false);
   const [nameModalOpen, setNameModalOpen] = useState(false);
   const [playerName, setPlayerName] = useState("");
   const [finalTime, setFinalTime] = useState(null);
@@ -269,6 +273,8 @@ export default function KinematicsSim() {
   }, []);
 
   const restart = useCallback(() => {
+    submittedRef.current = false;
+    runIdRef.current = (crypto?.randomUUID?.() || String(Date.now()));
     setState({ ...INITIAL_STATE });
     history.current = [];
     t0.current = performance.now() / 1000;
@@ -338,12 +344,7 @@ export default function KinematicsSim() {
               setGameOver(true);
               setWin(true);
               setNameModalOpen(true);
-              // try to submit immediately (optimistic); name may be updated later
-              submitScoreToSheet({ name: (playerName || "Player"), timeSec: total, stops: nextStops }).then(() => {
-                setPendingSubmitted(true);
-                // refresh cloud after a short moment
-                setTimeout(async () => setCloudScores(await fetchTopScores(10)), 600);
-              });
+              setPendingSubmitted(false); // we haven't submitted yet
             }
           }
 
@@ -444,25 +445,38 @@ export default function KinematicsSim() {
   const autoScale = !gameOn && !wrapWorld;
 
   // Handlers for leaderboard modal
-  const submitScore = useCallback(() => {
-    if (finalTime == null) {
-      setNameModalOpen(false);
-      return;
-    }
-    // local archive (not shown unless you want)
-    const updated = recordScore(playerName, finalTime);
-    setLeaderboard(updated);
-    // submit named score, then refresh top list
-    submitScoreToSheet({
-      name: playerName || "Player",
-      timeSec: finalTime,
-      stops: DEFAULTS.WIN_STOPS,
-    }).then(async () => {
-      setCloudScores(await fetchTopScores(10));
-    });
+const submitScore = useCallback(() => {
+  if (finalTime == null) {
+    setNameModalOpen(false);
+    return;
+  }
+  if (submittedRef.current) { // guard against double-clicks
+    setNameModalOpen(false);
+    return;
+  }
+  submittedRef.current = true;
+
+  // keep a local archive if you like
+  const updated = recordScore(playerName, finalTime);
+  setLeaderboard(updated);
+
+  // use player's name if given; otherwise "Player"
+  const nameToSend = (playerName || "Player").trim();
+
+  submitScoreToSheet({
+    name: nameToSend,
+    timeSec: finalTime,
+    stops: DEFAULTS.WIN_STOPS,
+    runId: runIdRef.current, // optional; server can ignore
+  }).then(async () => {
+    setPendingSubmitted(true);
+    setCloudScores(await fetchTopScores(10));
+  }).finally(() => {
     setNameModalOpen(false);
     setShowLB(true);
-  }, [playerName, finalTime]);
+  });
+}, [playerName, finalTime]);
+
 
   const clearLB = useCallback(() => {
     saveLB([]);
@@ -547,7 +561,6 @@ export default function KinematicsSim() {
         <div style={{ marginTop: 14, background: COLORS.panel, border: `1px solid ${COLORS.panelBorder}`, borderRadius: 12, padding: 12 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <h3 style={{ margin: 0, fontSize: 16 }}>Leaderboard</h3>
-            <button onClick={async () => setCloudScores(await fetchTopScores(10))} style={{ marginLeft: "auto", ...btnStyle, background: "#e5e7eb", color: COLORS.text }}>Refresh</button>
           </div>
 
           {/* Pending local victory: show a temporary banner IF it would place on board */}
