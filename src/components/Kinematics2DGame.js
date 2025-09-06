@@ -2,12 +2,13 @@ import React, { useRef, useState, useEffect, useCallback } from "react";
 import Sketch from "react-p5";
 
 // ==========================================
-// Config (update url!)
+// Config (Apps Script endpoints + token)
 // ==========================================
 const SCORE_API = {
-  url: "https://script.google.com/macros/s/XXXXX/exec", // <-- REPLACE with your Apps Script "exec" URL
-  token: "tomnook",                                     // must match SECRET in Apps Script
-  sheet: "Kinematics2D",
+  writeUrl: "https://script.google.com/macros/s/AKfycbxqYWYSJHCwp90JNgNspPqGuYOH6MsxSU_mWmJYXGzMGvXvOZNvUArzfCVqcU3blsr0Ig/exec",
+  readUrl:  "https://script.google.com/macros/s/AKfycbxqYWYSJHCwp90JNgNspPqGuYOH6MsxSU_mWmJYXGzMGvXvOZNvUArzfCVqcU3blsr0Ig/exec",
+  token: "tomnook",            // must match SECRET in Code.gs
+  sheet: "Kinematics2D",       // tab name (allowed by ALLOWED_TABS)
 };
 
 const COLORS = {
@@ -17,16 +18,12 @@ const COLORS = {
   text: "#1f2937",
   subtext: "#6b7280",
   grid: "#e5e7eb",
-
-  // vectors (same as 1D)
-  x: "#0ea5a0",  // position
-  v: "#9061f9",  // velocity
-  a: "#dc8850",  // acceleration
-
-  // tokens
+  x: "#0ea5a0",
+  v: "#9061f9",
+  a: "#dc8850",
   zone: "#28a745",
   golden: "rgba(218,165,32,1)",
-  boostOuter: "#f97316", // flame token outer
+  boostOuter: "#f97316",
   clock: "#8b5cf6",
 };
 
@@ -51,8 +48,8 @@ export default function Kinematics2DGame() {
 
   // spawn mix (3 items active)
   const MAX_SPAWNS = 3;
-  const PROB_CLOCK = 0.15; // chance for clock
-  const PROB_BOOST = 0.25; // (if not clock) chance for boost, else goal
+  const PROB_CLOCK = 0.15;
+  const PROB_BOOST = 0.25;
 
   // ---------- Game state ----------
   const [running, setRunning] = useState(false);
@@ -61,9 +58,16 @@ export default function Kinematics2DGame() {
   const [score, setScore] = useState(0);
   const [goldenHits, setGoldenHits] = useState(0);
   const [normalHits, setNormalHits] = useState(0);
-  const [ended, setEnded] = useState(false);         // ✅ state (fixes input losing focus)
+  const [ended, setEnded] = useState(false);
   const [finalScore, setFinalScore] = useState(null);
   const [pendingSubmitted, setPendingSubmitted] = useState(false);
+
+  // Leaderboard UI
+  const [playerName, setPlayerName] = useState("");
+  const [cloudScores, setCloudScores] = useState([]);
+  const [showLB, setShowLB] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [fetchingBoard, setFetchingBoard] = useState(false);
 
   // World
   const worldRef = useRef({
@@ -71,31 +75,21 @@ export default function Kinematics2DGame() {
     x: 0, y: 0, vx: 0, vy: 0, ax: 0, ay: 0,
     tLeft: GAME_TIME,
     lastMs: 0,
-    spawns: [],   // {type:'goal'|'boost'|'clock', x,y,r, ...}
-    boostLeft: 0, // seconds of active boost
+    spawns: [],
+    boostLeft: 0,
   });
 
   const mouseActiveRef = useRef(false);
 
-  // ---------- Leaderboard state (match 1D style) ----------
-  const [playerName, setPlayerName] = useState("");
-  const [cloudScores, setCloudScores] = useState([]); // like 1D’s cloudScores
-  const [showLB, setShowLB] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
-  const [fetchingBoard, setFetchingBoard] = useState(false);
-
   // ============== Leaderboard helpers ==============
-  const fetchLeaderboard = async (limit = 10) => {
+  const fetchLeaderboard = useCallback(async (limit = 10) => {
     try {
       setFetchingBoard(true);
-      const url = new URL(SCORE_API.url);
+      const url = new URL(SCORE_API.readUrl);
       url.searchParams.set("token", SCORE_API.token);
       url.searchParams.set("sheet", SCORE_API.sheet);
       url.searchParams.set("limit", String(limit));
-      const res = await fetch(url.toString(), {
-        method: "GET",
-        headers: { Accept: "application/json" },
-      });
+      const res = await fetch(url.toString(), { method: "GET", headers: { Accept: "application/json" } });
       const data = await res.json();
       if (data?.ok && Array.isArray(data.scores)) setCloudScores(data.scores);
     } catch (e) {
@@ -103,38 +97,52 @@ export default function Kinematics2DGame() {
     } finally {
       setFetchingBoard(false);
     }
-  };
+  }, []);
 
-  const submitScore = async ({ score, goldenHits, normalHits, timeSec, mode }) => {
+  // ---------- CORS-safe score submit (no preflight) ----------
+  const submitScore = useCallback(async ({ score, goldenHits, normalHits, timeSec, mode }) => {
     try {
       setSubmitting(true);
       setPendingSubmitted(true);
-      await fetch(SCORE_API.url, {
+
+      const payload = {
+        token: SCORE_API.token,
+        sheet: SCORE_API.sheet,
+        name: (playerName || "anon").trim(),
+        score,
+        goldenHits,
+        normalHits,
+        timeSec,            // GAME_TIME (plus any bonus time you award)
+        version: "2D-v1",
+        mode,
+      };
+
+      const resp = await fetch(SCORE_API.writeUrl, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          token: SCORE_API.token,
-          sheet: SCORE_API.sheet,
-          name: playerName || "anon",
-          score,
-          goldenHits,
-          normalHits,
-          timeSec,               // if you track added time, pass GAME_TIME + added
-          version: "2D-v1",
-          mode,
-        }),
+        headers: { "Content-Type": "text/plain;charset=UTF-8" }, // simple => no OPTIONS
+        body: JSON.stringify(payload),                            // JSON string as text/plain
       });
-      fetchLeaderboard(); // refresh
+
+      // Parse without assuming JSON to aid debugging
+      const text = await resp.text();
+      let j; try { j = JSON.parse(text); } catch { j = { ok: false, error: "Non-JSON response", text }; }
+
+      if (j?.ok) {
+        await fetchLeaderboard(10);  // refresh cloud board
+      } else {
+        console.warn("Submit failed:", j?.error || text);
+      }
     } catch (e) {
-      console.error(e);
+      console.error("Submit error:", e);
     } finally {
       setSubmitting(false);
+      setPendingSubmitted(false);
     }
-  };
+  }, [playerName, fetchLeaderboard]);
 
   useEffect(() => {
-    if (gameOn && showLB) fetchLeaderboard();
-  }, [gameOn, showLB]);
+    if (gameOn && showLB) fetchLeaderboard(10);
+  }, [gameOn, showLB, fetchLeaderboard]);
 
   // ============== Input: disable scroll + Space starts ==============
   useEffect(() => {
@@ -189,7 +197,7 @@ export default function Kinematics2DGame() {
     w.x = 0; w.y = 0; w.vx = 0; w.vy = 0; w.ax = 0; w.ay = 0;
     w.tLeft = GAME_TIME;
     w.boostLeft = 0;
-    setEnded(false);                 // ✅ reset ended state
+    setEnded(false);
     setFinalScore(null);
     setPendingSubmitted(false);
     setScore(0); setGoldenHits(0); setNormalHits(0);
@@ -226,7 +234,6 @@ export default function Kinematics2DGame() {
     p5.pop();
   };
 
-  // Original arrow style + perpendicular label
   const drawArrow = (p5, x0, y0, vx, vy, color, label) => {
     const L = Math.hypot(vx, vy); if (L < 1e-6) return;
     const s = 0.25, dx = vx * s, dy = vy * s;
@@ -234,7 +241,7 @@ export default function Kinematics2DGame() {
     p5.stroke(color); p5.strokeWeight(2);
     p5.line(x0, y0, x1, y1);
     const ang = Math.atan2(dy, dx);
-    const ah = 14, aw = 5; // long/slim head
+    const ah = 14, aw = 5;
     p5.fill(color);
     p5.push(); p5.translate(x1, y1); p5.rotate(ang);
     p5.triangle(0, 0, -ah, aw, -ah, -aw);
@@ -263,21 +270,14 @@ export default function Kinematics2DGame() {
         p5.fill(s.golden ? "rgba(218,165,32,0.7)" : "rgba(40,160,40,0.7)");
         p5.circle(gx, gy, 7 + 4 * pulse);
       } else if (s.type === "boost") {
-        // 🔥 flame token
-        p5.noStroke();
-        p5.fill(COLORS.boostOuter);
-        p5.circle(gx, gy, s.r * 2);
-
-        p5.push();
-        p5.translate(gx, gy);
-        // yellow flame body
+        p5.noStroke(); p5.fill(COLORS.boostOuter); p5.circle(gx, gy, s.r * 2);
+        p5.push(); p5.translate(gx, gy);
         p5.fill("#fde047");
         p5.beginShape();
         p5.vertex(0, -7);
         p5.bezierVertex(5, -2, 5, 4, 0, 8);
         p5.bezierVertex(-5, 4, -5, -2, 0, -7);
         p5.endShape(p5.CLOSE);
-        // white inner flicker
         p5.fill("#ffffff");
         p5.beginShape();
         p5.vertex(0, -4);
@@ -286,17 +286,15 @@ export default function Kinematics2DGame() {
         p5.endShape(p5.CLOSE);
         p5.pop();
       } else if (s.type === "clock") {
-        // ⏱️ ring + hands
         p5.noFill(); p5.stroke(COLORS.clock); p5.strokeWeight(3);
         p5.circle(gx, gy, s.r * 2);
         p5.stroke(COLORS.clock); p5.strokeWeight(2);
-        p5.line(gx, gy, gx, gy - 6);    // 12 o'clock
-        p5.line(gx, gy, gx + 5, gy + 3); // ~4 o'clock
+        p5.line(gx, gy, gx, gy - 6);
+        p5.line(gx, gy, gx + 5, gy + 3);
       }
     });
   };
 
-  // mouse->player unit direction (world coords)
   const mouseUnitDir = (p5) => {
     const w = worldRef.current;
     const CX = p5.width / 2, CY = p5.height / 2;
@@ -311,7 +309,6 @@ export default function Kinematics2DGame() {
   const stepPhysics = (p5, dt) => {
     const w = worldRef.current;
 
-    // decay boost timer
     if (w.boostLeft > 0) w.boostLeft = Math.max(0, w.boostLeft - dt);
 
     let ax = 0, ay = 0;
@@ -320,12 +317,10 @@ export default function Kinematics2DGame() {
       const d = mouseUnitDir(p5);
       ax = A_MOUSE * d.x; ay = A_MOUSE * d.y;
     } else {
-      // arrows
       if (p5.keyIsDown(p5.LEFT_ARROW))  ax -= A_STEP;
       if (p5.keyIsDown(p5.RIGHT_ARROW)) ax += A_STEP;
       if (p5.keyIsDown(p5.UP_ARROW))    ay -= A_STEP;
       if (p5.keyIsDown(p5.DOWN_ARROW))  ay += A_STEP;
-      // WASD
       if (p5.keyIsDown(65)) ax -= A_STEP; // A
       if (p5.keyIsDown(68)) ax += A_STEP; // D
       if (p5.keyIsDown(87)) ay -= A_STEP; // W
@@ -334,12 +329,10 @@ export default function Kinematics2DGame() {
 
     if (gravityOn) ay += 50;
 
-    // apply boost multiplier if active
     const mult = w.boostLeft > 0 ? BOOST_MULT : 1;
     w.ax = clamp(ax * mult, -A_MAX * mult, A_MAX * mult);
     w.ay = clamp(ay * mult, -A_MAX * mult, A_MAX * mult);
 
-    // integrate
     if (running && (!gameOn || w.tLeft > 0)) {
       w.vx += w.ax * dt; w.vy += w.ay * dt;
       const v = Math.hypot(w.vx, w.vy);
@@ -350,26 +343,23 @@ export default function Kinematics2DGame() {
         const before = w.tLeft;
         w.tLeft = Math.max(0, w.tLeft - dt);
         if (before > 0 && w.tLeft === 0) {
-          setEnded(true);             // ✅ end round
-          setFinalScore(score);       // record for banner
+          setEnded(true);
+          setFinalScore(score);
           setRunning(false);
         }
       }
     } else {
-      // gentle settle when idle
       const drag = Math.exp(-2 * dt);
       w.vx *= drag; w.vy *= drag;
       w.x += w.vx * dt; w.y += w.vy * dt;
     }
 
-    // walls
     const halfW = w.W * 0.5 - PLAYER_R, halfH = w.H * 0.5 - PLAYER_R;
     if (w.x < -halfW) { w.x = -halfW; w.vx *= -0.6; }
     if (w.x >  halfW) { w.x =  halfW; w.vx *= -0.6; }
     if (w.y < -halfH) { w.y = -halfH; w.vy *= -0.6; }
     if (w.y >  halfH) { w.y =  halfH; w.vy *= -0.6; }
 
-    // collisions (game mode only)
     if (gameOn && running && w.tLeft > 0) {
       for (let i = 0; i < w.spawns.length; i++) {
         const s = w.spawns[i];
@@ -378,11 +368,10 @@ export default function Kinematics2DGame() {
             setScore(sc => sc + s.points);
             if (s.golden) setGoldenHits(n => n + 1); else setNormalHits(n => n + 1);
           } else if (s.type === "boost") {
-            w.boostLeft = BOOST_DURATION; // (re)start boost
+            w.boostLeft = BOOST_DURATION;
           } else if (s.type === "clock") {
-            w.tLeft += CLOCK_BONUS;       // add time
+            w.tLeft += CLOCK_BONUS;
           }
-          // replace collected spawn
           w.spawns[i] = makeSpawn(w);
         }
       }
@@ -401,23 +390,19 @@ export default function Kinematics2DGame() {
     drawGrid(p5, CX, CY);
     stepPhysics(p5, dt);
 
-    // spawns (game only)
     if (gameOn) drawSpawns(p5, CX, CY, w.spawns);
 
-    // boost glow
     if (w.boostLeft > 0) {
       const pulse = 0.5 + 0.5 * Math.sin(p5.millis() * 0.01);
       const glowR = PLAYER_R * (2.5 + pulse);
       p5.noStroke();
-      p5.fill(249, 115, 22, 100); // #f97316 with alpha
+      p5.fill(249, 115, 22, 100);
       p5.circle(CX + w.x, CY + w.y, glowR * 2);
     }
 
-    // player
     p5.fill("#2f3747"); p5.stroke("#cbd5e1"); p5.strokeWeight(1.5);
     p5.circle(CX + w.x, CY + w.y, PLAYER_R * 2);
 
-    // vectors
     const px = CX + w.x, py = CY + w.y;
     drawArrow(p5, px, py, w.vx, w.vy, COLORS.v, "v");
     drawArrow(p5, px, py, w.ax, w.ay, COLORS.a, "a");
@@ -456,156 +441,51 @@ export default function Kinematics2DGame() {
     }
   }, [gameOn]);
 
-  // ============== Controls UI (same classes as 1D) ==============
-  const Controls = () => (
-    <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center", marginBottom: 12 }}>
-      <button className="btn" onClick={() => setRunning(true)} disabled={running}>
-        {running ? "Running…" : "Start (Space)"}
-      </button>
-      <button className="btn btn-secondary" onClick={() => resetGame({ millis: () => performance.now() })}>
-        Reset (R)
-      </button>
-      <label style={{ display: "flex", alignItems: "center", gap: 8, color: COLORS.subtext }}>
-        <input
-          type="checkbox"
-          checked={gameOn}
-          onChange={(e) => { setGameOn(e.target.checked); setRunning(false); }}
-        />
-        game mode
-      </label>
-      <label style={{ display: "flex", alignItems: "center", gap: 8, color: COLORS.subtext }}>
-        <input type="checkbox" checked={gravityOn} onChange={(e) => setGravityOn(e.target.checked)} />
-        gravity
-      </label>
-      {gameOn && (
-        <label style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: "auto" }}>
-          <button
-            className={`lb-toggle ${showLB ? "hide" : ""}`}
-            onClick={() => setShowLB((s) => !s)}
-          >
-            {showLB ? "Hide" : "Show"} leaderboard
-          </button>
-        </label>
-      )}
-    </div>
+  // For 2D, higher score is better.
+  const qualifies = finalScore != null && (
+    cloudScores.length < 10 ||
+    finalScore > Math.min(...cloudScores.map(s => Number(s.score || 0)))
   );
-
-  // ============== Submit panel (after round ends) ==============
-  const SubmitPanel = () => {
-    if (!(gameOn && ended)) return null;
-    return (
-      <div style={{ marginTop: 10, textAlign: "center" }}>
-        <div style={{ marginBottom: 8 }}>
-          <input
-            className="input"
-            placeholder="Your name"
-            value={playerName}
-            onChange={(e) => setPlayerName(e.target.value)}
-            style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #e5e7eb", marginRight: 8 }}
-          />
-          <button
-            className="btn"
-            disabled={submitting}
-            onClick={() => {
-              submitScore({
-                score,
-                goldenHits,
-                normalHits,
-                timeSec: GAME_TIME, // include extra time if you track it separately
-                mode: "GoalRush",
-              });
-              // keep the panel visible after click until user navigates/restarts
-            }}
-          >
-            {submitting ? "Submitting..." : "Submit score"}
-          </button>
-        </div>
-        <button
-          className="btn btn-secondary"
-          onClick={() => {
-            resetGame({ millis: () => performance.now() });
-            setRunning(true); // restart immediately
-          }}
-        >
-          Play again
-        </button>
-      </div>
+  const alreadyListed =
+    finalScore != null &&
+    cloudScores.some(s =>
+      Number(s.score) === Number(finalScore) &&
+      (String(s.name || "").trim() === String(playerName || "anon").trim())
     );
-  };
-
-  // ============== Leaderboard Panel (matches 1D structure) ==============
-  const LeaderboardPanel = () => {
-    if (!showLB) return null;
-
-    // For 2D, higher score is better.
-    const qualifies = finalScore != null && (
-      cloudScores.length < 10 ||
-      finalScore > Math.min(...cloudScores.map(s => Number(s.score || 0)))
-    );
-    const alreadyListed =
-      finalScore != null &&
-      cloudScores.some(s =>
-        Number(s.score) === Number(finalScore) &&
-        (String(s.name || "").trim() === String(playerName || "anon").trim())
-      );
-
-    return (
-      <div style={{ marginTop: 14, background: COLORS.panel, border: `1px solid ${COLORS.panelBorder}`, borderRadius: 12, padding: 12 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <h3 style={{ margin: 0, fontSize: 16 }}>Leaderboard</h3>
-        </div>
-
-        {/* Pending local victory banner: like 1D, but for "higher is better" */}
-        {finalScore != null && (
-          (() => {
-            if (qualifies && !alreadyListed && pendingSubmitted) {
-              return (
-                <div style={{ marginTop: 8, padding: 8, border: `1px dashed #0ea5a0`, borderRadius: 8, color: "#0ea5a0" }}>
-                  Your new score <strong>{finalScore}</strong> is posting… it should appear here shortly.
-                </div>
-              );
-            }
-            return null;
-          })()
-        )}
-
-        {fetchingBoard ? (
-          <p style={{ color: COLORS.subtext, marginTop: 8 }}>Loading…</p>
-        ) : cloudScores.length === 0 ? (
-          <p style={{ color: COLORS.subtext, marginTop: 8 }}>No cloud scores yet.</p>
-        ) : (
-          <ol style={{ listStyle: "none", padding: 0, marginTop: 8 }}>
-            {cloudScores.map((s, i) => (
-              <li
-                key={`${s.name}-${s.score}-${i}`}
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "40px 1fr 120px 200px",
-                  gap: 8,
-                  padding: "6px 0",
-                  borderBottom: `1px solid ${COLORS.panelBorder}`,
-                }}
-              >
-                <div style={{ fontWeight: 700, color: COLORS.subtext, textAlign: "right", paddingRight: 6 }}>
-                  #{i + 1}
-                </div>
-                <div style={{ fontWeight: 600 }}>{s.name || "Player"}</div>
-                <div>{Number(s.score).toFixed(0)} pts</div>
-                <div style={{ color: COLORS.subtext }}>
-                  ⭐ {s.goldenHits ?? 0} · ✓ {s.normalHits ?? 0} · {s.date ? new Date(s.date).toLocaleDateString() : ""}
-                </div>
-              </li>
-            ))}
-          </ol>
-        )}
-      </div>
-    );
-  };
 
   return (
     <div className="container">
       <h2>2D Kinematics — Sandbox / Goal Rush</h2>
-      <Controls />
+      <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center", marginBottom: 12 }}>
+        <button className="btn" onClick={() => setRunning(true)} disabled={running}>
+          {running ? "Running…" : "Start (Space)"}
+        </button>
+        <button className="btn btn-secondary" onClick={() => resetGame({ millis: () => performance.now() })}>
+          Reset (R)
+        </button>
+        <label style={{ display: "flex", alignItems: "center", gap: 8, color: COLORS.subtext }}>
+          <input
+            type="checkbox"
+            checked={gameOn}
+            onChange={(e) => { setGameOn(e.target.checked); setRunning(false); }}
+          />
+          game mode
+        </label>
+        <label style={{ display: "flex", alignItems: "center", gap: 8, color: COLORS.subtext }}>
+          <input type="checkbox" checked={gravityOn} onChange={(e) => setGravityOn(e.target.checked)} />
+          gravity
+        </label>
+        {gameOn && (
+          <label style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: "auto" }}>
+            <button
+              className={`lb-toggle ${showLB ? "hide" : ""}`}
+              onClick={() => setShowLB((s) => !s)}
+            >
+              {showLB ? "Hide" : "Show"} leaderboard
+            </button>
+          </label>
+        )}
+      </div>
 
       <div
         className="canvas"
@@ -624,10 +504,96 @@ export default function Kinematics2DGame() {
         <Sketch setup={setup} draw={draw} keyPressed={keyPressed} />
       </div>
 
-      <SubmitPanel />
+      {gameOn && ended && (
+        <div style={{ marginTop: 10, textAlign: "center" }}>
+          <div style={{ marginBottom: 8 }}>
+            <input
+              className="input"
+              placeholder="Your name"
+              value={playerName}
+              onChange={(e) => setPlayerName(e.target.value)}
+              style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #e5e7eb", marginRight: 8 }}
+            />
+            <button
+              className="btn"
+              disabled={submitting}
+              onClick={() => {
+                // Close the input flow immediately; show posting banner via pendingSubmitted
+                setFinalScore(score);
+                submitScore({
+                  score,
+                  goldenHits,
+                  normalHits,
+                  timeSec: GAME_TIME,
+                  mode: "GoalRush",
+                });
+              }}
+            >
+              {submitting ? "Submitting..." : "Submit score"}
+            </button>
+          </div>
+          <button
+            className="btn btn-secondary"
+            onClick={() => {
+              resetGame({ millis: () => performance.now() });
+              setRunning(true);
+            }}
+          >
+            Play again
+          </button>
+        </div>
+      )}
 
-      {/* Leaderboard Panel (matches your 1D panel markup/styling) */}
-      {gameOn && <LeaderboardPanel />}
+      {gameOn && showLB && (
+        <div style={{ marginTop: 14, background: COLORS.panel, border: `1px solid ${COLORS.panelBorder}`, borderRadius: 12, padding: 12 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <h3 style={{ margin: 0, fontSize: 16 }}>Leaderboard</h3>
+          </div>
+
+          {finalScore != null && (
+            (() => {
+              if (qualifies && !alreadyListed && pendingSubmitted) {
+                return (
+                  <div style={{ marginTop: 8, padding: 8, border: `1px dashed #0ea5a0`, borderRadius: 8, color: "#0ea5a0" }}>
+                    Your new score <strong>{finalScore}</strong> is posting… it should appear here shortly.
+                  </div>
+                );
+              }
+              return null;
+            })()
+          )}
+
+          {fetchingBoard ? (
+            <p style={{ color: COLORS.subtext, marginTop: 8 }}>Loading…</p>
+          ) : cloudScores.length === 0 ? (
+            <p style={{ color: COLORS.subtext, marginTop: 8 }}>No cloud scores yet.</p>
+          ) : (
+            <ol style={{ listStyle: "none", padding: 0, marginTop: 8 }}>
+              {cloudScores.map((s, i) => (
+                <li
+                  key={`${s.name}-${s.score}-${i}`}
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "40px 1fr 120px 200px",
+                    gap: 8,
+                    padding: "6px 0",
+                    borderBottom: `1px solid ${COLORS.panelBorder}`,
+                  }}
+                >
+                  <div style={{ fontWeight: 700, color: COLORS.subtext, textAlign: "right", paddingRight: 6 }}>
+                    #{i + 1}
+                  </div>
+                  <div style={{ fontWeight: 600 }}>{s.name || "Player"}</div>
+                  <div>{Number(s.score).toFixed(0)} pts</div>
+                  <div style={{ color: COLORS.subtext }}>
+                    ⭐ {s.goldenHits ?? 0} · ✓ {s.normalHits ?? 0} · {s.date ? new Date(s.date).toLocaleDateString() : ""}
+                  </div>
+                </li>
+              ))}
+            </ol>
+          )}
+        </div>
+      )}
 
       {gameOn && (
         <p style={{ textAlign: "center", marginTop: 6, fontSize: 14, color: COLORS.subtext }}>

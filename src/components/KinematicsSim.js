@@ -54,17 +54,16 @@ const INITIAL_STATE = { x: 0, v: 0, a: 0 };
 // readUrl: Web App URL for doGet (same base if you deploy once)
 const SCORE_API = {
   writeUrl: "https://script.google.com/macros/s/AKfycbxqYWYSJHCwp90JNgNspPqGuYOH6MsxSU_mWmJYXGzMGvXvOZNvUArzfCVqcU3blsr0Ig/exec",
-  readUrl:  "https://script.google.com/macros/s/AKfycbxqYWYSJHCwp90JNgNspPqGuYOH6MsxSU_mWmJYXGzMGvXvOZNvUArzfCVqcU3blsr0Ig/exec", // doGet handler
+  readUrl:  "https://script.google.com/macros/s/AKfycbxqYWYSJHCwp90JNgNspPqGuYOH6MsxSU_mWmJYXGzMGvXvOZNvUArzfCVqcU3blsr0Ig/exec",
   token: "tomnook",
 };
 
-
-
+// ---------- CORS-safe submit (no preflight) ----------
 async function submitScoreToSheet({ name, timeSec, stops }) {
   try {
     const payload = {
-      token: SCORE_API.token,   // must match SECRET in Code.gs
-      sheet: "Kinematics1D",    // ✅ tell Apps Script which tab
+      token: SCORE_API.token,     // must match SECRET in Code.gs
+      sheet: "Kinematics1D",      // tell Apps Script which tab
       name: name || "Player",
       time_sec: timeSec,
       stops,
@@ -72,13 +71,11 @@ async function submitScoreToSheet({ name, timeSec, stops }) {
 
     const resp = await fetch(SCORE_API.writeUrl, {
       method: "POST",
-      headers: { "Content-Type": "application/json" }, // you can use JSON now
-      body: JSON.stringify(payload),
+      headers: { "Content-Type": "text/plain;charset=UTF-8" }, // simple → no preflight
+      body: JSON.stringify(payload),                            // JSON body typed as text/plain
     });
 
     const text = await resp.text();
-    console.log("POST response:", text);
-
     let j;
     try { j = JSON.parse(text); }
     catch { j = { ok: false, error: "Non-JSON response", text }; }
@@ -90,13 +87,12 @@ async function submitScoreToSheet({ name, timeSec, stops }) {
   }
 }
 
-
 async function fetchTopScores(limit = 10) {
   try {
     const url = new URL(SCORE_API.readUrl);
     url.searchParams.set("limit", String(limit));
     url.searchParams.set("token", SCORE_API.token);
-    url.searchParams.set("sheet", "Kinematics1D");   // ✅ request correct tab
+    url.searchParams.set("sheet", "Kinematics1D");
     const resp = await fetch(url.toString());
     const j = await resp.json();
     if (j && Array.isArray(j.scores)) return j.scores;
@@ -160,7 +156,6 @@ function niceNumber(n, sig = 2) {
 // component: KinematicsSim (cloud leaderboard enabled)
 export default function KinematicsSim() {
   const submittedRef = useRef(false);
-  // identify a single run attempt (optional but handy if you later want server upserts)
   const runIdRef = useRef(null);
   const [state, setState] = useState(INITIAL_STATE);
   const [paused, setPaused] = useState(false);
@@ -181,8 +176,8 @@ export default function KinematicsSim() {
   const zoneDeadlineAbs = useRef(performance.now() / 1000);
 
   // Leaderboard UI
-  const [cloudScores, setCloudScores] = useState([]); // fetched from Sheet
-  const [leaderboard, setLeaderboard] = useState(() => loadLB()); // local fallback (hidden by default)
+  const [cloudScores, setCloudScores] = useState([]); // from Sheet
+  const [leaderboard, setLeaderboard] = useState(() => loadLB()); // local fallback
   const [showLB, setShowLB] = useState(false);
   const [nameModalOpen, setNameModalOpen] = useState(false);
   const [playerName, setPlayerName] = useState("");
@@ -443,51 +438,44 @@ export default function KinematicsSim() {
   const readouts = useMemo(() => ({ x: niceNumber(state.x), v: niceNumber(state.v), a: niceNumber(state.a) }), [state]);
   const autoScale = !gameOn && !wrapWorld;
 
-  // Handlers for leaderboard modal
-const submitScore = useCallback(() => {
-  if (finalTime == null) {
+  // ---------- Submit handler (uses top-level submit) ----------
+  const submitScore = useCallback(() => {
+    if (finalTime == null) {
+      setNameModalOpen(false);
+      return;
+    }
+    if (submittedRef.current) {
+      setNameModalOpen(false);
+      return;
+    }
+    submittedRef.current = true;
+
+    // Local leaderboard update (instant)
+    const updated = recordScore(playerName, finalTime);
+    setLeaderboard(updated);
+
+    const nameToSend = (playerName || "Player").trim();
+
+    // Close modal immediately & show LB with a "posting…" banner
     setNameModalOpen(false);
-    return;
-  }
-  if (submittedRef.current) {
-    setNameModalOpen(false);
-    return;
-  }
-  submittedRef.current = true;
+    setShowLB(true);
+    setPendingSubmitted(true);
 
-  // Local leaderboard update (instant)
-  const updated = recordScore(playerName, finalTime);
-  setLeaderboard(updated);
+    // Fire-and-forget network submit; when it returns, refresh cloud scores
+    (async () => {
+      const ok = await submitScoreToSheet({
+        name: nameToSend,
+        timeSec: finalTime,
+        stops,
+      });
 
-  const nameToSend = (playerName || "Player").trim();
-
-  // ✅ Close modal immediately & show LB with "posting…" banner
-  setNameModalOpen(false);
-  setShowLB(true);
-  setPendingSubmitted(true);
-
-  // Fire-and-forget network submit; refresh cloud scores when it returns
-  submitScoreToSheet({
-    name: nameToSend,
-    timeSec: finalTime,
-    stops: DEFAULTS.WIN_STOPS,
-    runId: runIdRef.current,
-  })
-    .then(async () => {
-      try {
-        const scores = await fetchTopScores(10);
-        setCloudScores(scores);
-      } catch (e) {
-        console.warn("Refresh cloud scores failed", e);
+      if (ok) {
+        const arr = await fetchTopScores(10);
+        setCloudScores(arr);
       }
-    })
-    .catch((err) => {
-      console.warn("Submit failed", err);
-      // (optional) you could show a small toast here indicating the cloud submit failed
-    });
-}, [playerName, finalTime]);
-
-
+      setPendingSubmitted(false);
+    })();
+  }, [finalTime, playerName, stops]);
 
   const clearLB = useCallback(() => {
     saveLB([]);
@@ -528,11 +516,12 @@ const submitScore = useCallback(() => {
         </label>
 
         <button
-  className={`lb-toggle ${showLB ? "hide" : ""}`}
-  onClick={() => setShowLB((s) => !s)}
->
-  {showLB ? "Hide" : "Show"} leaderboard
-</button>
+          className={`lb-toggle ${showLB ? "hide" : ""}`}
+          onClick={() => setShowLB((s) => !s)}
+          style={{ ...btnStyle, background: "#e5e7eb", color: COLORS.text }}
+        >
+          {showLB ? "Hide" : "Show"} leaderboard
+        </button>
       </div>
 
       {/* HUD */}
@@ -600,11 +589,10 @@ const submitScore = useCallback(() => {
           ) : (
             <ol style={{ listStyle: "none", padding: 0, marginTop: 8 }}>
               {cloudScores.map((s, i) => (
-                <li key={`${s.name}-${s.time_sec}-${i}`} style={{ display: "grid", gridTemplateColumns: "40px 1fr 120px 200px", gap: 8, padding: "6px 0", borderBottom: `1px solid ${COLORS.panelBorder}` }}>
+                <li key={`${s.name}-${s.time_sec}-${i}`} style={{ display: "grid", gridTemplateColumns: "40px 1fr 120px", gap: 8, padding: "6px 0", borderBottom: `1px solid ${COLORS.panelBorder}` }}>
                   <div style={{ fontWeight: 700, color: COLORS.subtext, textAlign: "right", paddingRight: 6 }}>#{i + 1}</div>
                   <div style={{ fontWeight: 600 }}>{s.name || 'Player'}</div>
                   <div>{Number(s.time_sec).toFixed(2)} s</div>
-            
                 </li>
               ))}
             </ol>
