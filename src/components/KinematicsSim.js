@@ -450,32 +450,44 @@ const submitScore = useCallback(() => {
     setNameModalOpen(false);
     return;
   }
-  if (submittedRef.current) { // guard against double-clicks
+  if (submittedRef.current) {
     setNameModalOpen(false);
     return;
   }
   submittedRef.current = true;
 
-  // keep a local archive if you like
+  // Local leaderboard update (instant)
   const updated = recordScore(playerName, finalTime);
   setLeaderboard(updated);
 
-  // use player's name if given; otherwise "Player"
   const nameToSend = (playerName || "Player").trim();
 
+  // ✅ Close modal immediately & show LB with "posting…" banner
+  setNameModalOpen(false);
+  setShowLB(true);
+  setPendingSubmitted(true);
+
+  // Fire-and-forget network submit; refresh cloud scores when it returns
   submitScoreToSheet({
     name: nameToSend,
     timeSec: finalTime,
     stops: DEFAULTS.WIN_STOPS,
-    runId: runIdRef.current, // optional; server can ignore
-  }).then(async () => {
-    setPendingSubmitted(true);
-    setCloudScores(await fetchTopScores(10));
-  }).finally(() => {
-    setNameModalOpen(false);
-    setShowLB(true);
-  });
+    runId: runIdRef.current,
+  })
+    .then(async () => {
+      try {
+        const scores = await fetchTopScores(10);
+        setCloudScores(scores);
+      } catch (e) {
+        console.warn("Refresh cloud scores failed", e);
+      }
+    })
+    .catch((err) => {
+      console.warn("Submit failed", err);
+      // (optional) you could show a small toast here indicating the cloud submit failed
+    });
 }, [playerName, finalTime]);
+
 
 
   const clearLB = useCallback(() => {
