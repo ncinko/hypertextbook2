@@ -43,7 +43,7 @@ const DEFAULTS = {
   HOLD_TIME: 0.5,
   ZONE_TIME_START: 10.0,
   ZONE_TIME_INCREMENT: 3.0,
-  WIN_STOPS: 5,
+  WIN_STOPS: 15,
 };
 
 const INITIAL_STATE = { x: 0, v: 0, a: 0 };
