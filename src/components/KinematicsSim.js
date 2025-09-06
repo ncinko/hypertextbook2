@@ -58,22 +58,28 @@ const SCORE_API = {
   token: "tomnook",
 };
 
-async function submitScoreToSheet(payload) {
+
+async function submitScoreToSheet({ name, timeSec, stops }) {
   try {
+    const body = new URLSearchParams({
+      token: SCORE_API.token,
+      name: name || "Player",
+      time_sec: String(timeSec),
+      stops: String(stops),
+    });
     const resp = await fetch(SCORE_API.writeUrl, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
+      body,               // <-- no headers; browser sets a simple content-type
     });
-    const text = await resp.text(); // peek raw text
-    let j;
-    try { j = JSON.parse(text); } catch { j = { ok:false, error:"Non-JSON response", text }; }
-    if (!resp.ok || !j.ok) console.warn("Score submit failed", { status: resp.status, j });
-    return !!j.ok;
-  } catch (err) {
-    console.warn("Score submit network error", err);
-    return false;
-  }
+     const text = await resp.text();
+     let j;
+     try { j = JSON.parse(text); } catch { j = { ok:false, error:"Non-JSON response", text }; }
+     if (!resp.ok || !j.ok) console.warn("Score submit failed", { status: resp.status, j });
+     return !!j.ok;
+   } catch (err) {
+     console.warn("Score submit network error", err);
+     return false;
+   }
 }
 
 async function fetchTopScores(limit = 10) {
