@@ -4,68 +4,126 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
  * components/KinematicsSim.jsx
  *
  * 1D kinematics sandbox — single game mode:
- *   STOP-IN-ZONES CHALLENGE
- *   • Toggle game on/off (off by default).
- *   • A highlighted zone appears on the track.
- *   • You have a per-zone time limit (starts at 5s, +2s each successful stop).
- *   • Stop inside the zone with |v| ≤ V_THRESH and hold for HOLD_TIME.
- *   • Each success shrinks the zone width and spawns a new one elsewhere.
- *   • 15 successful stops = WIN. Shows total time from game start.
+ *   STOP-IN-ZONES CHALLENGE (with local + cloud leaderboard)
  *
  * Controls: ←/→ accelerate, Space pause, R restart.
- * Clean, low-contrast palette; traces are below the animation.
  */
 
 // ----- Styles / Colors (avoid harsh primaries) -----
 const COLORS = {
-  bg: "#f7f7f7",          // page background
-  panel: "#ffffff",       // panels/cards
-  panelBorder: "#e5e7eb", // light gray border
-  text: "#1f2937",        // slate-800
-  subtext: "#6b7280",     // slate-500
-  accent: "#0f766e",      // teal-700 (muted)
-  accentSoft: "#65a30d",  // olive/lime-600 (muted)
-  cart: "#475569",        // slate-600
-  track: "#e5e7eb",       // light gray
-  grid: "#e5e7eb",        // light gray for plots
-  x: "#0ea5a0",           // teal-500
-  v: "#9061f9",           // violet-500 (soft)
-  a: "#dc8850",           // orange-400/500
-  zoneFill: "rgba(148,163,184,0.25)", // translucent slate
+  bg: "#f7f7f7",
+  panel: "#ffffff",
+  panelBorder: "#e5e7eb",
+  text: "#1f2937",
+  subtext: "#6b7280",
+  accent: "#0f766e",
+  accentSoft: "#65a30d",
+  cart: "#475569",
+  track: "#e5e7eb",
+  grid: "#e5e7eb",
+  x: "#0ea5a0",
+  v: "#9061f9",
+  a: "#dc8850",
+  zoneFill: "rgba(148,163,184,0.25)",
   zoneBorder: "#94a3b8",
-  success: "#16a34a",     // green-600 (muted)
-  danger: "#b45309",      // amber-700
+  success: "#16a34a",
+  danger: "#b45309",
 };
 
 // ----- Simulation constants -----
 const DEFAULTS = {
-  A_MAX: 4,               // m/s^2
-  SCALE: 80,              // px per meter (internal only)
-  HISTORY_SECONDS: 12,    // seconds of traces
-  WORLD_HALF_WIDTH_M: 6,  // meters to either side of origin (render ramp)
-
-  // Game tuning
-  START_ZONE_HALF: 1.2,       // meters (starts easy)
-  MIN_ZONE_HALF: 0.25,        // meters (difficulty floor)
-  SHRINK_FACTOR: 0.93,        // multiply zone half-width after each success
-  V_THRESH: 0.35,             // m/s required for a valid stop
-  HOLD_TIME: 0.5,             // seconds of dwell while slow inside zone
-  ZONE_TIME_START: 10.0,       // seconds on first zone
-  ZONE_TIME_INCREMENT: 3.0,   // add 3s after each successful stop
+  A_MAX: 4,
+  SCALE: 80,
+  HISTORY_SECONDS: 12,
+  WORLD_HALF_WIDTH_M: 6,
+  START_ZONE_HALF: 1.2,
+  MIN_ZONE_HALF: 0.25,
+  SHRINK_FACTOR: 0.93,
+  V_THRESH: 0.35,
+  HOLD_TIME: 0.5,
+  ZONE_TIME_START: 10.0,
+  ZONE_TIME_INCREMENT: 3.0,
   WIN_STOPS: 15,
 };
 
 const INITIAL_STATE = { x: 0, v: 0, a: 0 };
 
+// ===== Backend config (Google Apps Script) =====
+// Replace these with your deployed Apps Script URLs and shared token.
+// writeUrl: Web App URL for doPost
+// readUrl: Web App URL for doGet (same base if you deploy once)
+const SCORE_API = {
+  writeUrl: "https://script.google.com/macros/s/AKfycbz1f1DkPwir-zmHGNJpcvkjUEVS_kHcWY3onggVf2PFYv6AEbFh9Afv5QiWgNj2Oh8lBA/exec",
+  readUrl: "https://script.google.com/macros/s/AKfycbz1f1DkPwir-zmHGNJpcvkjUEVS_kHcWY3onggVf2PFYv6AEbFh9Afv5QiWgNj2Oh8lBA/exec", // doGet handler
+  token: "tomnook",
+};
+
+async function submitScoreToSheet({ name, timeSec, stops }) {
+  try {
+    const resp = await fetch(SCORE_API.writeUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        token: SCORE_API.token,
+        name,
+        time_sec: timeSec,
+        stops,
+      }),
+    });
+    const j = await resp.json();
+    return !!j.ok;
+  } catch (e) {
+    return false;
+  }
+}
+
+async function fetchTopScores(limit = 10) {
+  try {
+    const url = new URL(SCORE_API.readUrl);
+    url.searchParams.set("limit", String(limit));
+    // Optional: simple read token (same SECRET) to avoid random scraping
+    url.searchParams.set("token", SCORE_API.token);
+    const resp = await fetch(url.toString());
+    const j = await resp.json();
+    if (j && Array.isArray(j.scores)) return j.scores; // [{name,time_sec,date}]
+    return [];
+  } catch {
+    return [];
+  }
+}
+
+
+// ----- Local fallback (kept for continuity, but not shown by default) -----
+const LS_KEY = "pnook_kinematics_leaderboard_v1";
+function loadLB() {
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    const arr = raw ? JSON.parse(raw) : [];
+    if (Array.isArray(arr)) return arr;
+  } catch {}
+  return [];
+}
+function saveLB(arr) {
+  try { localStorage.setItem(LS_KEY, JSON.stringify(arr)); } catch {}
+}
+function recordScore(name, timeSec) {
+  const now = new Date().toISOString();
+  const next = [...loadLB(), { name: name?.trim() || "Player", timeSec, date: now }]
+    .sort((a, b) => a.timeSec - b.timeSec)
+    .slice(0, 10);
+  saveLB(next);
+  return next;
+}
+
 function useAnimationFrame(callback, isRunning) {
-  const requestRef = useRef();
-  const previousTimeRef = useRef();
+  const requestRef = useRef(null);
+  const previousTimeRef = useRef(undefined);
 
   const loop = useCallback(
     (time) => {
       if (previousTimeRef.current !== undefined) {
         const dt = (time - previousTimeRef.current) / 1000;
-        callback(Math.min(dt, 0.05)); // clamp to avoid huge steps when tab is inactive
+        callback(Math.min(dt, 0.05));
       }
       previousTimeRef.current = time;
       requestRef.current = requestAnimationFrame(loop);
@@ -76,7 +134,9 @@ function useAnimationFrame(callback, isRunning) {
   useEffect(() => {
     if (!isRunning) return;
     requestRef.current = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(requestRef.current);
+    return () => {
+      if (requestRef.current) cancelAnimationFrame(requestRef.current);
+    };
   }, [isRunning, loop]);
 }
 
@@ -84,17 +144,18 @@ function niceNumber(n, sig = 2) {
   return Number.parseFloat(n.toFixed(sig));
 }
 
+// component: KinematicsSim (cloud leaderboard enabled)
 export default function KinematicsSim() {
   const [state, setState] = useState(INITIAL_STATE);
   const [paused, setPaused] = useState(false);
   const [A_MAX, setAMax] = useState(DEFAULTS.A_MAX);
-  const [scale] = useState(DEFAULTS.SCALE); // internal only
+  const [scale] = useState(DEFAULTS.SCALE);
   const [wrapWorld, setWrapWorld] = useState(true);
-  const [plotTick, setPlotTick] = useState(0); // forces plot refresh
+  const [plotTick, setPlotTick] = useState(0);
 
   // Game state
-  const [gameOn, setGameOn] = useState(false); // off by default
-  const [zoneCenter, setZoneCenter] = useState(2); // meters from origin
+  const [gameOn, setGameOn] = useState(false);
+  const [zoneCenter, setZoneCenter] = useState(2);
   const [zoneHalfWidth, setZoneHalfWidth] = useState(DEFAULTS.START_ZONE_HALF);
   const [dwell, setDwell] = useState(0);
   const [stops, setStops] = useState(0);
@@ -103,45 +164,55 @@ export default function KinematicsSim() {
   const gameStartAbs = useRef(performance.now() / 1000);
   const zoneDeadlineAbs = useRef(performance.now() / 1000);
 
+  // Leaderboard UI
+  const [cloudScores, setCloudScores] = useState([]); // fetched from Sheet
+  const [leaderboard, setLeaderboard] = useState(() => loadLB()); // local fallback (hidden by default)
+  const [showLB, setShowLB] = useState(true);
+  const [nameModalOpen, setNameModalOpen] = useState(false);
+  const [playerName, setPlayerName] = useState("");
+  const [finalTime, setFinalTime] = useState(null);
+  const [pendingSubmitted, setPendingSubmitted] = useState(false);
+
+  // fetch cloud scores on mount
+  useEffect(() => {
+    (async () => {
+      const arr = await fetchTopScores(10);
+      setCloudScores(arr);
+    })();
+  }, []);
+
   const worldWidthM = DEFAULTS.WORLD_HALF_WIDTH_M * 2;
 
-  // Input state
   const keys = useRef({ left: false, right: false });
-
-  // History for traces
-  const history = useRef([]); // entries: { t, x, v, a }
+  const history = useRef([]);
   const t0 = useRef(performance.now() / 1000);
 
-  // Pause handling to keep trace time continuous
   const pauseAbsRef = useRef(null);
   const wasPausedRef = useRef(false);
   useEffect(() => {
     const now = performance.now() / 1000;
     if (paused && !wasPausedRef.current) {
-      // just entered pause
       pauseAbsRef.current = now;
     } else if (!paused && wasPausedRef.current) {
-      // just resumed: shift trace epoch forward by paused duration
       const delta = now - (pauseAbsRef.current ?? now);
       t0.current += delta;
-      zoneDeadlineAbs.current += delta; // push the zone deadline forward by the paused duration
-      gameStartAbs.current += delta;    // exclude paused time from total elapsed
+      zoneDeadlineAbs.current += delta;
+      gameStartAbs.current += delta;
       pauseAbsRef.current = null;
     }
     wasPausedRef.current = paused;
   }, [paused]);
 
-  // Canvas ref
   const canvasRef = useRef(null);
 
   // Keyboard
   useEffect(() => {
     function onKeyDown(e) {
-      if (document.activeElement.type === 'range') return;
+      if (document.activeElement && document.activeElement.tagName === "INPUT") return;
       if (e.repeat) return;
       if (e.key === "ArrowLeft") { keys.current.left = true; }
       if (e.key === "ArrowRight") { keys.current.right = true; }
-      if (e.code === "Space") { e.preventDefault(); setPaused(p => !p); }
+      if (e.code === "Space") { e.preventDefault(); setPaused((p) => !p); }
       if (e.key.toLowerCase() === "r") { restart(); }
     }
     function onKeyUp(e) {
@@ -166,41 +237,30 @@ export default function KinematicsSim() {
       const touch = e.touches[0];
       const rect = canvas.getBoundingClientRect();
       const touchX = touch.clientX - rect.left;
-      
       if (touchX < canvas.clientWidth / 2) {
-        keys.current.left = true;
-        keys.current.right = false;
+        keys.current.left = true; keys.current.right = false;
       } else {
-        keys.current.right = true;
-        keys.current.left = false;
+        keys.current.right = true; keys.current.left = false;
       }
     };
+    const onTouchEnd = (e) => { e.preventDefault(); keys.current.left = false; keys.current.right = false; };
 
-    const onTouchEnd = (e) => {
-      e.preventDefault();
-      keys.current.left = false;
-      keys.current.right = false;
-    };
-
-    canvas.addEventListener('touchstart', onTouchStart, { passive: false });
-    canvas.addEventListener('touchend', onTouchEnd, { passive: false });
-    canvas.addEventListener('touchcancel', onTouchEnd, { passive: false });
-
+    canvas.addEventListener("touchstart", onTouchStart, { passive: false });
+    canvas.addEventListener("touchend", onTouchEnd, { passive: false });
+    canvas.addEventListener("touchcancel", onTouchEnd, { passive: false });
     return () => {
-      canvas.removeEventListener('touchstart', onTouchStart);
-      canvas.removeEventListener('touchend', onTouchEnd);
-      canvas.removeEventListener('touchcancel', onTouchEnd);
+      canvas.removeEventListener("touchstart", onTouchStart);
+      canvas.removeEventListener("touchend", onTouchEnd);
+      canvas.removeEventListener("touchcancel", onTouchEnd);
     };
   }, []);
 
   const restart = useCallback(() => {
-    // Reset simulation + game; start a fresh run
     setState({ ...INITIAL_STATE });
     history.current = [];
     t0.current = performance.now() / 1000;
     gameStartAbs.current = performance.now() / 1000;
     setStops(0);
-    // First zone deadline: 5s
     zoneDeadlineAbs.current = gameStartAbs.current + DEFAULTS.ZONE_TIME_START;
     setDwell(0);
     setZoneCenter(2);
@@ -212,9 +272,8 @@ export default function KinematicsSim() {
   }, []);
 
   const newZone = useCallback(() => {
-    // place new zone somewhere not too close to current x to encourage travel
     const half = DEFAULTS.WORLD_HALF_WIDTH_M;
-    let z;
+    let z = 0;
     for (let i = 0; i < 20; i++) {
       z = (Math.random() * 2 - 1) * (half - 0.5);
       const dx = wrapDelta(z, state.x, half);
@@ -222,7 +281,6 @@ export default function KinematicsSim() {
     }
     setZoneCenter(z);
     setDwell(0);
-    // Add increment to the current deadline, carrying over remaining time
     zoneDeadlineAbs.current += DEFAULTS.ZONE_TIME_INCREMENT;
   }, [state.x]);
 
@@ -231,14 +289,9 @@ export default function KinematicsSim() {
     (dt) => {
       if (paused || gameOver) return;
 
-      const inputA = keys.current.right === keys.current.left
-        ? 0
-        : keys.current.right
-        ? +A_MAX
-        : -A_MAX;
+      const inputA = keys.current.right === keys.current.left ? 0 : (keys.current.right ? +A_MAX : -A_MAX);
 
       setState((s) => {
-        // Semi-implicit Euler
         const a = inputA;
         let v = s.v + a * dt;
         let x = s.x + v * dt;
@@ -249,40 +302,38 @@ export default function KinematicsSim() {
           if (x > half) x -= worldWidthM;
         }
 
-        // push history sample with new state
         const t = performance.now() / 1000 - t0.current;
         history.current.push({ t, x, v, a });
         const cutoff = t - DEFAULTS.HISTORY_SECONDS - 0.25;
         while (history.current.length && history.current[0].t < cutoff) history.current.shift();
 
-        // Stop-in-Zones logic (only when game is on)
         if (gameOn) {
           const half = DEFAULTS.WORLD_HALF_WIDTH_M;
           const dx = Math.abs(wrapDelta(x, zoneCenter, half));
           const inside = dx <= zoneHalfWidth;
           const slow = Math.abs(v) <= DEFAULTS.V_THRESH;
-          if (inside && slow) {
-            setDwell((d) => d + dt);
-          } else {
-            setDwell(0);
-          }
+          if (inside && slow) setDwell((d) => d + dt); else setDwell(0);
 
-          // Check success
           if (inside && slow && dwell + dt >= DEFAULTS.HOLD_TIME) {
             const nextStops = stops + 1;
             setStops(nextStops);
-            // shrink difficulty
             setZoneHalfWidth((w) => Math.max(DEFAULTS.MIN_ZONE_HALF, w * DEFAULTS.SHRINK_FACTOR));
-            // spawn new zone & reset timer
             newZone();
-            // win condition
             if (nextStops >= DEFAULTS.WIN_STOPS) {
+              const total = performance.now() / 1000 - gameStartAbs.current;
+              setFinalTime(total);
               setGameOver(true);
               setWin(true);
+              setNameModalOpen(true);
+              // try to submit immediately (optimistic); name may be updated later
+              submitScoreToSheet({ name: (playerName || "Player"), timeSec: total, stops: nextStops }).then(() => {
+                setPendingSubmitted(true);
+                // refresh cloud after a short moment
+                setTimeout(async () => setCloudScores(await fetchTopScores(10)), 600);
+              });
             }
           }
 
-          // Time-out loss
           if (performance.now() / 1000 > zoneDeadlineAbs.current) {
             setGameOver(true);
             setWin(false);
@@ -293,7 +344,7 @@ export default function KinematicsSim() {
         return { x, v, a };
       });
     },
-    true // keep sim loop active
+    true
   );
 
   // Draw animation
@@ -309,14 +360,12 @@ export default function KinematicsSim() {
       canvas.width = cssW * dpr;
       canvas.height = cssH * dpr;
     }
-    ctx.setTransform(1, 0, 0, 1, 0, 0); // reset
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.scale(dpr, dpr);
 
-    // Clear
     ctx.fillStyle = COLORS.panel;
     ctx.fillRect(0, 0, cssW, cssH);
 
-    // Track center line
     const midY = Math.round(cssH * 0.65);
     ctx.strokeStyle = COLORS.track;
     ctx.lineWidth = 2;
@@ -327,35 +376,25 @@ export default function KinematicsSim() {
 
     const pxPerMeter = scale;
     let originX = Math.round(cssW / 2);
-    if (!wrapWorld) {
-      originX -= state.x * pxPerMeter;
-    }
+    if (!wrapWorld) originX -= state.x * pxPerMeter;
 
-    // Tick marks (every meter)
-    const metersPerTick = 1;
+    // meter ticks
     ctx.strokeStyle = COLORS.grid;
-    const viewMinM = - (originX / pxPerMeter);
+    const viewMinM = -(originX / pxPerMeter);
     const viewMaxM = (cssW - originX) / pxPerMeter;
-
-    for (let m = Math.floor(viewMinM); m <= Math.ceil(viewMaxM); m += metersPerTick) {
-        const xPx = originX + m * pxPerMeter;
-        ctx.beginPath();
-        ctx.moveTo(xPx, midY - 12);
-        ctx.lineTo(xPx, midY + 12);
-        ctx.stroke();
+    for (let m = Math.floor(viewMinM); m <= Math.ceil(viewMaxM); m += 1) {
+      const xPx = originX + m * pxPerMeter;
+      ctx.beginPath();
+      ctx.moveTo(xPx, midY - 12);
+      ctx.lineTo(xPx, midY + 12);
+      ctx.stroke();
     }
 
+    if (gameOn) drawZone(ctx, zoneCenter, zoneHalfWidth, originX, pxPerMeter, midY, cssW);
 
-    // Zone (only when game on)
-    if (gameOn) {
-      drawZone(ctx, zoneCenter, zoneHalfWidth, originX, pxPerMeter, midY, cssW);
-    }
-
-    // Draw cart
     const cartX = originX + state.x * pxPerMeter;
     const cartY = midY - 18;
-    const cartW = 44;
-    const cartH = 24;
+    const cartW = 44, cartH = 24;
 
     // shadow
     ctx.fillStyle = "rgba(0,0,0,0.07)";
@@ -365,25 +404,21 @@ export default function KinematicsSim() {
 
     // body
     ctx.fillStyle = COLORS.cart;
-    ctx.strokeStyle = "#cbd5e1"; // slate-300 outline, soft
+    ctx.strokeStyle = "#cbd5e1";
     ctx.lineWidth = 1.5;
     roundRect(ctx, cartX - cartW / 2, cartY - cartH / 2, cartW, cartH, 8);
     ctx.fill();
     ctx.stroke();
 
-    // position vector
+    // vectors
     const posY = midY + 28;
     drawArrow(ctx, originX, posY, originX + state.x * pxPerMeter, posY, COLORS.x);
-
-    // velocity arrow
     const vPx = Math.max(-300, Math.min(300, state.v * 10));
     drawArrow(ctx, cartX, cartY - cartH * 0.9, cartX + vPx, cartY - cartH * 0.9, COLORS.v);
-
-    // acceleration arrow
     const aPx = Math.max(-100, Math.min(100, state.a * 10));
     drawArrow(ctx, cartX, cartY - cartH * 1.65, cartX + aPx, cartY - cartH * 1.65, COLORS.a);
 
-    // Labels
+    // labels
     ctx.fillStyle = COLORS.subtext;
     ctx.font = "500 12px ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto";
     ctx.fillText("position", originX - 30, posY - 5);
@@ -392,14 +427,35 @@ export default function KinematicsSim() {
   }, [state, scale, zoneCenter, zoneHalfWidth, gameOn, wrapWorld]);
 
   // Derived readouts
-  const readouts = useMemo(
-    () => ({ x: niceNumber(state.x), v: niceNumber(state.v), a: niceNumber(state.a) }),
-    [state]
-  );
-
+  const readouts = useMemo(() => ({ x: niceNumber(state.x), v: niceNumber(state.v), a: niceNumber(state.a) }), [state]);
   const autoScale = !gameOn && !wrapWorld;
 
-  // --- Render ---
+  // Handlers for leaderboard modal
+  const submitScore = useCallback(() => {
+    if (finalTime == null) {
+      setNameModalOpen(false);
+      return;
+    }
+    // local archive (not shown unless you want)
+    const updated = recordScore(playerName, finalTime);
+    setLeaderboard(updated);
+    // submit named score, then refresh top list
+    submitScoreToSheet({
+      name: playerName || "Player",
+      timeSec: finalTime,
+      stops: DEFAULTS.WIN_STOPS,
+    }).then(async () => {
+      setCloudScores(await fetchTopScores(10));
+    });
+    setNameModalOpen(false);
+    setShowLB(true);
+  }, [playerName, finalTime]);
+
+  const clearLB = useCallback(() => {
+    saveLB([]);
+    setLeaderboard([]);
+  }, []);
+
   return (
     <div style={{
       background: COLORS.bg,
@@ -410,19 +466,10 @@ export default function KinematicsSim() {
     }}>
       {/* Controls */}
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center", marginBottom: 12 }}>
-        <button onClick={() => setPaused(p => !p)} style={btnStyle}>
-          {paused ? "Resume" : "Pause"}
-        </button>
+        <button onClick={() => setPaused((p) => !p)} style={btnStyle}>{paused ? "Resume" : "Pause"}</button>
         <button onClick={restart} style={{ ...btnStyle, background: "#e5e7eb", color: COLORS.text }}>Restart (R)</button>
 
-        <LabeledSlider
-          label={`a: ${A_MAX.toFixed(1)} m/s²`}
-          min={0}
-          max={10}
-          step={0.1}
-          value={A_MAX}
-          onChange={setAMax}
-        />
+        <LabeledSlider label={`a: ${A_MAX.toFixed(1)} m/s²`} min={0} max={10} step={0.1} value={A_MAX} onChange={setAMax} />
 
         <label style={{ display: "flex", alignItems: "center", gap: 8, color: COLORS.subtext }}>
           <input
@@ -431,14 +478,7 @@ export default function KinematicsSim() {
             onChange={(e) => {
               const v = e.target.checked;
               setGameOn(v);
-              if (v) {
-                setWrapWorld(true);
-                restart();
-              } else {
-                setGameOver(false);
-                setWin(false);
-                setDwell(0);
-              }
+              if (v) { setWrapWorld(true); restart(); } else { setGameOver(false); setWin(false); setDwell(0); }
             }}
           />
           game mode
@@ -448,34 +488,22 @@ export default function KinematicsSim() {
           <input type="checkbox" checked={wrapWorld} onChange={(e) => setWrapWorld(e.target.checked)} disabled={gameOn} />
           wrap world
         </label>
+
+        <button onClick={() => setShowLB((s) => !s)} style={{ ...btnStyle, background: "#e5e7eb", color: COLORS.text }}>{showLB ? "Hide" : "Show"} leaderboard</button>
       </div>
 
       {/* HUD */}
       {gameOn && (
-        <div style={{
-          display: "flex", gap: 16, flexWrap: "wrap", alignItems: "center", marginBottom: 12,
-          background: COLORS.panel, border: `1px solid ${COLORS.panelBorder}`, borderRadius: 12, padding: "10px 12px"
-        }}>
+        <div style={{ display: "flex", gap: 16, flexWrap: "wrap", alignItems: "center", marginBottom: 12, background: COLORS.panel, border: `1px solid ${COLORS.panelBorder}`, borderRadius: 12, padding: "10px 12px" }}>
           <div><strong>stops</strong>: {stops} / {DEFAULTS.WIN_STOPS}</div>
           <div>| <strong>time left</strong>: {Math.max(0, zoneDeadlineAbs.current - performance.now() / 1000).toFixed(2)} s</div>
-          <div style={{ marginLeft: "auto", color: COLORS.subtext }}>
-            total time: {(performance.now() / 1000 - gameStartAbs.current).toFixed(2)} s
-          </div>
+          <div style={{ marginLeft: "auto", color: COLORS.subtext }}>total time: {(performance.now() / 1000 - gameStartAbs.current).toFixed(2)} s</div>
         </div>
       )}
 
       {/* Game over banner */}
       {gameOn && gameOver && (
-        <div style={{
-          background: win ? "rgba(22,163,74,0.12)" : "rgba(180,83,9,0.12)",
-          border: `1px solid ${win ? COLORS.success : COLORS.danger}`,
-          color: win ? COLORS.success : COLORS.danger,
-          borderRadius: 12,
-          padding: 12,
-          marginBottom: 12,
-          fontWeight: 700,
-          textAlign: "center",
-        }}>
+        <div style={{ background: win ? "rgba(22,163,74,0.12)" : "rgba(180,83,9,0.12)", border: `1px solid ${win ? COLORS.success : COLORS.danger}`, color: win ? COLORS.success : COLORS.danger, borderRadius: 12, padding: 12, marginBottom: 12, fontWeight: 700, textAlign: "center" }}>
           {win ? `You won! 15 stops in ${(performance.now() / 1000 - gameStartAbs.current).toFixed(1)} s` : "Time's up! Press R to try again."}
         </div>
       )}
@@ -488,44 +516,82 @@ export default function KinematicsSim() {
       </div>
 
       {/* Animation */}
-      <div style={{
-        background: COLORS.panel,
-        border: `1px solid ${COLORS.panelBorder}`,
-        borderRadius: 14,
-        padding: 12,
-      }}>
+      <div style={{ background: COLORS.panel, border: `1px solid ${COLORS.panelBorder}`, borderRadius: 14, padding: 12 }}>
         <div style={{ height: 200, position: "relative" }}>
           <canvas ref={canvasRef} style={{ width: "100%", height: "100%", display: "block" }} />
         </div>
       </div>
 
-      {/* Traces (fixed y-scales for x and v, taller plots) */}
+      {/* Traces */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 10, marginTop: 12 }}>
-        <MiniPlot
-          historyRef={history}
-          color={COLORS.x}
-          label="x(t) [m]"
-          heightPx={140}
-          yMin={autoScale ? null : -DEFAULTS.WORLD_HALF_WIDTH_M}
-          yMax={autoScale ? null : DEFAULTS.WORLD_HALF_WIDTH_M}
-          tick={plotTick}
-        />
-        <MiniPlot
-          historyRef={history}
-          color={COLORS.v}
-          label="v(t) [m/s]"
-          heightPx={140}
-          yMin={autoScale ? null : -3 * A_MAX}
-          yMax={autoScale ? null : 3 * A_MAX}
-          tick={plotTick}
-        />
-        <MiniPlot
-          historyRef={history}
-          color={COLORS.a}
-          label="a(t) [m/s²]"
-          tick={plotTick}
-        />
+        <MiniPlot historyRef={history} color={COLORS.x} label="x(t) [m]" heightPx={140} yMin={autoScale ? null : -DEFAULTS.WORLD_HALF_WIDTH_M} yMax={autoScale ? null : DEFAULTS.WORLD_HALF_WIDTH_M} tick={plotTick} />
+        <MiniPlot historyRef={history} color={COLORS.v} label="v(t) [m/s]" heightPx={140} yMin={autoScale ? null : 3 * -A_MAX} yMax={autoScale ? null : 3 * A_MAX} tick={plotTick} />
+        <MiniPlot historyRef={history} color={COLORS.a} label="a(t) [m/s²]" tick={plotTick} />
       </div>
+
+      {/* Leaderboard Panel */}
+      {showLB && (
+        <div style={{ marginTop: 14, background: COLORS.panel, border: `1px solid ${COLORS.panelBorder}`, borderRadius: 12, padding: 12 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <h3 style={{ margin: 0, fontSize: 16 }}>Leaderboard</h3>
+            <button onClick={async () => setCloudScores(await fetchTopScores(10))} style={{ marginLeft: "auto", ...btnStyle, background: "#e5e7eb", color: COLORS.text }}>Refresh</button>
+          </div>
+
+          {/* Pending local victory: show a temporary banner IF it would place on board */}
+          {finalTime != null && !nameModalOpen && (
+            (() => {
+              const qualifies = cloudScores.length < 10 || finalTime < Math.max(...cloudScores.map(s => s.time_sec));
+              const alreadyListed = cloudScores.some(s => Math.abs(s.time_sec - finalTime) < 1e-6 && (s.name || "").trim() === (playerName || "Player").trim());
+              if (qualifies && !alreadyListed && pendingSubmitted) {
+                return (
+                  <div style={{ marginTop: 8, padding: 8, border: `1px dashed ${COLORS.accent}`, borderRadius: 8, color: COLORS.accent }}>
+                    Your new score <strong>{finalTime.toFixed(2)} s</strong> is posting… it should appear here shortly.
+                  </div>
+                );
+              }
+              return null;
+            })()
+          )}
+
+          {cloudScores.length === 0 ? (
+            <p style={{ color: COLORS.subtext, marginTop: 8 }}>No cloud scores yet.</p>
+          ) : (
+            <ol style={{ listStyle: "none", padding: 0, marginTop: 8 }}>
+              {cloudScores.map((s, i) => (
+                <li key={`${s.name}-${s.time_sec}-${i}`} style={{ display: "grid", gridTemplateColumns: "40px 1fr 120px 200px", gap: 8, padding: "6px 0", borderBottom: `1px solid ${COLORS.panelBorder}` }}>
+                  <div style={{ fontWeight: 700, color: COLORS.subtext, textAlign: "right", paddingRight: 6 }}>#{i + 1}</div>
+                  <div style={{ fontWeight: 600 }}>{s.name || 'Player'}</div>
+                  <div>{Number(s.time_sec).toFixed(2)} s</div>
+            
+                </li>
+              ))}
+            </ol>
+          )}
+        </div>
+      )}
+
+      {/* Name Entry Modal */}
+      {nameModalOpen && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.35)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50 }}>
+          <div style={{ background: COLORS.panel, border: `1px solid ${COLORS.panelBorder}`, borderRadius: 14, padding: 16, minWidth: 320 }}>
+            <h3 style={{ marginTop: 0 }}>Great run! Add your name</h3>
+            <p style={{ marginTop: 4, color: COLORS.subtext }}>15 stops in <strong>{finalTime?.toFixed(2)} s</strong></p>
+            <input
+              type="text"
+              placeholder="Display name or initials (not full name)"
+              value={playerName}
+              onChange={(e) => setPlayerName(e.target.value)}
+              maxLength={24}
+              style={{ width: "100%", padding: "10px 12px", borderRadius: 10, border: `1px solid ${COLORS.panelBorder}`, marginTop: 6 }}
+              autoFocus
+            />
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 12 }}>
+              <button onClick={() => setNameModalOpen(false)} style={{ ...btnStyle, background: "#e5e7eb", color: COLORS.text }}>Skip</button>
+              <button onClick={submitScore} style={btnStyle}>Save score</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -543,13 +609,7 @@ const btnStyle = {
 
 function Stat({ label, value }) {
   return (
-    <div style={{
-      background: COLORS.panel,
-      border: `1px solid ${COLORS.panelBorder}`,
-      borderRadius: 12,
-      padding: "10px 12px",
-      minWidth: 120,
-    }}>
+    <div style={{ background: COLORS.panel, border: `1px solid ${COLORS.panelBorder}`, borderRadius: 12, padding: "10px 12px", minWidth: 120 }}>
       <div style={{ fontSize: 12, color: COLORS.subtext }}>{label}</div>
       <div style={{ fontSize: 18, fontWeight: 700 }}>{value}</div>
     </div>
@@ -560,27 +620,18 @@ function LabeledSlider({ label, min, max, step, value, onChange }) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
       <span style={{ color: COLORS.subtext, minWidth: 110 }}>{label}</span>
-      <input
-        type="range"
-        min={min}
-        max={max}
-        step={step}
-        value={value}
-        onChange={(e) => onChange(parseFloat(e.target.value))}
-        style={{ accentColor: COLORS.accent }}
-      />
+      <input type="range" min={min} max={max} step={step} value={value} onChange={(e) => onChange(parseFloat(e.target.value))} style={{ accentColor: COLORS.accent }} />
     </div>
   );
 }
 
-// ---- Plot component (fixed or auto y-scale) ----
+// ---- Plot component ----
 function MiniPlot({ historyRef, color, label, tick, heightPx = 90, yMin = null, yMax = null }) {
   const svgRef = useRef(null);
   const [width, setWidth] = useState(0);
 
-  // Resize observer for responsive SVG width
   useEffect(() => {
-    const el = svgRef.current?.parentElement;
+    const el = svgRef.current ? svgRef.current.parentElement : null;
     if (!el) return;
     const ro = new ResizeObserver(() => setWidth(el.clientWidth));
     ro.observe(el);
@@ -593,11 +644,9 @@ function MiniPlot({ historyRef, color, label, tick, heightPx = 90, yMin = null, 
   const { pathD, zeroY } = useMemo(() => {
     const data = historyRef.current;
     if (!data.length || width === 0) return { pathD: "", zeroY: null };
-
     const tMin = Math.max(0, data[data.length - 1].t - DEFAULTS.HISTORY_SECONDS);
     const tMax = data[data.length - 1].t;
 
-    // Y-range: fixed if yMin/yMax provided; else auto from data
     let ymin = yMin, ymax = yMax;
     if (ymin == null || ymax == null) {
       ymin = Infinity; ymax = -Infinity;
@@ -616,7 +665,8 @@ function MiniPlot({ historyRef, color, label, tick, heightPx = 90, yMin = null, 
     const mapX = (t) => padding.l + ((t - tMin) / (tMax - tMin || 1)) * W;
     const mapY = (y) => padding.t + (1 - (y - ymin) / (ymax - ymin || 1)) * H;
 
-    let dStr = "", started = false;
+    let dStr = "";
+    let started = false;
     for (const s of data) {
       if (s.t < tMin) continue;
       const x = mapX(s.t);
@@ -624,30 +674,18 @@ function MiniPlot({ historyRef, color, label, tick, heightPx = 90, yMin = null, 
       if (!started) { dStr += `M ${x},${y}`; started = true; }
       else { dStr += ` L ${x},${y}`; }
     }
-    
-    const zeroY = (ymin < 0 && ymax > 0) ? mapY(0) : null;
-    return { pathD: dStr, zeroY };
+
+    const zeroYLine = (ymin < 0 && ymax > 0) ? mapY(0) : null;
+    return { pathD: dStr, zeroY: zeroYLine };
   }, [historyRef, label, width, tick, heightPx, yMin, yMax]);
 
   return (
-    <div style={{
-      background: COLORS.panel,
-      border: `1px solid ${COLORS.panelBorder}`,
-      borderRadius: 12,
-      padding: 8,
-    }}>
+    <div style={{ background: COLORS.panel, border: `1px solid ${COLORS.panelBorder}`, borderRadius: 12, padding: 8 }}>
       <div style={{ fontSize: 12, color: COLORS.subtext, marginBottom: 6 }}>{label}</div>
       <svg ref={svgRef} width="100%" height={heightPx}>
         <rect x={0} y={0} width={width} height={heightPx} fill={COLORS.panel} rx={10} />
         {zeroY !== null && (
-          <line
-            x1={padding.l}
-            y1={zeroY}
-            x2={width - padding.r}
-            y2={zeroY}
-            stroke={COLORS.grid}
-            strokeWidth={1}
-          />
+          <line x1={padding.l} y1={zeroY} x2={width - padding.r} y2={zeroY} stroke={COLORS.grid} strokeWidth={1} />
         )}
         <path d={pathD} fill="none" stroke={color} strokeWidth={2} />
       </svg>
@@ -679,65 +717,32 @@ function drawArrow(ctx, x1, y1, x2, y2, color) {
   const len = Math.hypot(dx, dy) || 1;
   const ux = dx / len, uy = dy / len;
   const size = 6;
-
-  ctx.strokeStyle = color;
-  ctx.fillStyle = color;
-  ctx.lineWidth = 2;
-
-  ctx.beginPath();
-  ctx.moveTo(x1, y1);
-  ctx.lineTo(x2, y2);
-  ctx.stroke();
-
+  ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
   ctx.beginPath();
   ctx.moveTo(x2, y2);
   ctx.lineTo(x2 - ux * 10 - uy * size, y2 - uy * 10 + ux * size);
   ctx.lineTo(x2 - ux * 10 + uy * size, y2 - uy * 10 - ux * size);
-  ctx.closePath();
-  ctx.fill();
+  ctx.closePath(); ctx.fill();
 }
 
 function drawZone(ctx, centerM, halfWm, originX, pxPerMeter, midY, cssW) {
-  // Convert zone [center-half, center+half] meters to pixel spans; may wrap past edges
   const leftPx = originX + (centerM - halfWm) * pxPerMeter;
   const rightPx = originX + (centerM + halfWm) * pxPerMeter;
-  const yTop = midY - 22;
-  const yH = 44;
-
-  ctx.lineWidth = 2;
-  ctx.strokeStyle = COLORS.zoneBorder;
-  ctx.fillStyle = COLORS.zoneFill;
-
+  const yTop = midY - 22; const yH = 44;
+  ctx.lineWidth = 2; ctx.strokeStyle = COLORS.zoneBorder; ctx.fillStyle = COLORS.zoneFill;
   const pad = 16;
   const drawSegment = (x1, x2) => {
-    const w = Math.max(0, x2 - x1);
-    if (w <= 0) return;
-    ctx.beginPath();
-    roundRect(ctx, x1, yTop, w, yH, 8);
-    ctx.fill();
-    ctx.stroke();
+    const w = Math.max(0, x2 - x1); if (w <= 0) return;
+    ctx.beginPath(); roundRect(ctx, x1, yTop, w, yH, 8); ctx.fill(); ctx.stroke();
   };
-
-  if (leftPx >= pad && rightPx <= cssW - pad) {
-    // Simple case: inside bounds
-    drawSegment(leftPx, rightPx);
-  } else {
-    // Wrap: draw two pieces
-    if (leftPx < pad) {
-      drawSegment(pad, Math.min(rightPx, cssW - pad));
-      drawSegment(Math.max(leftPx + cssW, pad), cssW - pad);
-    } else if (rightPx > cssW - pad) {
-      drawSegment(leftPx, cssW - pad);
-      drawSegment(pad, (rightPx - cssW));
-    }
+  if (leftPx >= pad && rightPx <= cssW - pad) { drawSegment(leftPx, rightPx); }
+  else {
+    if (leftPx < pad) { drawSegment(pad, Math.min(rightPx, cssW - pad)); drawSegment(Math.max(leftPx + cssW, pad), cssW - pad); }
+    else if (rightPx > cssW - pad) { drawSegment(leftPx, cssW - pad); drawSegment(pad, (rightPx - cssW)); }
   }
 }
 
 function wrapDelta(x, x0, half) {
-  // minimal signed distance on a circular track [-half, half]
-  let dx = x - x0;
-  const C = 2 * half;
-  if (dx > half) dx -= C;
-  if (dx < -half) dx += C;
-  return dx;
+  let dx = x - x0; const C = 2 * half; if (dx > half) dx -= C; if (dx < -half) dx += C; return dx;
 }
