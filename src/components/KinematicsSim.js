@@ -67,7 +67,11 @@ async function submitScoreToSheet({ name, timeSec, stops }) {
       time_sec: String(timeSec),
       stops: String(stops),
     });
-    const resp = await fetch(SCORE_API.writeUrl, { method: "POST", body });
+       const resp = await fetch(SCORE_API.writeUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
+      body,
+    });
     const text = await resp.text();
     console.log('POST response:', text);
     let j; try { j = JSON.parse(text); } catch { j = { ok:false, error:"Non-JSON response", text }; }
