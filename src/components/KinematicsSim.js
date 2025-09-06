@@ -53,26 +53,25 @@ const INITIAL_STATE = { x: 0, v: 0, a: 0 };
 // writeUrl: Web App URL for doPost
 // readUrl: Web App URL for doGet (same base if you deploy once)
 const SCORE_API = {
-  writeUrl: "https://script.google.com/macros/s/AKfycbz1f1DkPwir-zmHGNJpcvkjUEVS_kHcWY3onggVf2PFYv6AEbFh9Afv5QiWgNj2Oh8lBA/exec",
-  readUrl: "https://script.google.com/macros/s/AKfycbz1f1DkPwir-zmHGNJpcvkjUEVS_kHcWY3onggVf2PFYv6AEbFh9Afv5QiWgNj2Oh8lBA/exec", // doGet handler
+  writeUrl: "https://script.google.com/macros/s/AKfycbxqYWYSJHCwp90JNgNspPqGuYOH6MsxSU_mWmJYXGzMGvXvOZNvUArzfCVqcU3blsr0Ig/exec",
+  readUrl:  "https://script.google.com/macros/s/AKfycbxqYWYSJHCwp90JNgNspPqGuYOH6MsxSU_mWmJYXGzMGvXvOZNvUArzfCVqcU3blsr0Ig/exec", // doGet handler
   token: "tomnook",
 };
 
-async function submitScoreToSheet({ name, timeSec, stops }) {
+async function submitScoreToSheet(payload) {
   try {
     const resp = await fetch(SCORE_API.writeUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        token: SCORE_API.token,
-        name,
-        time_sec: timeSec,
-        stops,
-      }),
+      body: JSON.stringify(payload),
     });
-    const j = await resp.json();
+    const text = await resp.text(); // peek raw text
+    let j;
+    try { j = JSON.parse(text); } catch { j = { ok:false, error:"Non-JSON response", text }; }
+    if (!resp.ok || !j.ok) console.warn("Score submit failed", { status: resp.status, j });
     return !!j.ok;
-  } catch (e) {
+  } catch (err) {
+    console.warn("Score submit network error", err);
     return false;
   }
 }
