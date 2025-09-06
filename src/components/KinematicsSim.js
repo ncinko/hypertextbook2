@@ -43,7 +43,7 @@ const DEFAULTS = {
   HOLD_TIME: 0.5,
   ZONE_TIME_START: 10.0,
   ZONE_TIME_INCREMENT: 3.0,
-  WIN_STOPS: 15,
+  WIN_STOPS: 5,
 };
 
 const INITIAL_STATE = { x: 0, v: 0, a: 0 };
@@ -67,19 +67,14 @@ async function submitScoreToSheet({ name, timeSec, stops }) {
       time_sec: String(timeSec),
       stops: String(stops),
     });
-    const resp = await fetch(SCORE_API.writeUrl, {
-      method: "POST",
-      body,               // <-- no headers; browser sets a simple content-type
-    });
-     const text = await resp.text();
-     let j;
-     try { j = JSON.parse(text); } catch { j = { ok:false, error:"Non-JSON response", text }; }
-     if (!resp.ok || !j.ok) console.warn("Score submit failed", { status: resp.status, j });
-     return !!j.ok;
-   } catch (err) {
-     console.warn("Score submit network error", err);
-     return false;
-   }
+    const resp = await fetch(SCORE_API.writeUrl, { method: "POST", body });
+    const text = await resp.text();
+    let j; try { j = JSON.parse(text); } catch { j = { ok:false, error:"Non-JSON response", text }; }
+    return !!j.ok;
+  } catch (err) {
+    console.warn("Score submit network error", err);
+    return false;
+  }
 }
 
 async function fetchTopScores(limit = 10) {
