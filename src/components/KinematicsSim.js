@@ -62,25 +62,34 @@ const SCORE_API = {
 async function submitScoreToSheet({ name, timeSec, stops }) {
   try {
     const body = new URLSearchParams({
-      token: SCORE_API.token,
+      token: SCORE_API.token,          // must match SECRET in Code.gs
       name: name || "Player",
       time_sec: String(timeSec),
       stops: String(stops),
     });
-       const resp = await fetch(SCORE_API.writeUrl, {
+
+    const resp = await fetch(SCORE_API.writeUrl, {
       method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
-      body,
+      body,  // pass the URLSearchParams object directly
     });
+
+    // For debugging, log the raw text response
     const text = await resp.text();
-    console.log('POST response:', text);
-    let j; try { j = JSON.parse(text); } catch { j = { ok:false, error:"Non-JSON response", text }; }
+    console.log("POST response:", text);
+
+    let j;
+    try {
+      j = JSON.parse(text);
+    } catch {
+      j = { ok: false, error: "Non-JSON response", text };
+    }
     return !!j.ok;
   } catch (err) {
     console.warn("Score submit network error", err);
     return false;
   }
 }
+
 
 async function fetchTopScores(limit = 10) {
   try {
