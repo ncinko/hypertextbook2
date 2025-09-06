@@ -179,3 +179,25 @@ code {
 @media (max-width: 480px) {
   .debug-overflow * { outline: 1px solid rgba(255,0,0,0.2); }
 }
+
+
+/*button styling*/
+.btn {
+  background: #0f766e; /* match COLORS.accent */
+  color: white;
+  border: none;
+  border-radius: 12px;
+  padding: 8px 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.btn:hover {
+  background: #0ea5a0; /* slightly lighter for hover */
+}
+
+.btn-secondary {
+  background: #e5e7eb; /* gray bg for secondary actions */
+  color: #1f2937;      /* text color */
+}

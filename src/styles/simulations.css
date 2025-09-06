@@ -34,3 +34,20 @@
     color: #555;
   }
   
+
+  /* Leaderboard toggle button */
+.lb-toggle {
+  background: var(--accent, #0ea5a0); /* fallback if no CSS var */
+  color: white;
+  border: none;
+  border-radius: 12px;
+  padding: 8px 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+}
+
+.lb-toggle.hide {
+  background: #e5e7eb;
+  color: #1f2937; /* COLORS.text */
+}

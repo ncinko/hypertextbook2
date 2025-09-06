@@ -63,16 +63,16 @@ const SCORE_API = {
 async function submitScoreToSheet({ name, timeSec, stops }) {
   try {
     const payload = {
-      token: SCORE_API.token,          // must match SECRET in Code.gs
+      token: SCORE_API.token,   // must match SECRET in Code.gs
+      sheet: "Kinematics1D",    // ✅ tell Apps Script which tab
       name: name || "Player",
       time_sec: timeSec,
       stops,
     };
 
-    // text/plain keeps it a simple request (no preflight), body is JSON
     const resp = await fetch(SCORE_API.writeUrl, {
       method: "POST",
-      headers: { "Content-Type": "text/plain;charset=UTF-8" },
+      headers: { "Content-Type": "application/json" }, // you can use JSON now
       body: JSON.stringify(payload),
     });
 
@@ -95,17 +95,16 @@ async function fetchTopScores(limit = 10) {
   try {
     const url = new URL(SCORE_API.readUrl);
     url.searchParams.set("limit", String(limit));
-    // Optional: simple read token (same SECRET) to avoid random scraping
     url.searchParams.set("token", SCORE_API.token);
+    url.searchParams.set("sheet", "Kinematics1D");   // ✅ request correct tab
     const resp = await fetch(url.toString());
     const j = await resp.json();
-    if (j && Array.isArray(j.scores)) return j.scores; // [{name,time_sec,date}]
+    if (j && Array.isArray(j.scores)) return j.scores;
     return [];
   } catch {
     return [];
   }
 }
-
 
 // ----- Local fallback (kept for continuity, but not shown by default) -----
 const LS_KEY = "pnook_kinematics_leaderboard_v1";
@@ -528,7 +527,12 @@ const submitScore = useCallback(() => {
           wrap world
         </label>
 
-        <button onClick={() => setShowLB((s) => !s)} style={{ ...btnStyle, background: "#e5e7eb", color: COLORS.text }}>{showLB ? "Hide" : "Show"} leaderboard</button>
+        <button
+  className={`lb-toggle ${showLB ? "hide" : ""}`}
+  onClick={() => setShowLB((s) => !s)}
+>
+  {showLB ? "Hide" : "Show"} leaderboard
+</button>
       </div>
 
       {/* HUD */}

@@ -11,6 +11,7 @@ import Chaos from "./pages/Chaos"
 import Momentum from "./pages/Momentum"
 import Sound from "./pages/Sound"
 import Kinematics from "./pages/Kinematics"
+import Kinematics2 from "./pages/Kinematics2"
 import PolarKinematics from "./pages/PolarKinematics";
 
 import './styles/main.css';
@@ -19,17 +20,40 @@ export default function App() {
     return (
         <div>
             <nav className="navbar">
-                <div className="nav-container">
-                    <Link to="/" className="nav-logo">Physics Nook</Link>
-                    <div className="nav-links">
-                        <Link to="/chaos" className="nav-item">Chaos</Link>
-                        <Link to="/oscillations" className="nav-item">Oscillation</Link>
-                        <Link to="/electric-fields" className="nav-item">Fields</Link>
-                        <Link to="/momentum" className="nav-item">Momentum</Link>
-                        <Link to="/kinematics" className="nav-item">Kinematics</Link>
-                    </div>
-                </div>
-            </nav>
+  <div className="nav-container">
+    <Link to="/" className="nav-logo">Physics Nook</Link>
+    <div className="nav-links">
+
+      {/* Mechanics Dropdown */}
+      <div className="nav-dropdown">
+        <span className="nav-item">Mechanics ▾</span>
+        <div className="dropdown-content">
+          <Link to="/kinematics">1D Kinematics</Link>
+          <Link to="/momentum">Momentum</Link>
+          <Link to="/oscillations">Oscillations</Link>
+        </div>
+      </div>
+
+      {/* Fields Dropdown */}
+      <div className="nav-dropdown">
+        <span className="nav-item">Fields ▾</span>
+        <div className="dropdown-content">
+          <Link to="/electric-fields">Electric Fields</Link>
+        </div>
+      </div>
+
+      {/* Advanced Dropdown */}
+      <div className="nav-dropdown">
+        <span className="nav-item">Advanced ▾</span>
+        <div className="dropdown-content">
+          <Link to="/chaos">Chaos</Link>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</nav>
+
             <Routes>
                 <Route path="/" element={<LandingPage />} />
                 <Route path="/double-pendulum" element={<DoublePendulum />} />
@@ -42,6 +66,7 @@ export default function App() {
                 <Route path="/momentum" element={<Momentum/>} />
                 <Route path="/sound" element={<Sound/>} />
                 <Route path="/kinematics" element={<Kinematics />} />
+                <Route path="/kinematics2" element={<Kinematics2 />} />
                 <Route path="/kk" element={<PolarKinematics />} />
             </Routes>
         </div>
