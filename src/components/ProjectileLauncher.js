@@ -1,10 +1,7 @@
 // src/components/ProjectileLauncher.js
-// Two‑trace update:
-//  • Show only the most recent live trace and the immediately previous trace (fainter)
-//  • Remove predictive "ghost" path
-//  • Always draw the initial velocity vector before launches while user adjusts settings
-//  • Keep on‑canvas aim drag + angle/speed sliders, gravity + air‑drag sliders, live readout
-//  • Small anti‑alias polish (rounded joins/caps)
+// Two-trace update + Mole throw at flag when within 1 m.
+//  • Shows a mole GIF next to the flag briefly and relaunches with random toss
+//  • Cooldown so it won’t re-trigger while still near the flag
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 
@@ -33,7 +30,7 @@ export default function ProjectileLauncher() {
   const [speed, setSpeed] = useState(20); // m/s
   const [g, setG] = useState(9.8); // m/s^2 downward
   const [drag, setDrag] = useState(0.0); // linear drag coeff (1/s)
-  const [wind, setWind] = useState(0.0); // (kept but unused in drawing logic)
+  const [wind, setWind] = useState(0.0); // kept for completeness
   const [timeScale, setTimeScale] = useState(1.0);
   const [zoom, setZoom] = useState(10);
 
@@ -43,7 +40,7 @@ export default function ProjectileLauncher() {
   const [showVectors, setShowVectors] = useState(true);
 
   // target/ruler flag to measure horizontal distance
-  const [flagX, setFlagX] = useState(50); // in meters along ground
+  const [flagX, setFlagX] = useState(50); // meters
 
   // previous completed path (array of {x,y} in world meters)
   const [prevPath, setPrevPath] = useState([]);
@@ -55,8 +52,14 @@ export default function ProjectileLauncher() {
   const parentRef = useRef(null);
   const rafRef = useRef(0);
   const tPrevRef = useRef(0);
-  
 
+  // Mole image + state
+  const moleImgRef = useRef({ img: null, loaded: false, w: 64, h: 64 });
+  const moleStateRef = useRef({
+    show: false,
+    showUntil: 0,
+    cooldown: false, // prevents repeated triggers when lingering near the flag
+  });
 
   // world state (meters, seconds)
   const stateRef = useRef({
@@ -88,6 +91,13 @@ export default function ProjectileLauncher() {
     return () => ro.disconnect();
   }, []);
 
+  // Preload mole GIF (place file at public/assets/mole.gif)
+  useEffect(() => {
+    const img = new Image();
+    img.src = process.env.PUBLIC_URL + "/assets/mole.gif";
+    img.onload = () => (moleImgRef.current = { img, loaded: true, w: img.width, h: img.height });
+  }, []);
+
   // Reset sim state to pre-launch
   function prime() {
     const th = toRad(angleDeg);
@@ -106,6 +116,9 @@ export default function ProjectileLauncher() {
     setLaunched(false);
     setPlaying(false);
     setMetrics({ tof: 0, range: 0, hmax: origin.y });
+    // allow mole to trigger again on a fresh launch
+    moleStateRef.current.cooldown = false;
+    moleStateRef.current.show = false;
   }
 
   // Initialize
@@ -130,12 +143,36 @@ export default function ProjectileLauncher() {
     const ym = (h - py - 40) / zoom;
     return [xm, ym];
   }
+
+  // Trigger mole + random throw
+  function triggerMoleThrow() {
+    const s = stateRef.current;
+    const now = performance.now();
+    moleStateRef.current.show = true;
+    moleStateRef.current.showUntil = now + 1500; // show ~1.5 s
+    moleStateRef.current.cooldown = true;
+
+    // Random throw parameters
+    const ang = toRad(30 + Math.random() * 45); // 30°–75°
+    const dir = Math.random() < 0.5 ? -1 : 1;   // left or right
+    const v = 10 + Math.random() * 20;          // 10–30 m/s
+
+    // Start from the flag location at ground
+    s.x = flagX;
+    s.y = 0;
+    s.vx = dir * v * Math.cos(ang);
+    s.vy = v * Math.sin(ang);
+    s.landed = false;
+    s.path.push({ x: s.x, y: s.y });
+
+    // Keep going!
+    setPlaying(true);
+  }
+
   // Physics step (semi-implicit Euler)
   function step(dt) {
     const s = stateRef.current;
-    const [bx, by] = worldToScreen(s.x, s.y);
 
-    // screen position of projectile (for vectors/dot)
     if (s.landed) return;
 
     // Air drag: simple linear model F_d = -m*k*v  => dv/dt = -k*v
@@ -153,7 +190,12 @@ export default function ProjectileLauncher() {
     s.hmax = Math.max(s.hmax, s.y);
     s.path.push({ x: s.x, y: s.y });
 
-    // Ground collision (y<=0) -> land with simple inelastic stop
+    // Reset mole cooldown once we've moved well away from the flag & off ground
+    if (moleStateRef.current.cooldown && Math.abs(s.x - flagX) > 3 && s.y > 0.5) {
+      moleStateRef.current.cooldown = false;
+    }
+
+    // Ground collision (y<=0) -> land / or mole-throw if near flag
     if (s.y <= 0 && s.t > 0.0001) {
       // interpolate landing for slightly below ground
       const n = s.path.length;
@@ -165,6 +207,21 @@ export default function ProjectileLauncher() {
         s.x = xLand;
       }
       s.y = 0;
+
+      const miss = Math.abs(s.x - flagX);
+
+      // If within 1 m and not in cooldown, mole throws the projectile
+      if (miss <= 1.0 && !moleStateRef.current.cooldown) {
+  if (Math.random() < 0.25) {
+    triggerMoleThrow();
+    return; // do not mark as landed; continue flying
+  } else {
+    // Optional: brief cooldown so it doesn't immediately re-check and pop
+    moleStateRef.current.cooldown = true;
+  }
+}
+
+      // Otherwise: normal landing
       s.vx = 0; s.vy = 0;
       s.landed = true;
       setPlaying(false);
@@ -172,7 +229,8 @@ export default function ProjectileLauncher() {
 
       // save this completed path as the faint previous trace
       setPrevPath([{ x: origin.x, y: origin.y }, ...s.path]);
-      // trigger a final redraw to show the faint previous after landing
+
+      // final redraw
       requestAnimationFrame(draw);
     }
   }
@@ -206,8 +264,6 @@ export default function ProjectileLauncher() {
 
   // Draw everything
   function draw() {
-
-    const [bx, by] = worldToScreen(stateRef.current.x, stateRef.current.y);
     const cvs = canvasRef.current; if (!cvs) return;
     const dpr = window.devicePixelRatio || 1;
     const ctx = cvs.getContext("2d");
@@ -285,21 +341,21 @@ export default function ProjectileLauncher() {
     }
 
     const s = stateRef.current;
+    const [bx, by] = worldToScreen(s.x, s.y);
 
     if (playing) { // --- current (live) path ---
-    ctx.strokeStyle = COLORS.accent; ctx.lineWidth = 2.5;
-    ctx.beginPath();
-    const path = [{ x: origin.x, y: origin.y }, ...s.path];
-    path.forEach((p, i) => {
-      const [px, py] = worldToScreen(p.x, p.y);
-      if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
-    });
-    ctx.stroke();
+      ctx.strokeStyle = COLORS.accent; ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      const path = [{ x: origin.x, y: origin.y }, ...s.path];
+      path.forEach((p, i) => {
+        const [px, py] = worldToScreen(p.x, p.y);
+        if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+      });
+      ctx.stroke();
 
-    // projectile
-    ctx.fillStyle = COLORS.accent;
-    ctx.beginPath(); ctx.arc(bx, by, 5, 0, Math.PI * 2); ctx.fill();
-
+      // projectile
+      ctx.fillStyle = COLORS.accent;
+      ctx.beginPath(); ctx.arc(bx, by, 5, 0, Math.PI * 2); ctx.fill();
     }
 
     // vectors
@@ -324,6 +380,20 @@ export default function ProjectileLauncher() {
     ctx.strokeStyle = COLORS.warn; ctx.fillStyle = COLORS.warn; ctx.lineWidth = 2;
     ctx.beginPath(); ctx.moveTo(fx, fy); ctx.lineTo(fx, fy - 40); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(fx, fy - 40); ctx.lineTo(fx + 10, fy - 28); ctx.lineTo(fx, fy - 28); ctx.closePath(); ctx.fill();
+
+    // --- Mole image next to the flag when active ---
+    const now = performance.now();
+    if (moleImgRef.current.loaded) {
+      if (moleStateRef.current.show && now < moleStateRef.current.showUntil) {
+        const img = moleImgRef.current.img;
+        // Draw slightly to the right of the flag, above ground
+        const imgW = 64; // scale to a small size
+        const imgH = 64;
+        ctx.drawImage(img, fx + 0, fy + 15- imgH, imgW, imgH);
+      } else if (moleStateRef.current.show && now >= moleStateRef.current.showUntil) {
+        moleStateRef.current.show = false; // hide after timeout
+      }
+    }
 
     // if landed: draw miss distance
     if (s.landed) {
@@ -351,31 +421,31 @@ export default function ProjectileLauncher() {
   // Interaction: drag handle from origin to set angle & speed
   const dragRef = useRef({ active: false, mode: "none" });
   function handlePointerDown(e) {
-  if (!canvasRef.current) return;
-  const rect = canvasRef.current.getBoundingClientRect();
-  const px = e.clientX - rect.left;
-  const py = e.clientY - rect.top;
+    if (!canvasRef.current) return;
+    const rect = canvasRef.current.getBoundingClientRect();
+    const px = e.clientX - rect.left;
+    const py = e.clientY - rect.top;
 
-  // Check if near flag first
-  const [fx, fy] = worldToScreen(flagX, 0);
-  const dFlag = Math.hypot(px - fx, py - (fy - 20));
-  if (dFlag < 24) {
-    dragRef.current = { active: true, mode: "flag" };
-  } else {
-    // Aim drag from anywhere
-    dragRef.current = { active: true, mode: "aim" };
-    const [mx, my] = screenToWorld(px, py);
-    const dx = mx - origin.x, dy = my - origin.y;
-    setAngleDeg(clamp(toDeg(Math.atan2(dy, dx)), 0, 90));
-    setSpeed(clamp(Math.hypot(dx, dy) * 2, 1, 100)); // drag length -> speed
-  }
+    // Check if near flag first
+    const [fx, fy] = worldToScreen(flagX, 0);
+    const dFlag = Math.hypot(px - fx, py - (fy - 20));
+    if (dFlag < 24) {
+      dragRef.current = { active: true, mode: "flag" };
+    } else {
+      // Aim drag from anywhere
+      dragRef.current = { active: true, mode: "aim" };
+      const [mx, my] = screenToWorld(px, py);
+      const dx = mx - origin.x, dy = my - origin.y;
+      setAngleDeg(clamp(toDeg(Math.atan2(dy, dx)), 0, 90));
+      setSpeed(clamp(Math.hypot(dx, dy) * 2, 1, 100)); // drag length -> speed
+    }
 
-  if (canvasRef.current.setPointerCapture && e.pointerId != null) {
-    try { canvasRef.current.setPointerCapture(e.pointerId); } catch {}
+    if (canvasRef.current.setPointerCapture && e.pointerId != null) {
+      try { canvasRef.current.setPointerCapture(e.pointerId); } catch {}
+    }
+    e.preventDefault?.();
+    draw();
   }
-  e.preventDefault?.();
-  draw();
-}
 
   function handlePointerMove(e) {
     if (!dragRef.current.active) return;
@@ -386,7 +456,7 @@ export default function ProjectileLauncher() {
       const [mx, my] = screenToWorld(px, py);
       const dx = mx - origin.x, dy = my - origin.y;
       const ang = clamp(toDeg(Math.atan2(dy, dx)), 0, 90);
-      const spd = clamp(Math.hypot(dx, dy)*2, 1, 100); // drag length -> speed
+      const spd = clamp(Math.hypot(dx, dy) * 2, 1, 100); // drag length -> speed
       setAngleDeg(ang);
       setSpeed(spd);
       draw(); // reflect aiming immediately
@@ -457,7 +527,6 @@ export default function ProjectileLauncher() {
             <label style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: 13 }}>
               <input type="checkbox" checked={showGrid} onChange={e => setShowGrid(e.target.checked)} /> Grid
             </label>
-
           </div>
         </div>
 
