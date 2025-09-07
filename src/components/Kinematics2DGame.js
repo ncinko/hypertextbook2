@@ -560,15 +560,7 @@ if (j?.ok) {
               Score submitted! Thanks for playing.
             </div>
           )}
-          <button
-            className="btn btn-secondary"
-            onClick={() => {
-              resetGame({ millis: () => performance.now() });
-              setRunning(true);
-            }}
-          >
-            Play again
-          </button>
+          
         </div>
       )}
 
