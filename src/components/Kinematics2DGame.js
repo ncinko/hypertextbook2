@@ -36,20 +36,20 @@ export default function Kinematics2DGame() {
   const GAME_TIME = 30;
 
   // accel/vel caps
-  const A_STEP = 150, A_MAX = 300, V_MAX = 520;
-  const A_MOUSE = 150;
+  const A_STEP = 175, A_MAX = 350, V_MAX = 1000;
+  const A_MOUSE = 200;
 
   // goals
-  const GOAL_R = 18, GOLDEN_R = 20, GOLDEN_VALUE = 5, NORMAL_VALUE = 1, GOLDEN_CHANCE = 0.2;
+  const GOAL_R = 18, GOLDEN_R = 20, GOLDEN_VALUE = 3, NORMAL_VALUE = 1, GOLDEN_CHANCE = 0.15;
 
   // collectibles
   const BOOST_R = 16, BOOST_MULT = 2.0, BOOST_DURATION = 5.0; // 🔥
   const CLOCK_R = 16, CLOCK_BONUS = 5.0; // ⏱️
 
-  // spawn mix (3 items active)
-  const MAX_SPAWNS = 3;
+  // spawn mix (4 items active)
+  const MAX_SPAWNS = 4;
   const PROB_CLOCK = 0.15;
-  const PROB_BOOST = 0.25;
+  const PROB_BOOST = 0.15;
 
   // ---------- Game state ----------
   const [running, setRunning] = useState(false);
@@ -68,6 +68,8 @@ export default function Kinematics2DGame() {
   const [showLB, setShowLB] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [fetchingBoard, setFetchingBoard] = useState(false);
+  const [isInputFocused, setIsInputFocused] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
 
   // World
   const worldRef = useRef({
@@ -117,8 +119,8 @@ export default function Kinematics2DGame() {
         mode,
       };
 
-      // ✅ preflight-free
-await fetch(SCORE_API.writeUrl, {
+// ✅ preflight-free
+const resp = await fetch(SCORE_API.writeUrl, {
   method: "POST",
   headers: { "Content-Type": "text/plain;charset=UTF-8" }, // simple → no OPTIONS
   body: JSON.stringify({
@@ -128,22 +130,26 @@ await fetch(SCORE_API.writeUrl, {
     score,
     goldenHits,
     normalHits,
-    timeSec: GAME_TIME,      // your round time (or GAME_TIME + bonuses if you track them)
+    timeSec: GAME_TIME, // your round time (or GAME_TIME + bonuses if you track them)
     version: "2D-v1",
     mode: "GoalRush",
   }),
 });
 
+// Parse without assuming JSON to aid debugging
+const text = await resp.text();
+let j;
+try {
+  j = JSON.parse(text);
+} catch {
+  j = { ok: false, error: "Non-JSON response", text, status: resp.status };
+}
 
-      // Parse without assuming JSON to aid debugging
-      const text = await resp.text();
-      let j; try { j = JSON.parse(text); } catch { j = { ok: false, error: "Non-JSON response", text }; }
-
-      if (j?.ok) {
-        await fetchLeaderboard(10);  // refresh cloud board
-      } else {
-        console.warn("Submit failed:", j?.error || text);
-      }
+if (j?.ok) {
+  await fetchLeaderboard(10); // refresh cloud board
+} else {
+  console.warn("Score submit failed:", j);
+}
     } catch (e) {
       console.error("Submit error:", e);
     } finally {
@@ -160,12 +166,13 @@ await fetch(SCORE_API.writeUrl, {
   useEffect(() => {
     const block = new Set(["ArrowUp","ArrowDown","ArrowLeft","ArrowRight"," ","Spacebar","w","a","s","d","W","A","S","D"]);
     const onKeyDown = (e) => {
+      if (isInputFocused) return;
       if (block.has(e.key)) e.preventDefault();
       if ((e.key === " " || e.key === "Spacebar") && !running) setRunning(true);
     };
     window.addEventListener("keydown", onKeyDown, { passive: false });
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [running]);
+  }, [running, isInputFocused]);
 
   // ============== Spawns ==============
   const jitterAwayFromCenter = (w, gx, gy, minR = 100) => {
@@ -213,6 +220,7 @@ await fetch(SCORE_API.writeUrl, {
     setFinalScore(null);
     setPendingSubmitted(false);
     setScore(0); setGoldenHits(0); setNormalHits(0);
+    setSubmitted(false);
     if (gameOn) seedSpawns(w); else w.spawns = [];
     w.lastMs = p5 ? p5.millis() : 0;
     setRunning(false);
@@ -325,21 +333,23 @@ await fetch(SCORE_API.writeUrl, {
 
     let ax = 0, ay = 0;
 
-    if (mouseActiveRef.current) {
-      const d = mouseUnitDir(p5);
-      ax = A_MOUSE * d.x; ay = A_MOUSE * d.y;
-    } else {
-      if (p5.keyIsDown(p5.LEFT_ARROW))  ax -= A_STEP;
-      if (p5.keyIsDown(p5.RIGHT_ARROW)) ax += A_STEP;
-      if (p5.keyIsDown(p5.UP_ARROW))    ay -= A_STEP;
-      if (p5.keyIsDown(p5.DOWN_ARROW))  ay += A_STEP;
-      if (p5.keyIsDown(65)) ax -= A_STEP; // A
-      if (p5.keyIsDown(68)) ax += A_STEP; // D
-      if (p5.keyIsDown(87)) ay -= A_STEP; // W
-      if (p5.keyIsDown(83)) ay += A_STEP; // S
+    if (!isInputFocused) {
+      if (mouseActiveRef.current) {
+        const d = mouseUnitDir(p5);
+        ax = A_MOUSE * d.x; ay = A_MOUSE * d.y;
+      } else {
+        if (p5.keyIsDown(p5.LEFT_ARROW))  ax -= A_STEP;
+        if (p5.keyIsDown(p5.RIGHT_ARROW)) ax += A_STEP;
+        if (p5.keyIsDown(p5.UP_ARROW))    ay -= A_STEP;
+        if (p5.keyIsDown(p5.DOWN_ARROW))  ay += A_STEP;
+        if (p5.keyIsDown(65)) ax -= A_STEP; // A
+        if (p5.keyIsDown(68)) ax += A_STEP; // D
+        if (p5.keyIsDown(87)) ay -= A_STEP; // W
+        if (p5.keyIsDown(83)) ay += A_STEP; // S
+      }
     }
 
-    if (gravityOn) ay += 50;
+    if (gravityOn) ay += 100;
 
     const mult = w.boostLeft > 0 ? BOOST_MULT : 1;
     w.ax = clamp(ax * mult, -A_MAX * mult, A_MAX * mult);
@@ -433,8 +443,7 @@ await fetch(SCORE_API.writeUrl, {
   };
 
   const keyPressed = (p5) => {
-    if (p5.key === " " || p5.key === "Spacebar") setRunning(true);
-    else if (p5.key.toLowerCase() === "r") resetGame(p5);
+    if (p5.key.toLowerCase() === "r") resetGame(p5);
   };
 
   // toggle seeds/clear spawns on mode switch
@@ -467,7 +476,6 @@ await fetch(SCORE_API.writeUrl, {
 
   return (
     <div className="container">
-      <h2>2D Kinematics — Sandbox / Goal Rush</h2>
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center", marginBottom: 12 }}>
         <button className="btn" onClick={() => setRunning(true)} disabled={running}>
           {running ? "Running…" : "Start (Space)"}
@@ -518,32 +526,40 @@ await fetch(SCORE_API.writeUrl, {
 
       {gameOn && ended && (
         <div style={{ marginTop: 10, textAlign: "center" }}>
-          <div style={{ marginBottom: 8 }}>
-            <input
-              className="input"
-              placeholder="Your name"
-              value={playerName}
-              onChange={(e) => setPlayerName(e.target.value)}
-              style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #e5e7eb", marginRight: 8 }}
-            />
-            <button
-              className="btn"
-              disabled={submitting}
-              onClick={() => {
-                // Close the input flow immediately; show posting banner via pendingSubmitted
-                setFinalScore(score);
-                submitScore({
-                  score,
-                  goldenHits,
-                  normalHits,
-                  timeSec: GAME_TIME,
-                  mode: "GoalRush",
-                });
-              }}
-            >
-              {submitting ? "Submitting..." : "Submit score"}
-            </button>
-          </div>
+          {!submitted ? (
+            <div style={{ marginBottom: 8 }}>
+              <input
+                className="input"
+                placeholder="Your name"
+                value={playerName}
+                onChange={(e) => setPlayerName(e.target.value)}
+                onFocus={() => setIsInputFocused(true)}
+                onBlur={() => setIsInputFocused(false)}
+                style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #e5e7eb", marginRight: 8 }}
+              />
+              <button
+                className="btn"
+                disabled={submitting}
+                onClick={() => {
+                  setSubmitted(true);
+                  setFinalScore(score);
+                  submitScore({
+                    score,
+                    goldenHits,
+                    normalHits,
+                    timeSec: GAME_TIME,
+                    mode: "GoalRush",
+                  });
+                }}
+              >
+                {submitting ? "Submitting..." : "Submit score"}
+              </button>
+            </div>
+          ) : (
+            <div style={{ marginBottom: 8, color: COLORS.subtext, height: 38, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              Score submitted! Thanks for playing.
+            </div>
+          )}
           <button
             className="btn btn-secondary"
             onClick={() => {
