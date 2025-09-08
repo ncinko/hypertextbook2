@@ -5,7 +5,7 @@ import { MathJax, MathJaxContext } from "better-react-mathjax";
 import PotentialFieldSimulation from "../components/electricity/PotentialFieldSimulation";
 import PotentialEnergyLandscape from "../components/electricity/PotentialEnergyLandscape";
 import ScalarPotential2D from "../components/electricity/ScalarPotential2D";
-//import ElectricPotentialSimulation from "../components/electricity/ElectricPotentialSimulation";
+import ElectricPotentialSimulation from "../components/electricity/ElectricPotentialSimulation";
 import HiddenExposition from "../components/HiddenExposition"; 
 
 const ElectricPotential = () => {
@@ -133,7 +133,8 @@ The work done by a conservative force depends only on the initial and final posi
     <p>Evaluating this integral, we have <div style={{ textAlign: "center", margin: "6px 0" }}><MathJax inline>{"\\(\\Delta U = -\\int_{\\infty}^{r} k \\frac{Qq}{r^2} \\, dr = - kQq \\left[ -\\frac{1}{r} \\right]_{\\infty}^{r} = k \\frac{Qq}{r} \\)"}</MathJax>.</div></p>
     <p>Finally, substituting this expression for <MathJax inline>{"\\( U \\)"}</MathJax> into the definition of electric potential, we find <div style={{ textAlign: "center", margin: "6px 0" }}><MathJax inline>{"\\( V = \\frac{U}{q} = k \\frac{Q}{r} \\)"}</MathJax>.</div></p>
 </HiddenExposition>
-            <p>Let's first turn to the issue of visualizng this scalar field.  We'll stick with 2D space and represent values of <MathJax inline>{"\\( V(x,y) \\)"}</MathJax> using a color map.  The simulation below shows the potential field of a single positive point charge.  You can see that the potential decreases as you move away from the charge, and increases as you move closer.</p>
+            <p>Let's first turn to the issue of visualizing this function.  We'll stick with 2D space and represent values of <MathJax inline>{"\\( V(x,y) \\)"}</MathJax> using a color map. 
+             The plot below shows the potential field of a single positive point charge.  You can see that the potential decreases as you move away from the charge, and increases as you move closer.</p>
             <div style={{ marginTop: "2rem", marginBottom: "2rem" }}>
             <ScalarPotential2D />
             </div>
@@ -148,15 +149,21 @@ The work done by a conservative force depends only on the initial and final posi
             <p>In this final simulation, we'll add electric potential into our existing electric field visualization.  Try to develop some sense of how placing source charges affects the potential, 
                 how a test charge behaves in a given potential landscape, and the relationship between electric field and potential</p>  
             <div style={{ marginTop: "2rem", marginBottom: "2rem" }}>
-            
-            </div>        
+            <ElectricPotentialSimulation />
+            </div>
+            <p><strong>Note:</strong> lines of equipotential are usually drawn at common intervals (100 Volts, 200 Volts, ...).  
+            These are analogous to lines of constant elevation on a topographical map (perhaps drawn every 100 feet).  
+            It turns out this is rather tricky to simulate, so the ones above are haphazardly placed.    </p>
+            <p>However, they do retain the important feature of being perpendicular to the electric field lines.
+               In the same way <MathJax inline>{" \\( F \\approx -\\frac{\\Delta U}{\\Delta x}\\)"}</MathJax> in one dimension,
+                <MathJax inline>{" \\( E \\approx -\\frac{\\Delta V}{\\Delta x}\\)"}</MathJax>.   </p> 
                 <h2>Practice Problems</h2>
           <ol className="mathjax-list">
             <li
               onClick={() => setShowAnswer1(!showAnswer1)}
               style={{ cursor: "pointer", fontWeight: 600 }}
             >
-              What is the potential 0.25 m from a +3 µC point charge?
+              What is the electric potential 0.25 m from a +3 µC point charge?
             </li>
             {showAnswer1 && (
               <p>
@@ -175,11 +182,11 @@ The work done by a conservative force depends only on the initial and final posi
               onClick={() => setShowAnswer2(!showAnswer2)}
               style={{ cursor: "pointer", fontWeight: 600 }}
             >
-              Why is no work required to move a charge along an equipotential?
+              Why is no work required to move a charge along an equipotential surface?
             </li>
             {showAnswer2 && (
               <p>
-                Along an equipotential,{" "}
+                Along an equipotential surface,{" "}
                 <MathJax inline>{"\\( \\Delta V = 0 \\)"}</MathJax>. Thus,{" "}
                 <MathJax inline>{"\\( \\Delta U = q\\Delta V = 0 \\)"}</MathJax>.
               </p>

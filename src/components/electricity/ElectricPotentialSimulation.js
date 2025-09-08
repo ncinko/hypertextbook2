@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 
-// ElectricFieldSimulation — with potential colormap + equipotential lines (togglable)
+// ElectricPotentialSimulation — with potential colormap + equipotential lines (togglable)
 // -------------------------------------------------------------------------------
 // What’s new vs your original file:
 //  • Show potential as a 2D color map (diverging palette, negative→blue, zero→white, positive→red)
@@ -10,7 +10,7 @@ import React, { useState, useEffect, useRef, useMemo } from "react";
 //  • Resize-safe: regenerates cached colormap/contours only when size/charges/settings change
 //  • Keeps all of your interactions: add/drag/delete charges + draggable/animatable test charge
 
-const ElectricFieldSimulation = () => {
+const ElectricPotentialSimulation = () => {
   const canvasRef = useRef(null);
   const k = 9e9; // Coulomb's constant
 
@@ -69,9 +69,9 @@ const ElectricFieldSimulation = () => {
     { x: 0.65 * W, y: 0.5 * H, q: -1e-6 },
   ];
   const capacitorConfig = (W, H) => {
-    const rows = 5;
+    const rows = 7;
     const ys = Array.from({ length: rows }, (_, i) => ((i + 1) / (rows + 1)) * H);
-    const leftX = 0.25 * W, rightX = 0.75 * W;
+    const leftX = 0.4 * W, rightX = 0.6 * W;
     const leftPlate = ys.map((y) => ({ x: leftX, y, q: 1e-6 }));
     const rightPlate = ys.map((y) => ({ x: rightX, y, q: -1e-6 }));
     return [...leftPlate, ...rightPlate];
@@ -88,6 +88,7 @@ const ElectricFieldSimulation = () => {
   const [showArrows, setShowArrows] = useState(true);
   const [showFieldLines, setShowFieldLines] = useState(false);
   const [linesPerMicroC, setLinesPerMicroC] = useState(12);
+  const [maxStreamlines, setMaxStreamlines] = useState(100);
 
   // Potential colormap & equipotentials
   const [showColormap, setShowColormap] = useState(true);
@@ -135,9 +136,169 @@ const ElectricFieldSimulation = () => {
     return V;
   };
 
+  const distToAnyCharge = (x, y, localCharges = charges) => localCharges.reduce((d, c) => Math.min(d, Math.hypot(x - c.x, y - c.y)), Infinity);
+
+  // === Equipotentials orthogonal to streamlines (no marching squares) ===
+
+  // One Newton step along ∇V to snap (x,y) back onto V(x,y)=V0
+  const projectToIsoOnto = (V0, x, y) => {
+    const { Ex, Ey } = computeField(x, y);   // ∇V = -E
+    const gx = -Ex, gy = -Ey;
+    const g2 = gx * gx + gy * gy + 1e-9;
+    const Vhere = computePotential(x, y);
+    const t = (Vhere - V0) / g2;
+    return [x - t * gx, y - t * gy];
+  }
+
+  // Integrate one streamline and return a polyline of points
+  const traceStreamlinePolyline = (x0, y0, dir, baseStepPx, maxSteps) => {
+    const pts = [[x0, y0]];
+    let x = x0, y = y0;
+
+    const fieldUnit = (X, Y) => {
+      const { Ex, Ey } = computeField(X, Y);
+      const m = Math.hypot(Ex, Ey) || 1e-12;
+      return [dir * (Ex / m), dir * (Ey / m)];
+    };
+
+    for (let i = 0; i < maxSteps; i++) {
+      const dNear = distToAnyCharge(x, y);
+      const nearFactor = Math.max(0.25, Math.min(1, (dNear - 8) / 40));
+      let h = baseStepPx * nearFactor;
+
+      const [k1x, k1y] = fieldUnit(x, y);
+      const [k2x, k2y] = fieldUnit(x + 0.5 * h * k1x, y + 0.5 * h * k1y);
+      const [k3x, k3y] = fieldUnit(x + 0.5 * h * k2x, y + 0.5 * h * k2y);
+      const [k4x, k4y] = fieldUnit(x + h * k3x, y + h * k3y);
+
+      x += (h / 6) * (k1x + 2 * k2x + 2 * k3x + k4x);
+      y += (h / 6) * (k1y + 2 * k2y + 2 * k3y + k4y);
+      pts.push([x, y]);
+
+      if (x < 0 || x > size.width || y < 0 || y > size.height) break;
+      if (distToAnyCharge(x, y) < 10) break;
+    }
+    return pts;
+  }
+
+  // Trace a single equipotential curve through (x0,y0) at level V0, ⟂ to E
+  const traceEquipotentialCurve = (V0, x0, y0, dir, baseStepPx, maxSteps) => {
+    // Start exactly on the iso
+    let [x, y] = projectToIsoOnto(V0, x0, y0);
+
+    const path = new Path2D();
+    path.moveTo(x, y);
+
+    const samples = [[x, y]];   // sparse samples for de-dup occupancy
+    const closeTol = 3;          // px
+    const minLoop = 50;
+    const avoidCore = 15;
+
+    const tanUnit = (X, Y) => {
+      // perpendicular to E: T = ±(Ey, -Ex)/||E||
+      const { Ex, Ey } = computeField(X, Y);
+      let tx = dir * Ey, ty = dir * -Ex;
+      const m = Math.hypot(tx, ty) || 1e-12;
+      return [tx / m, ty / m];
+    };
+
+    const clampIn = (X, Y) => [
+      Math.max(0, Math.min(size.width, X)),
+      Math.max(0, Math.min(size.height, Y)),
+    ];
+
+    const xStart = x, yStart = y;
+
+    for (let i = 0; i < maxSteps; i++) {
+      const dNear = distToAnyCharge(x, y);
+      const nearFactor = Math.max(0.4, Math.min(1.2, (dNear - 8) / 36)); // adaptive step
+      const h = baseStepPx * (0.72 + 0.28 * nearFactor);
+
+      const [k1x, k1y] = tanUnit(x, y);
+      const [k2x, k2y] = tanUnit(x + 0.5 * h * k1x, y + 0.5 * h * k1y);
+      const [k3x, k3y] = tanUnit(x + 0.5 * h * k2x, y + 0.5 * h * k2y);
+      const [k4x, k4y] = tanUnit(x + h * k3x, y + h * k3y);
+
+      let xn = x + (h / 6) * (k1x + 2 * k2x + 2 * k3x + k4x);
+      let yn = y + (h / 6) * (k1y + 2 * k2y + 2 * k3y + k4y);
+
+      // snap back to the exact V0 iso and keep inside the canvas
+      [xn, yn] = projectToIsoOnto(V0, xn, yn);
+      [xn, yn] = clampIn(xn, yn);
+
+      if (xn <= 0 || xn >= size.width || yn <= 0 || yn >= size.height) break;
+      if (distToAnyCharge(xn, yn) < avoidCore) break;
+
+      path.lineTo(xn, yn);
+      if (i % 4 === 0) samples.push([xn, yn]);
+      x = xn; y = yn;
+
+      if (i > minLoop && Math.hypot(x - xStart, y - yStart) < closeTol) {
+        path.closePath();
+        break;
+      }
+    }
+
+    if (samples.length < 8) return null;
+    return { path, samples };
+  }
+
+  // Build equipotentials by sampling a few points along streamlines, then tracing ⟂
+  const buildEquipotentialsOrthogonalToStreamlines = () => {
+    const paths = [];
+    const cell = 24;                                       // occupancy grid cell (px)
+    const key = (x, y) => `${Math.floor(x / cell)}|${Math.floor(y / cell)}`;
+    const occupied = new Set();
+
+    const baseStepPx = Math.max(0.9, Math.min(size.width, size.height) / 420);
+    const maxStepsSL = 1200;   // streamline steps
+    const maxStepsEQ = 3000;   // equipotential steps
+    const r0 = 10;             // seed radius around charge
+    const maxPaths = 30;       // overall cap
+
+    // If linesPerMicroC is missing, fall back to a sensible default
+    const _linesPerMicroC = (typeof linesPerMicroC !== "undefined") ? linesPerMicroC : 8;
+
+    // Seed streamlines as you already do, but collect polylines (not drawing)
+    for (const c of charges) {
+      const muC = Math.abs(c.q) / 1e-6;
+      const N = Math.max(4, Math.min(24, Math.round(_linesPerMicroC * muC)));
+      for (let k = 0; k < N; k++) {
+        const theta = (2 * Math.PI * k) / N;
+        const sx = c.x + r0 * Math.cos(theta);
+        const sy = c.y + r0 * Math.sin(theta);
+        const dir = c.q >= 0 ? +1 : -1;
+
+        const poly = traceStreamlinePolyline(sx, sy, dir, baseStepPx, maxStepsSL);
+        if (poly.length < 20) continue;
+
+        // Sample 2–3 points along this streamline away from ends
+        const picks = [0.3, 0.55, 0.8]; // fractions along the polyline
+        for (const frac of picks) {
+          const idx = Math.min(poly.length - 1, Math.max(0, Math.floor(frac * poly.length)));
+          const [px, py] = poly[idx];
+          if (distToAnyCharge(px, py) < 12) continue;
+
+          const V0 = computePotential(px, py);
+          if (occupied.has(key(px, py))) continue;
+
+          // Trace both directions ⟂ to E
+          for (const sgn of [+1, -1]) {
+            const traced = traceEquipotentialCurve(V0, px, py, sgn, baseStepPx, maxStepsEQ);
+            if (!traced) continue;
+            for (const [ux, uy] of traced.samples) occupied.add(key(ux, uy));
+            paths.push(traced.path);
+            if (paths.length >= maxPaths) return paths;
+          }
+        }
+      }
+    }
+    return paths;
+  }
+  // === End orthogonal-equipotential helpers ===
+
   // --- Field lines helpers ---
   const norm2 = (x, y) => { const m = Math.hypot(x, y) || 1e-12; return [x / m, y / m]; };
-  const distToAnyCharge = (x, y, localCharges = charges) => localCharges.reduce((d, c) => Math.min(d, Math.hypot(x - c.x, y - c.y)), Infinity);
 
   // --- RK4 streamline integrator with adaptive step on curvature ---
   const traceFieldLine = (ctx, x0, y0, dir, baseStepPx, maxSteps) => {
@@ -196,19 +357,40 @@ const ElectricFieldSimulation = () => {
     const baseStepPx = Math.max(0.75, Math.min(size.width, size.height) / 500);
     const maxSteps = 2000;
     const r0 = 10;
+    let streamlineCount = 0;
 
     for (const c of charges) {
+      if (streamlineCount >= maxStreamlines) break;
       const muC = Math.abs(c.q) / 1e-6;
       const N = Math.max(4, Math.min(24, Math.round(linesPerMicroC * muC)));
       for (let k = 0; k < N; k++) {
+        if (streamlineCount >= maxStreamlines) break;
         const theta = (2 * Math.PI * k) / N;
         const sx = c.x + r0 * Math.cos(theta);
         const sy = c.y + r0 * Math.sin(theta);
         const dir = c.q >= 0 ? +1 : -1; // from +q outward, into –q
         traceFieldLine(ctx, sx, sy, dir, baseStepPx, maxSteps);
+        streamlineCount++;
       }
     }
   };
+
+  const divergingColor = (t) => {
+    // t in [-1,1]; -1 deep blue, 0 white, +1 deep red
+    t = Math.max(-1, Math.min(1, t));
+    const w = 1 - Math.abs(t); // whiteness toward center
+    const to255 = (x) => Math.max(0, Math.min(255, Math.round(x)));
+
+    // endpoints
+    const neg = [30, 90, 200];  // blue
+    const pos = [230, 60, 50];  // red
+
+    const base = t < 0 ? neg : pos;
+    const r = base[0] * Math.abs(t) + 255 * w;
+    const g = base[1] * Math.abs(t) + 255 * w;
+    const b = base[2] * Math.abs(t) + 255 * w;
+    return [to255(r), to255(g), to255(b)];
+  }
 
   // --- Potential colormap generation (cached) ---
   const regenerateColormapAndContours = useMemo(() => {
@@ -274,16 +456,14 @@ const ElectricFieldSimulation = () => {
         });
       });
 
-      // Equipotential contours via marching squares (precomputed Path2D list)
+      // Equipotential contours via orthogonal-to-E tracer
       if (showEquipotentials) {
-        const levels = buildFixedContourLevels(size.width, size.height, 9); // symmetric ± fixed levels (stable)
-        const paths = buildEquipotentialPathsWithTracer(levels, V, W, H);
+        const paths = buildEquipotentialsOrthogonalToStreamlines();
         contourCacheRef.current = { paths, w: W, h: H };
       } else {
         contourCacheRef.current = { paths: [], w: W, h: H };
-      }
-    };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+      };
+    }
   }, [size.width, size.height, charges, quality, logColors, showColormap, showEquipotentials]);
 
   // Regenerate when dependencies change
@@ -422,7 +602,7 @@ const ElectricFieldSimulation = () => {
       if (showArrows) {
         const spacing = Math.max(20, Math.round(Math.min(width, height) / 20));
         const arrowLength = 15;
-        const opacityScale = 0.01;
+        const arrowHeadSize = 5; // Size of the arrow head
         ctx.lineWidth = 2;
         for (let x = spacing; x < width; x += spacing) {
           for (let y = spacing; y < height; y += spacing) {
@@ -431,8 +611,18 @@ const ElectricFieldSimulation = () => {
             const angle = Math.atan2(Ey, Ex);
             const toX = x + arrowLength * Math.cos(angle);
             const toY = y + arrowLength * Math.sin(angle);
-            ctx.strokeStyle = `rgba(0,0,0,${Math.min(1, E_mag * 0.01)})`;
-            ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(toX, toY); ctx.stroke();
+            ctx.strokeStyle = `rgba(0,0,0,${Math.min(1, E_mag * 0.03)})`;
+            ctx.beginPath();
+            ctx.moveTo(x, y);
+            ctx.lineTo(toX, toY);
+
+            // Draw arrowhead
+            ctx.moveTo(toX, toY);
+            ctx.lineTo(toX - arrowHeadSize * Math.cos(angle - Math.PI / 6), toY - arrowHeadSize * Math.sin(angle - Math.PI / 6));
+            ctx.moveTo(toX, toY);
+            ctx.lineTo(toX - arrowHeadSize * Math.cos(angle + Math.PI / 6), toY - arrowHeadSize * Math.sin(angle + Math.PI / 6));
+
+            ctx.stroke();
           }
         }
       }
@@ -468,7 +658,7 @@ const ElectricFieldSimulation = () => {
 
     animationFrameId = requestAnimationFrame(animate);
     return () => { mounted = false; cancelAnimationFrame(animationFrameId); };
-  }, [charges, animateTestCharge, draggingTestCharge, showFieldLines, linesPerMicroC, size, showColormap, showArrows, showEquipotentials]);
+  }, [charges, animateTestCharge, draggingTestCharge, showFieldLines, linesPerMicroC, maxStreamlines, size, showColormap, showArrows, showEquipotentials]);
 
   // UI
   return (
@@ -482,7 +672,7 @@ const ElectricFieldSimulation = () => {
         </select>
 
         <label style={{ marginLeft: 12 }}>
-          <input type="checkbox" checked={showColormap} onChange={(e) => setShowColormap(e.target.checked)} /> Show potential colormap
+          <input type="checkbox" checked={showColormap} onChange={(e) => setShowColormap(e.target.checked)} /> Potential colormap
         </label>
         <label>
           <input type="checkbox" checked={showEquipotentials} onChange={(e) => setShowEquipotentials(e.target.checked)} /> Equipotential lines
@@ -491,16 +681,11 @@ const ElectricFieldSimulation = () => {
           <input type="checkbox" checked={showArrows} onChange={(e) => setShowArrows(e.target.checked)} /> Field arrows
         </label>
         <label>
-          <input type="checkbox" checked={showFieldLines} onChange={(e) => setShowFieldLines(e.target.checked)} /> Streamlines
+          <input type="checkbox" checked={showFieldLines} onChange={(e) => setShowFieldLines(e.target.checked)} /> Field lines
         </label>
 
-        <label style={{ marginLeft: 8 }}>
-          Colormap quality
-          <input type="range" min="0.4" max="1" step="0.05" value={quality} onChange={(e) => setQuality(+e.target.value)} />
-        </label>
-        <label>
-          <input type="checkbox" checked={logColors} onChange={(e) => setLogColors(e.target.checked)} /> Log color scale
-        </label>
+      
+
       </div>
 
       {/* Responsive, centered canvas */}
@@ -530,263 +715,6 @@ const ElectricFieldSimulation = () => {
       </p>
     </div>
   );
-
-  // ===== Helper fns below =====
-
-  function buildContourLevels(Vmax, nPerSide) {
-    // symmetric levels around 0, mildly log-spaced for visual balance
-    const levels = [];
-    for (let i = 1; i <= nPerSide; i++) {
-      const t = i / (nPerSide + 1); // 0..1 (exclude 0)
-      const w = Math.pow(t, 1.2);   // bias toward low values
-      const v = w * Vmax;
-      levels.push(+v, -v);
-    }
-    return levels;
-  }
-
-  function buildContourPathFromGrid(V, W, H, level) {
-    const path = new Path2D();
-    // marching squares over W x H scalar field V (row-major)
-    const ix = (i, j) => V[j * W + i];
-
-    for (let j = 0; j < H - 1; j++) {
-      for (let i = 0; i < W - 1; i++) {
-        const v00 = ix(i, j);
-        const v10 = ix(i + 1, j);
-        const v11 = ix(i + 1, j + 1);
-        const v01 = ix(i, j + 1);
-        const mask = (v00 > level ? 1 : 0) | (v10 > level ? 2 : 0) | (v11 > level ? 4 : 0) | (v01 > level ? 8 : 0);
-        if (mask === 0 || mask === 15) continue;
-
-        // Interpolate along edges
-        const f = (a, b) => (level - a) / (b - a + 1e-12);
-        const xL = i;       const xR = i + 1;
-        const yT = j;       const yB = j + 1;
-
-        const pt = [];
-        switch (mask) {
-          case 1: case 14: pt.push([xL, yT + f(v00, v01)], [xL + f(v00, v10), yT]); break;
-          case 2: case 13: pt.push([xL + f(v10, v11), yT], [xR, yT + f(v10, v00)]); break;
-          case 3: case 12: pt.push([xL, yT + f(v00, v01)], [xR, yT + f(v10, v11)]); break;
-          case 4: case 11: pt.push([xR, yT + f(v11, v10)], [xL + f(v11, v01), yB]); break;
-          case 5:          pt.push([xL, yT + f(v00, v01)], [xL + f(v00, v10), yT], [xR, yT + f(v11, v10)], [xL + f(v11, v01), yB]); break;
-          case 6: case 9:  pt.push([xL + f(v10, v11), yT], [xL + f(v00, v10), yT], [xL + f(v11, v01), yB], [xL + f(v00, v01), yB]); break;
-          case 7: case 8:  pt.push([xL, yT + f(v01, v11)], [xL + f(v00, v10), yT]); break;
-        }
-        // Each pair of points is a segment. Convert grid coords to canvas px
-        for (let k = 0; k < pt.length; k += 2) {
-          const [ax, ay] = pt[k];
-          const [bx, by] = pt[k + 1];
-          const xA = (ax / (W - 1)) * size.width;
-          const yA = (ay / (H - 1)) * size.height;
-          const xB = (bx / (W - 1)) * size.width;
-          const yB = (by / (H - 1)) * size.height;
-          path.moveTo(xA, yA); path.lineTo(xB, yB);
-        }
-      }
-    }
-    return path;
-  }
-  function buildFixedContourLevels(W, H, nPerSide) {
-    // Build *absolute* potential levels for contours that don't jitter as the scene changes.
-    // Reference: 1 µC at a range of radii between a small core and ~40% of the viewport.
-    const qRef = 1e-6;            // 1 microcoulomb
-    const rCore = 5;              // same softening used in potential/field (pixels)
-    const rMin = 12;              // just outside the core
-    const rMax = 0.42 * Math.min(W, H);
-    const levels = [];
-    for (let i = 1; i <= nPerSide; i++) {
-      const t = i / (nPerSide + 1);             // (0,1)
-      const r = rMin * Math.pow(rMax / rMin, t); // log-spaced radii
-      const V = (k * qRef) / Math.sqrt(r * r + rCore * rCore);
-      levels.push(+V, -V); // symmetric ±V
-    }
-    return levels;
-  }
-  // --- Hybrid equipotential tracer helpers (seed with marching squares, trace ⟂ to E, project to V0) ---
-  function buildEquipotentialPathsWithTracer(levels, Vgrid, W, H) {
-    const paths = [];
-    const cellSize = 18; // coarse occupancy grid size in px
-    const keyCell = (x, y) => `${Math.floor(x / cellSize)}|${Math.floor(y / cellSize)}`;
-
-    for (const V0 of levels) {
-      const seeds = marchingSquaresSeeds(Vgrid, W, H, V0);
-      const occupied = new Set(); // cells already covered by a traced loop at this level
-
-      for (const s of seeds) {
-        // Project seed to canvas & onto the V=V0 iso; skip if its cell is already covered
-        const sx = (s.x / (W - 1)) * size.width;
-        const sy = (s.y / (H - 1)) * size.height;
-        let [px, py] = projectToIso(sx, sy, V0);
-        const startKey = keyCell(px, py);
-        if (occupied.has(startKey)) continue;
-
-        const traced = traceEquipotentialFromSeed(V0, s.x, s.y, W, H, 1);
-        if (!traced) continue;
-
-        // Mark all coarse cells touched by the loop as occupied
-        for (const [ux, uy] of traced.samples) occupied.add(keyCell(ux, uy));
-        paths.push(traced.path);
-      }
-    }
-    return paths;
-  }
-
-  function traceEquipotentialFromSeed(V0, x0grid, y0grid, W, H, dir = 1) {
-    const x0 = (x0grid / (W - 1)) * size.width;
-    const y0 = (y0grid / (H - 1)) * size.height;
-    let [x, y] = projectToIso(x0, y0, V0);
-
-    const path = new Path2D();
-    path.moveTo(x, y);
-
-    const samples = [[x, y]]; // coarse coverage samples
-    const maxSteps = 5000;
-    const rCore = 10; // px avoid singularities
-    const closeTol = 3;
-    const minLoop = 50;
-
-    let step = Math.max(0.9, Math.min(size.width, size.height) / 420);
-    const rk = (X, Y) => {
-      const { Ex, Ey } = computeField(X, Y);
-      let tx = dir * Ey, ty = dir * -Ex; // ⟂ to E
-      const m = Math.hypot(tx, ty) || 1e-9; return [tx / m, ty / m];
-    };
-
-    const clampIn = (X, Y) => [
-      Math.max(0, Math.min(size.width, X)),
-      Math.max(0, Math.min(size.height, Y)),
-    ];
-
-    const xStart = x, yStart = y;
-    for (let i = 0; i < maxSteps; i++) {
-      const [k1x, k1y] = rk(x, y);
-      const [k2x, k2y] = rk(x + 0.5 * step * k1x, y + 0.5 * step * k1y);
-      const [k3x, k3y] = rk(x + 0.5 * step * k2x, y + 0.5 * step * k2y);
-      const [k4x, k4y] = rk(x + step * k3x, y + step * k3y);
-      let xn = x + (step / 6) * (k1x + 2*k2x + 2*k3x + k4x);
-      let yn = y + (step / 6) * (k1y + 2*k2y + 2*k3y + k4y);
-
-      ;[xn, yn] = projectToIso(xn, yn, V0);
-      ;[xn, yn] = clampIn(xn, yn);
-
-      const dNear = distToAnyCharge(xn, yn);
-      const sFac = Math.max(0.4, Math.min(1.2, (dNear - 8) / 36));
-      step *= 0.72 + 0.28 * sFac;
-
-      if (xn <= 0 || xn >= size.width || yn <= 0 || yn >= size.height) break;
-      if (dNear < rCore) break;
-
-      path.lineTo(xn, yn);
-      if (i % 4 === 0) samples.push([xn, yn]);
-      x = xn; y = yn;
-      if (i > minLoop && Math.hypot(x - xStart, y - yStart) < closeTol) { path.closePath(); break; }
-    }
-
-    if (samples.length < 8) return null; // too tiny/degenerate
-    return { path, samples };
-  }
-
-  function traceEquipotentialFromSeed(V0, x0grid, y0grid, W, H, dir = 1) {
-    const x0 = (x0grid / (W - 1)) * size.width;
-    const y0 = (y0grid / (H - 1)) * size.height;
-    let [x, y] = projectToIso(x0, y0, V0);
-
-    const path = new Path2D();
-    path.moveTo(x, y);
-
-    const maxSteps = 4000;
-    const rCore = 10; // px avoid singularities
-    const closeTol = 3;
-    const minLoop = 50;
-
-    let step = Math.max(0.9, Math.min(size.width, size.height) / 420);
-    const rk = (X, Y) => {
-      const { Ex, Ey } = computeField(X, Y);
-      let tx = dir * Ey, ty = dir * -Ex; // ⟂ to E
-      const m = Math.hypot(tx, ty) || 1e-9; return [tx / m, ty / m];
-    };
-
-    const clampIn = (X, Y) => [
-      Math.max(0, Math.min(size.width, X)),
-      Math.max(0, Math.min(size.height, Y)),
-    ];
-
-    const xStart = x, yStart = y;
-    for (let i = 0; i < maxSteps; i++) {
-      const [k1x, k1y] = rk(x, y);
-      const [k2x, k2y] = rk(x + 0.5 * step * k1x, y + 0.5 * step * k1y);
-      const [k3x, k3y] = rk(x + 0.5 * step * k2x, y + 0.5 * step * k2y);
-      const [k4x, k4y] = rk(x + step * k3x, y + step * k3y);
-      let xn = x + (step / 6) * (k1x + 2*k2x + 2*k3x + k4x);
-      let yn = y + (step / 6) * (k1y + 2*k2y + 2*k3y + k4y);
-
-      ;[xn, yn] = projectToIso(xn, yn, V0);
-      ;[xn, yn] = clampIn(xn, yn);
-
-      const dNear = distToAnyCharge(xn, yn);
-      const sFac = Math.max(0.35, Math.min(1.25, (dNear - 8) / 36));
-      step *= 0.7 + 0.3 * sFac;
-
-      if (xn <= 0 || xn >= size.width || yn <= 0 || yn >= size.height) break;
-      if (dNear < rCore) break;
-
-      path.lineTo(xn, yn);
-      x = xn; y = yn;
-      if (i > minLoop && Math.hypot(x - xStart, y - yStart) < closeTol) { path.closePath(); break; }
-    }
-    return path;
-  }
-
-  function projectToIso(x, y, V0) {
-    const Vhere = computePotential(x, y);
-    const { Ex, Ey } = computeField(x, y);
-    const gx = -Ex, gy = -Ey; // ∇V = -E
-    const g2 = gx*gx + gy*gy + 1e-9;
-    const t = (Vhere - V0) / g2;
-    return [x - t * gx, y - t * gy];
-  }
-
-  function marchingSquaresSeeds(V, W, H, level) {
-    // Return *sparse* seeds by emitting only left & top edge crossings.
-    const seeds = [];
-    const at = (i, j) => V[j * W + i];
-    for (let j = 0; j < H - 1; j++) {
-      for (let i = 0; i < W - 1; i++) {
-        const v00 = at(i, j), v10 = at(i + 1, j), v11 = at(i + 1, j + 1), v01 = at(i, j + 1);
-        const mask = (v00 > level ? 1 : 0) | (v10 > level ? 2 : 0) | (v11 > level ? 4 : 0) | (v01 > level ? 8 : 0);
-        if (mask === 0 || mask === 15) continue;
-        const lerp01 = (a, b) => (level - a) / (b - a + 1e-12);
-        const xL = i, xR = i + 1, yT = j, yB = j + 1;
-        // left edge
-        if ((mask & 1) !== (mask & 8)) seeds.push({ x: xL, y: yT + lerp01(v00, v01) });
-        // top edge
-        if ((mask & 1) !== (mask & 2)) seeds.push({ x: xL + lerp01(v00, v10), y: yT });
-      }
-    }
-    return seeds;
-  }
-    }
-    return seeds;
-  }
-
-  function divergingColor(t) {
-    // t in [-1,1]; -1 deep blue, 0 white, +1 deep red
-    t = Math.max(-1, Math.min(1, t));
-    const w = 1 - Math.abs(t); // whiteness toward center
-    const to255 = (x) => Math.max(0, Math.min(255, Math.round(x)));
-
-    // endpoints
-    const neg = [30, 90, 200];  // blue
-    const pos = [230, 60, 50];  // red
-
-    const base = t < 0 ? neg : pos;
-    const r = base[0] * Math.abs(t) + 255 * w;
-    const g = base[1] * Math.abs(t) + 255 * w;
-    const b = base[2] * Math.abs(t) + 255 * w;
-    return [to255(r), to255(g), to255(b)];
-  }
 };
 
-export default ElectricFieldSimulation;
+export default ElectricPotentialSimulation;
