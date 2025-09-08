@@ -5,7 +5,8 @@ import DoublePendulum from './DoublePendulum';
 import SpringMass from './SpringMass';
 import IdealGas from './IdealGas';
 import Oscillations from "./pages/Oscillations";
-import ElectricFields from "./pages/ElectricFields";
+import ElectricField from "./pages/ElectricField";
+import ElectricPotential from "./pages/ElectricPotential"
 import RotationalDynamics from "./pages/RotationalDynamics"
 import Chaos from "./pages/Chaos"
 import Momentum from "./pages/Momentum"
@@ -37,9 +38,10 @@ export default function App() {
 
       {/* Fields Dropdown */}
       <div className="nav-dropdown">
-        <span className="nav-item">Fields ▾</span>
+        <span className="nav-item">Electricity ▾</span>
         <div className="dropdown-content">
-          <Link to="/electric-fields">Electric Fields</Link>
+          <Link to="/electric-field">Electric Field</Link>
+          <Link to="/electric-potential">Electric Potential</Link>
         </div>
       </div>
 
@@ -61,7 +63,8 @@ export default function App() {
                 <Route path="/spring-mass" element={<SpringMass />} />
                 <Route path="/ideal-gas" element={<IdealGas />} />
 				<Route path="/oscillations" element={<Oscillations />} />
-                <Route path="/electric-fields" element={<ElectricFields/>} />
+                <Route path="/electric-field" element={<ElectricField/>} />
+                <Route path="/electric-potential" element={<ElectricPotential/>} />
                 <Route path="/rotational-dynamics" element={<RotationalDynamics/>} />
                 <Route path="/chaos" element={<Chaos/>} />
                 <Route path="/momentum" element={<Momentum/>} />

@@ -1,9 +1,9 @@
 import React, { useState } from "react";
 import { MathJax, MathJaxContext } from "better-react-mathjax";
-import ElectricFieldSimulation from "../components/ElectricFieldSimulation"; // Adjust path if needed
-import EquipotentialSimulation from "../components/EquipotentialSimulation"; // Adjust path if needed
-import PointChargeUnitVectorDemo from "../components/PointChargeField";
-import TwoPointChargeSuperposition from "../components/TwoPointChargeSimulation";
+import ElectricFieldSimulation from "../components/electricity/ElectricFieldSimulation"; // Adjust path if needed
+import EquipotentialSimulation from "../components/electricity/EquipotentialSimulation"; // Adjust path if needed
+import PointChargeUnitVectorDemo from "../components/electricity/PointChargeField";
+import TwoPointChargeSuperposition from "../components/electricity/TwoPointChargeSimulation";
 import HiddenExposition from "../components/HiddenExposition";
 
 const chipStyle = {
@@ -16,7 +16,7 @@ const chipStyle = {
   background: "#fafafa",
 };
 
-const ElectricFields = () => {
+const ElectricField = () => {
   const [showAnswer, setShowAnswer] = useState(false);
   const [showAnswer1, setShowAnswer1] = useState(false);
   const [showAnswer2, setShowAnswer2] = useState(false);
@@ -264,4 +264,4 @@ const ElectricFields = () => {
   );
 };
 
-export default ElectricFields;
+export default ElectricField;

@@ -19,7 +19,7 @@ export default function HiddenExposition({ title = "Read more", children }) {
     boxShadow: open ? "0 2px 14px rgba(0,0,0,0.06)" : "0 1px 6px rgba(0,0,0,0.04)",
     transition: "box-shadow 200ms ease, border-color 200ms ease",
     maxWidth: 820,
-    margin: "18px auto",
+    margin: "12px auto",
   };
 
   const header = {
