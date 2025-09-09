@@ -326,7 +326,7 @@ function drawHawks(ctx) {
         <p style={{ fontSize: 18, opacity: 0.9, marginTop: 8 }}>Explore interactive simulations for a variety of topics.</p>
         <div style={{ marginTop: 16, display: "flex", gap: 12, justifyContent: "center" }}>
           <Link to="/kinematics" style={{ padding: "10px 14px", borderRadius: 12, background: "#1f2937", color: "white", textDecoration: "none" }}>Kinematics</Link>
-          <Link to="/electric-fields" style={{ padding: "10px 14px", borderRadius: 12, background: "#1f2937", color: "white", textDecoration: "none" }}>Electric Fields</Link>
+          <Link to="/electric-field" style={{ padding: "10px 14px", borderRadius: 12, background: "#1f2937", color: "white", textDecoration: "none" }}>Electric Fields</Link>
         </div>
       </div>
     </div>
