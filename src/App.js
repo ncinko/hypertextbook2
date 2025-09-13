@@ -14,6 +14,7 @@ import Sound from "./pages/Sound"
 import Kinematics from "./pages/Kinematics"
 import Kinematics2 from "./pages/Kinematics2"
 import PolarKinematics from "./pages/PolarKinematics";
+import Vectors from "./pages/Vectors";
 
 import './styles/main.css';
 
@@ -30,7 +31,8 @@ export default function App() {
         <span className="nav-item">Mechanics ▾</span>
         <div className="dropdown-content">
           <Link to="/kinematics">1D Kinematics</Link>
-            <Link to="/kinematics2">2D Kinematics</Link>
+          <Link to="/vectors">Vectors</Link>
+          <Link to="/kinematics2">2D Kinematics</Link>
           <Link to="/momentum">Momentum</Link>
           <Link to="/oscillations">Oscillations</Link>
         </div>
@@ -72,6 +74,7 @@ export default function App() {
                 <Route path="/kinematics" element={<Kinematics />} />
                 <Route path="/kinematics2" element={<Kinematics2 />} />
                 <Route path="/kk" element={<PolarKinematics />} />
+                <Route path="/vectors" element={<Vectors />} />
             </Routes>
         </div>
     );

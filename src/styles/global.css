@@ -201,3 +201,13 @@ code {
   background: #e5e7eb; /* gray bg for secondary actions */
   color: #1f2937;      /* text color */
 }
+
+.container h2 {
+  margin-top: 0.5cm;
+  margin-bottom: 0.25cm;
+}
+
+/* Ensure a few centimeters of space at the end of each page */
+.container {
+  padding-bottom: 3cm;
+}
