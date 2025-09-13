@@ -2,6 +2,7 @@ import React from "react";
 import { MathJax, MathJaxContext } from "better-react-mathjax";
 import PolarAccelerationSim from "../components/PolarAccelerationSim";
 import RotatingShip2D from "../components/RotatingShip2D";
+import BeadOnRotatingRod from "../components/mechanics/BeadOnRotatingRod";
 import kk from '../assets/kk.png';
 
 export default function PolarKinematics() {

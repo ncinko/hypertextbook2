@@ -24,7 +24,7 @@ export default function ScalarPotential2D() {
   const mapping = "log";    // fixed
 
   // Render perf
-  const [quality, setQuality] = useState(0.8); // render scale (0.5 .. 1), default low for speed
+  const [quality, setQuality] = useState(0.6); // render scale (0.5 .. 1), default low for speed
 
   // Toggles
   const [snap, setSnap] = useState(false);
@@ -88,7 +88,7 @@ export default function ScalarPotential2D() {
     if (!wrap || !canvas) return;
 
     const dpr = window.devicePixelRatio || 1;
-    const cssW = Math.max(640, Math.min(1000, wrap.clientWidth)); // within typical text column
+    const cssW = Math.max(640, Math.min(800, wrap.clientWidth)); // within typical text column
     const cssH = Math.round(cssW * 0.8);
     const w = Math.round(cssW * dpr * quality);
     const h = Math.round(cssH * dpr * quality);
