@@ -8,6 +8,8 @@ const BASE_URL = 'https://physicsnook.com';
 const routes = [
   '/',                // homepage
   '/kinematics',
+  '/forces',
+  '/vectors',
 ];
 
 (async function generate() {
