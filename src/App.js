@@ -15,6 +15,7 @@ import Kinematics from "./pages/Kinematics"
 import Kinematics2 from "./pages/Kinematics2"
 import PolarKinematics from "./pages/PolarKinematics";
 import Vectors from "./pages/Vectors";
+import CubePuzzle3x3 from './components/math/CubePuzzle3x3';  
 
 import './styles/main.css';
 
@@ -75,6 +76,7 @@ export default function App() {
                 <Route path="/kinematics2" element={<Kinematics2 />} />
                 <Route path="/kk" element={<PolarKinematics />} />
                 <Route path="/vectors" element={<Vectors />} />
+                <Route path="/cube" element={<CubePuzzle3x3 />} />
             </Routes>
         </div>
     );
