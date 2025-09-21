@@ -16,6 +16,7 @@ import Kinematics2 from "./pages/Kinematics2"
 import PolarKinematics from "./pages/PolarKinematics";
 import Vectors from "./pages/Vectors";
 import Forces from "./pages/Forces";
+import CubePuzzle3x3 from './components/math/CubePuzzle3x3';  
 
 import './styles/main.css';
 
@@ -78,6 +79,7 @@ export default function App() {
                 <Route path="/kk" element={<PolarKinematics />} />
                 <Route path="/forces" element={<Forces />} />
                 <Route path="/vectors" element={<Vectors />} />
+                <Route path="/cube" element={<CubePuzzle3x3 />} />
             </Routes>
         </div>
     );
