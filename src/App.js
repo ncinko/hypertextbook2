@@ -33,7 +33,6 @@ export default function App() {
         <span className="nav-item">Mechanics ▾</span>
         <div className="dropdown-content">
           <Link to="/kinematics">1D Kinematics</Link>
-          <Link to="/forces">Forces</Link>
           <Link to="/vectors">Vectors</Link>
           <Link to="/kinematics2">2D Kinematics</Link>
           <Link to="/momentum">Momentum</Link>
