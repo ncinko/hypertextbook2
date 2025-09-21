@@ -15,6 +15,7 @@ import Kinematics from "./pages/Kinematics"
 import Kinematics2 from "./pages/Kinematics2"
 import PolarKinematics from "./pages/PolarKinematics";
 import Vectors from "./pages/Vectors";
+import Forces from "./pages/Forces";
 import CubePuzzle3x3 from './components/math/CubePuzzle3x3';  
 
 import './styles/main.css';
@@ -32,6 +33,7 @@ export default function App() {
         <span className="nav-item">Mechanics ▾</span>
         <div className="dropdown-content">
           <Link to="/kinematics">1D Kinematics</Link>
+          <Link to="/forces">Forces</Link>
           <Link to="/vectors">Vectors</Link>
           <Link to="/kinematics2">2D Kinematics</Link>
           <Link to="/momentum">Momentum</Link>
@@ -75,6 +77,7 @@ export default function App() {
                 <Route path="/kinematics" element={<Kinematics />} />
                 <Route path="/kinematics2" element={<Kinematics2 />} />
                 <Route path="/kk" element={<PolarKinematics />} />
+                <Route path="/forces" element={<Forces />} />
                 <Route path="/vectors" element={<Vectors />} />
                 <Route path="/cube" element={<CubePuzzle3x3 />} />
             </Routes>
