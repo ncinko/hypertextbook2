@@ -3,6 +3,8 @@ import React from "react";
 import { MathJax, MathJaxContext } from "better-react-mathjax";
 import HiddenQuestion from "../components/shared/HiddenQuestion";
 import StickFigureForcesDemo from "../components/mechanics/StickFigureForcesDemo";
+import SimplePlatformer from "../components/mechanics/SimplePlatformer";
+import Platformer from "../components/mechanics/Platformer";
 
 export default function Forces() {
   return (
@@ -13,106 +15,82 @@ export default function Forces() {
 
           <h2>Introduction</h2>
           <p>
-            A <strong>force</strong> is any interaction that can change an object's motion or deform it. Forces are
-            vector quantities, so they combine using both magnitude and direction. When several forces act on an object we
-            summarize them by the <em>net force</em>, the vector sum of all individual contributions.
+            When two objects interact, mutual <strong>forces</strong> arise between them.  Some examples include electrical repulsion, gravitational attraction, and contact forces.  
           </p>
           <p>
-            Newton's second law connects forces to motion:
-            <MathJax inline>{"\\( \\vec{F}_{\\text{net}} = m\\vec{a} \\)"}</MathJax>.  Drawing and labeling each
-            contributor is often the cleanest path to solving mechanics problems.
+            The forces on a single object can be combined into the <strong>net force</strong> that determines its acceleration according to Newton's second law: 
+            <MathJax inline>{" \\( \\vec{F}_{\\text{net}} = m\\vec{a} \\)"}</MathJax>. 
           </p>
 
           <h2>Key Ideas</h2>
           <ul className="card-list">
             <li>
-              <strong>Free-body diagrams</strong>
+              <strong >Free-body diagrams</strong>&nbsp;&nbsp;&nbsp;
               <span>
-                Represent each distinct interaction (weight, normal, tension, thrust, friction, drag, etc.) with an arrow
+                Represent each distinct force with an arrow
                 attached to the object. This makes it easier to track directions before writing equations.
               </span>
             </li>
             <li>
-              <strong>Newton's second law</strong>
+              <strong>Newton's second law</strong>&nbsp;&nbsp;&nbsp;
               <span>
-                The net force is the vector sum of all forces and sets the acceleration through
-                <MathJax inline>{"\\( \\vec{F}_{\\text{net}} = m\\vec{a} \\)"}</MathJax>.  If the net force is zero the object
-                moves at constant velocity (possibly zero).
+                The net force is the vector sum of all forces and determines the acceleration according to
+                <MathJax inline>{" \\( \\vec{F}_{\\text{net}} = m\\vec{a} \\)"}</MathJax>.  If the net force is zero, the object
+                moves at constant velocity.
               </span>
             </li>
             <li>
-              <strong>Surface forces</strong>
+              <strong>Surface forces</strong>&nbsp;&nbsp;&nbsp;
               <span>
                 Normal and friction forces arise from contact with a surface. The normal acts perpendicular to the surface while
-                friction opposes relative motion along it with magnitude up to
-                <MathJax inline>{"\\( f_{\\text{max}} = \\mu_s N \\)"}</MathJax> for static friction.
+                friction opposes relative motion along the surface.
               </span>
             </li>
           </ul>
 
           <h2>Force Playground</h2>
           <p>
-            Use the stick-figure platformer to experiment with applied pushes, gravity, and friction. Toggle interactions on and
-            off to see how the free-body diagram and the net force vector respond. Try taking a running start, then remove
-            friction to watch the character coast.
+            Introductory physics problems are filled with blocks often resting or sliding along a surface.  
+            There are more interesting things, but blocks are a good starting point.  
+            The better you understand blocks, the better you will understand the rest of existence. </p>
+          <p>
+              The forces on these blocks can be tricky to visualize, especially frictional forces.  The interactive below allows you to apply forces to a block and see how it responds.  You can also see the free-body diagram of the block, which shows all the forces acting on it.
           </p>
 
-          <StickFigureForcesDemo />
+          <Platformer />
 
           <h2>Practice</h2>
           <div className="exposition-list">
             <HiddenQuestion
               title={
                 <span>
-                  A 65 kg skateboarder pushes off the ground so that the ground exerts a 110 N force to the right while static
-                  friction provides 40 N to the left. What is the horizontal acceleration?
+                  A 65 kg skateboarder pushes off the ground so that the ground exerts a 110 N force to the right while friction provides 40 N to the left. What is the horizontal acceleration?
                 </span>
               }
             >
               <MathJax>{`
-                \\( F_{\\text{net},x} = 110\\,\\text{N} - 40\\,\\text{N} = 70\\,\\text{N}.\\)
-                With mass 65 kg, \\
-                \\( a_x = F_{\\text{net},x}/m = 70/65 \\approx 1.1\\,\\text{m/s}^2. \\)
+                \\( F_{\\text{net}} = 110\\,\\text{N} - 40\\,\\text{N} = 70\\,\\text{N}.\\)
+                With mass 65 kg, \
+                \\( a = F_{\\text{net}}/m = 70/65 \\approx 1.1\\,\\text{m/s}^2 \\) to the right.
               `}</MathJax>
             </HiddenQuestion>
 
             <HiddenQuestion
               title={
                 <span>
-                  A 12 kg crate rests on a level floor. The coefficient of static friction is 0.5. What minimum horizontal force
-                  is required to start it sliding?
+                  A 12 kg crate falls from a cargo plane.  The force of gravity is 118 N downward, and air resistance is 20 N upward.  What is the crate's acceleration?
                 </span>
               }
             >
               <MathJax>{`
-                \\( N = mg = 12\\,\\text{kg} \times 9.8\\,\\text{m/s}^2 = 118 \\\,\\text{N}.\\)
-                Static friction can supply up to \\( f_{\\max} = \\mu_s N = 0.5 \times 118 \\approx 59\\,\\text{N}.\\)
-                Any applied force greater than about 59 N will break the grip and start the motion.
+                \\( F_{\\text{net}} = 118\\,\\text{N} - 20\\,\\text{N} = 98\\,\\text{N}.\\)
+                With mass 12 kg, \
+                \\( a = F_{\\text{net}}/m = 98/12 \\approx 8.2\\,\\text{m/s}^2 \\) downward.
               `}</MathJax>
-            </HiddenQuestion>
+            </HiddenQuestion> 
           </div>
         </div>
       </MathJaxContext>
-      <style>{`
-        .card-list {
-          list-style: none;
-          padding: 0;
-          display: grid;
-          gap: 10px;
-        }
-        .card-list li {
-          background: #f8fafc;
-          border: 1px solid #e5e7eb;
-          border-radius: 12px;
-          padding: 10px 12px;
-          display: grid;
-          grid-template-columns: 160px 1fr;
-          align-items: center;
-        }
-        .card-list li strong {
-          color: #111827;
-        }
-      `}</style>
     </div>
   );
 }

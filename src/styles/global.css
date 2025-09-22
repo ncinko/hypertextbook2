@@ -140,7 +140,7 @@ code {
 }
 .card-list li span {
   display: inline-block;
-  width: calc(100% - clamp(90px, 35vw, 150px));
+  width: calc(95% - clamp(90px, 35vw, 150px));
 }
 
 /* ===========================

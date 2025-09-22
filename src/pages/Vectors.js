@@ -108,9 +108,6 @@ export default function Vectors() {
         .demo-card { margin: 12px 0 22px; }
         .readout { margin-top: 8px; font-size: 0.95rem; color: #111; }
         .hint { color: #6b7280; font-size: 0.9rem; }
-        .card-list { list-style: none; padding: 0; display: grid; gap: 10px; }
-        .card-list li { background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 12px; padding: 10px 12px; display: grid; grid-template-columns: 160px 1fr; align-items: center; }
-        .card-list li strong { color: #111827; }
         .mathjax-list { padding-left: 18px; }
       `}</style>
     </div>

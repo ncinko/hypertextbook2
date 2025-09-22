@@ -1,27 +1,45 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 
+/**
+ * Physics constants
+ */
 const MASS = 60; // kg
 const GRAVITY = 9.8; // m/s^2
-const MOVE_FORCE = 120; // N applied by player input
-const FRICTION_COEFF = 0.55;
+const MOVE_THRUST = 120; // N maximum tangential ground reaction you can "request"
+const MU = 0.55; // static ~= kinetic for this demo
 const JUMP_VELOCITY = 5.5; // m/s upward impulse
 const SIM_WIDTH = 560;
 const SIM_HEIGHT = 360;
 const GROUND_Y = SIM_HEIGHT - 60;
 const PX_PER_METER = 80;
-const HORIZONTAL_BOUND = 3.2; // meters from center
-const ARROW_SCALE = 0.07; // pixels per Newton
+const HORIZONTAL_BOUND = 3.2; // m from center
+const ARROW_SCALE = 0.07; // px per Newton
+const STATIC_V_THRESH = 0.06; // m/s for "at rest" handling
 
 export default function StickFigureForcesDemo() {
   const canvasRef = useRef(null);
   const animationRef = useRef(null);
-  const stateRef = useRef({ x: 0, y: 0, vx: 0, vy: 0, onGround: true });
-  const keysRef = useRef({ left: false, right: false });
-  const netForceRef = useRef({ x: 0, y: 0 });
 
+  // physics state
+  const stateRef = useRef({ x: 0, y: 0, vx: 0, vy: 0, onGround: true });
+
+  // input
+  const keysRef = useRef({ left: false, right: false });
+
+  // force readout
+  const netForceRef = useRef({ x: 0, y: 0 });
   const [gravityOn, setGravityOn] = useState(true);
   const [frictionOn, setFrictionOn] = useState(true);
   const [netForce, setNetForce] = useState({ x: 0, y: 0 });
+
+  // animation state
+  const animRef = useRef({
+    phase: 0,
+    torsoTilt: 0,
+    headBob: 0,
+    legA: 0, legB: 0,
+    armA: 0, armB: 0
+  });
 
   const commitNetForce = useCallback((fx, fy) => {
     const prev = netForceRef.current;
@@ -31,14 +49,17 @@ export default function StickFigureForcesDemo() {
     }
   }, []);
 
-  const drawScene = useCallback((ctx, state, forces, netX, netY) => {
+  /**
+   * Draw the scene + stick figure
+   */
+  const drawScene = useCallback((ctx, state, forces, netX, netY, animActive) => {
     ctx.clearRect(0, 0, SIM_WIDTH, SIM_HEIGHT);
 
     // background
     ctx.fillStyle = "#f8fafc";
     ctx.fillRect(0, 0, SIM_WIDTH, SIM_HEIGHT);
 
-    // ground platform
+    // ground
     ctx.fillStyle = "#e5e7eb";
     ctx.fillRect(0, GROUND_Y, SIM_WIDTH, SIM_HEIGHT - GROUND_Y);
     ctx.strokeStyle = "#9ca3af";
@@ -51,99 +72,132 @@ export default function StickFigureForcesDemo() {
     const baseX = SIM_WIDTH / 2 + state.x * PX_PER_METER;
     const footY = GROUND_Y - state.y * PX_PER_METER;
 
-    // stick figure proportions
+    // stick figure proportions (px)
     const legLength = 48;
     const torsoLength = 54;
     const headRadius = 16;
-    const hipY = footY - legLength;
-    const shoulderY = hipY - torsoLength;
-    const headCenterY = shoulderY - headRadius - 6;
-    const anchorY = shoulderY + torsoLength * 0.4;
 
-    ctx.strokeStyle = "#1f2937";
-    ctx.lineWidth = 4;
-    ctx.lineCap = "round";
+    // === Velocity- and intent-gated running animation ===
+    const a = animRef.current;
+    const intent = (keysRef.current.right ? 1 : 0) - (keysRef.current.left ? 1 : 0);
+    const animEnabled = animActive && intent !== 0; // only when trying to accelerate on ground
+    const speed = Math.abs(state.vx); // m/s
+    const amp = animEnabled ? Math.min(1, speed / 3) : 0;
+    const targetSwing = 0.7 * amp;
+    const targetPhaseSpeed = animEnabled ? (2.4 + 1.8 * amp) * Math.max(speed, 1.2) * 0.06 : 0;
+
+    a.phase += targetPhaseSpeed;
+    const ease = (val, target, t = 0.18) => val * (1 - t) + target * t;
+
+    const desLegA = Math.sin(a.phase) * targetSwing;
+    const desLegB = Math.sin(a.phase + Math.PI) * targetSwing;
+    const desArmA = -Math.sin(a.phase) * (targetSwing * 0.8);
+    const desArmB = -Math.sin(a.phase + Math.PI) * (targetSwing * 0.8);
+    const desTilt = animEnabled ? Math.max(-0.25, Math.min(0.25, state.vx * 0.08)) : 0;
+    const desBob = animEnabled ? Math.sin(a.phase * 2) * 4 * amp : 0;
+
+    a.legA = ease(a.legA, desLegA);
+    a.legB = ease(a.legB, desLegB);
+    a.armA = ease(a.armA, desArmA);
+    a.armB = ease(a.armB, desArmB);
+    a.torsoTilt = ease(a.torsoTilt, desTilt, 0.22);
+    a.headBob = ease(a.headBob, desBob, 0.16);
+
+    // skeleton points
+    const hipX = baseX;
+    const hipY = footY - legLength;
+    const shoulderX = hipX + Math.sin(a.torsoTilt) * torsoLength;
+    const shoulderY = hipY - Math.cos(a.torsoTilt) * torsoLength;
+    const headCx = shoulderX + Math.sin(a.torsoTilt) * (headRadius + 6);
+    const headCy = shoulderY - Math.cos(a.torsoTilt) * (headRadius + 6) - a.headBob;
+
+    // helper to place endpoints given an angle from origin
+    const segment = (ox, oy, len, ang) => ({ x: ox + Math.sin(ang) * len, y: oy + Math.cos(ang) * len });
+
+    const footA = segment(hipX, hipY, legLength, a.legA);
+    const footB = segment(hipX, hipY, legLength, a.legB);
+    const handA = segment(shoulderX, shoulderY, 36, a.armA + a.torsoTilt + 0.25);
+    const handB = segment(shoulderX, shoulderY, 36, a.armB + a.torsoTilt - 0.25);
+
+    const stroke = (fn, width = 4, color = "#1f2937") => {
+      ctx.save();
+      ctx.strokeStyle = color;
+      ctx.lineWidth = width;
+      ctx.lineCap = "round";
+      fn();
+      ctx.restore();
+    };
 
     // legs
-    ctx.beginPath();
-    ctx.moveTo(baseX, hipY);
-    ctx.lineTo(baseX - 16, footY);
-    ctx.moveTo(baseX, hipY);
-    ctx.lineTo(baseX + 16, footY);
-    ctx.stroke();
-
-    // torso
-    ctx.beginPath();
-    ctx.moveTo(baseX, hipY);
-    ctx.lineTo(baseX, shoulderY);
-    ctx.stroke();
-
-    // arms
-    ctx.beginPath();
-    ctx.moveTo(baseX, shoulderY + 4);
-    ctx.lineTo(baseX - 28, shoulderY + 22);
-    ctx.moveTo(baseX, shoulderY + 4);
-    ctx.lineTo(baseX + 28, shoulderY + 18);
-    ctx.stroke();
-
-    // head
-    ctx.beginPath();
-    ctx.arc(baseX, headCenterY, headRadius, 0, Math.PI * 2);
-    ctx.stroke();
-
-    const anchorX = baseX;
-    const anchor = { x: anchorX, y: anchorY };
-
-    // draw each individual force vector
-    forces.forEach(force => {
-      drawArrow(ctx, anchor, force, force.color, force.label);
+    stroke(() => {
+      ctx.beginPath();
+      ctx.moveTo(hipX, hipY);
+      ctx.lineTo(footA.x, footA.y);
+      ctx.moveTo(hipX, hipY);
+      ctx.lineTo(footB.x, footB.y);
+      ctx.stroke();
     });
 
-    // net force arrow
+    // torso
+    stroke(() => {
+      ctx.beginPath();
+      ctx.moveTo(hipX, hipY);
+      ctx.lineTo(shoulderX, shoulderY);
+      ctx.stroke();
+    });
+
+    // arms
+    stroke(() => {
+      ctx.beginPath();
+      ctx.moveTo(shoulderX, shoulderY);
+      ctx.lineTo(handA.x, handA.y);
+      ctx.moveTo(shoulderX, shoulderY);
+      ctx.lineTo(handB.x, handB.y);
+      ctx.stroke();
+    });
+
+    // head
+    stroke(() => {
+      ctx.beginPath();
+      ctx.arc(headCx, headCy, headRadius, 0, Math.PI * 2);
+      ctx.stroke();
+    });
+
+    // force arrows anchor near torso
+    const anchor = { x: (hipX + shoulderX) / 2, y: (hipY + shoulderY) / 2 };
+    forces.forEach(f => drawArrow(ctx, anchor, f, f.color, f.label));
+
     const netForceVector = { x: netX, y: netY, color: "#0f766e", label: "Net" };
     drawArrow(ctx, anchor, netForceVector, netForceVector.color, netForceVector.label);
 
     ctx.save();
     ctx.fillStyle = "#0f172a";
     ctx.font = "13px 'Inter', 'Segoe UI', sans-serif";
-    ctx.fillText(
-      `Net F = (${netX.toFixed(1)} N, ${netY.toFixed(1)} N)`,
-      anchor.x + 18,
-      anchor.y - 18
-    );
+    ctx.fillText(`Net F = (${netX.toFixed(1)} N, ${netY.toFixed(1)} N)`, anchor.x + 18, anchor.y - 18);
     ctx.restore();
   }, []);
 
+  /**
+   * Input
+   */
   useEffect(() => {
     function handleKeyDown(e) {
-      if (["ArrowLeft", "ArrowRight", "Space", "KeyA", "KeyD"].includes(e.code)) {
-        e.preventDefault();
-      }
-      if (e.code === "ArrowLeft" || e.code === "KeyA") {
-        keysRef.current.left = true;
-      }
-      if (e.code === "ArrowRight" || e.code === "KeyD") {
-        keysRef.current.right = true;
-      }
+      if (["ArrowLeft", "ArrowRight", "Space", "KeyA", "KeyD"].includes(e.code)) e.preventDefault();
+      if (e.code === "ArrowLeft" || e.code === "KeyA") keysRef.current.left = true;
+      if (e.code === "ArrowRight" || e.code === "KeyD") keysRef.current.right = true;
       if (e.code === "Space") {
-        const state = stateRef.current;
-        if (state.onGround) {
-          state.vy = JUMP_VELOCITY;
-          state.onGround = false;
-          state.y = Math.max(state.y, 0.01);
+        const s = stateRef.current;
+        if (s.onGround) {
+          s.vy = JUMP_VELOCITY;
+          s.onGround = false;
+          s.y = Math.max(s.y, 0.01);
         }
       }
     }
-
     function handleKeyUp(e) {
-      if (e.code === "ArrowLeft" || e.code === "KeyA") {
-        keysRef.current.left = false;
-      }
-      if (e.code === "ArrowRight" || e.code === "KeyD") {
-        keysRef.current.right = false;
-      }
+      if (e.code === "ArrowLeft" || e.code === "KeyA") keysRef.current.left = false;
+      if (e.code === "ArrowRight" || e.code === "KeyD") keysRef.current.right = false;
     }
-
     window.addEventListener("keydown", handleKeyDown);
     window.addEventListener("keyup", handleKeyUp);
     return () => {
@@ -152,93 +206,102 @@ export default function StickFigureForcesDemo() {
     };
   }, []);
 
+  /**
+   * Simulation
+   */
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     let last = performance.now();
 
-    function step(timestamp) {
-      const dt = Math.min((timestamp - last) / 1000, 0.032);
-      last = timestamp;
+    function step(ts) {
+      const dt = Math.min((ts - last) / 1000, 0.032);
+      last = ts;
 
-      const state = stateRef.current;
+      const s = stateRef.current;
       const keys = keysRef.current;
 
-      let Fx = 0;
-      let Fy = 0;
+      let Fx = 0, Fy = 0;
       const forces = [];
 
+      // weight
       if (gravityOn) {
         const weight = -MASS * GRAVITY;
         Fy += weight;
         forces.push({ label: "Weight", x: 0, y: weight, color: "#ef4444" });
       }
 
-      let onGround = state.y <= 0.0001 && state.vy <= 0;
-      let normalForce = 0;
+      // ground contact + normal
+      let onGround = s.y <= 0.0001 && s.vy <= 0;
+      let normal = 0;
       if (onGround) {
-        normalForce = Math.max(0, -Fy);
-        if (normalForce > 0) {
-          Fy += normalForce;
-          forces.push({ label: "Normal", x: 0, y: normalForce, color: "#3b82f6" });
+        normal = Math.max(0, -Fy); // support balances downwards forces
+        if (normal > 0) {
+          Fy += normal;
+          forces.push({ label: "Normal", x: 0, y: normal, color: "#3b82f6" });
         }
       }
 
-      let driveForce = 0;
-      if (keys.left) driveForce -= MOVE_FORCE;
-      if (keys.right) driveForce += MOVE_FORCE;
-      if (driveForce !== 0) {
-        Fx += driveForce;
-        forces.push({ label: "Applied", x: driveForce, y: 0, color: "#8b5cf6" });
-      }
+      // --- Only ground friction can accelerate horizontally ---
+      const intent = (keys.right ? 1 : 0) - (keys.left ? 1 : 0);
+      if (frictionOn && onGround) {
+        const limit = MU * normal; // max static/kinetic magnitude
 
-      if (onGround && frictionOn) {
-        const limit = FRICTION_COEFF * normalForce;
-        let friction = 0;
-        if (Math.abs(state.vx) > 0.15) {
-          friction = -limit * Math.sign(state.vx);
-        } else if (driveForce === 0) {
-          const needed = -state.vx * MASS / Math.max(dt, 0.016);
-          friction = Math.max(-limit, Math.min(limit, needed));
-          if (Math.abs(needed) <= limit) {
-            state.vx = 0;
-          }
-        }
-        if (friction !== 0) {
+        if (intent !== 0) {
+          // Request a tangential ground reaction in direction of intent
+          const drive = intent * MOVE_THRUST;
+          const friction = Math.max(-limit, Math.min(limit, drive)); // static up to μN
           Fx += friction;
           forces.push({ label: "Friction", x: friction, y: 0, color: "#f97316" });
+
+          // If already sliding fast opposite our intent (rare in this simple model),
+          // the static limit still caps our usable ground reaction.
+        } else {
+          // No intent: friction only works to reduce slipping
+          if (Math.abs(s.vx) > STATIC_V_THRESH) {
+            const friction = -limit * Math.sign(s.vx); // kinetic
+            Fx += friction;
+            forces.push({ label: "Friction", x: friction, y: 0, color: "#f97316" });
+          } else if (Math.abs(s.vx) > 0.002) {
+            // Try to come to exact rest with static friction
+            const needed = -s.vx * MASS / Math.max(dt, 0.016);
+            const friction = Math.max(-limit, Math.min(limit, needed));
+            Fx += friction;
+            forces.push({ label: "Friction", x: friction, y: 0, color: "#f97316" });
+            if (Math.abs(needed) <= limit) s.vx = 0;
+          }
         }
       }
+      // In the air: NO horizontal forces at all (no acceleration mid-air)
 
+      // integrate
       const netX = Fx;
       const netY = Fy;
 
-      state.vx += (netX / MASS) * dt;
-      state.vy += (netY / MASS) * dt;
-      state.x += state.vx * dt;
-      state.y += state.vy * dt;
+      s.vx += (netX / MASS) * dt;
+      s.vy += (netY / MASS) * dt;
+      s.x += s.vx * dt;
+      s.y += s.vy * dt;
 
-      if (state.y < 0) {
-        state.y = 0;
-        if (state.vy < 0) state.vy = 0;
+      // resolve floor
+      if (s.y < 0) {
+        s.y = 0;
+        if (s.vy < 0) s.vy = 0;
         onGround = true;
       } else {
         onGround = false;
       }
-      state.onGround = onGround;
+      s.onGround = onGround;
 
-      if (state.x < -HORIZONTAL_BOUND) {
-        state.x = -HORIZONTAL_BOUND;
-        if (state.vx < 0) state.vx = 0;
-      }
-      if (state.x > HORIZONTAL_BOUND) {
-        state.x = HORIZONTAL_BOUND;
-        if (state.vx > 0) state.vx = 0;
-      }
+      // horizontal bounds
+      if (s.x < -HORIZONTAL_BOUND) { s.x = -HORIZONTAL_BOUND; if (s.vx < 0) s.vx = 0; }
+      if (s.x >  HORIZONTAL_BOUND) { s.x =  HORIZONTAL_BOUND; if (s.vx > 0) s.vx = 0; }
 
       commitNetForce(netX, netY);
-      drawScene(ctx, state, forces, netX, netY);
+      const animActive = onGround && frictionOn; // for gating animation
+      drawScene(ctx, s, forces, netX, netY, animActive);
+
       animationRef.current = requestAnimationFrame(step);
     }
 
@@ -270,7 +333,7 @@ export default function StickFigureForcesDemo() {
           />
           Friction
         </label>
-        <span className="control-hint">Use ←/→ or A/D to push, space to jump.</span>
+        <span className="control-hint">Use ←/→ or A/D to accelerate, Space to jump.</span>
       </div>
 
       <canvas
@@ -288,14 +351,11 @@ export default function StickFigureForcesDemo() {
             ({netForce.x.toFixed(1)} i, {netForce.y.toFixed(1)} j)
           </span>
         </div>
-        <div>
-          <strong>Horizontal velocity:</strong> {velocity.toFixed(2)} m/s
-        </div>
+        <div><strong>Horizontal velocity:</strong> {velocity.toFixed(2)} m/s</div>
         <div className="forces-legend">
           <span><span className="legend-box" style={{ background: "#ef4444" }} /> Weight</span>
           <span><span className="legend-box" style={{ background: "#3b82f6" }} /> Normal</span>
-          <span><span className="legend-box" style={{ background: "#f97316" }} /> Friction</span>
-          <span><span className="legend-box" style={{ background: "#8b5cf6" }} /> Applied</span>
+          <span><span className="legend-box" style={{ background: "#f97316" }} /> Friction (ground)</span>
           <span><span className="legend-box" style={{ background: "#0f766e" }} /> Net</span>
         </div>
       </div>
@@ -308,6 +368,7 @@ export default function StickFigureForcesDemo() {
           background: linear-gradient(180deg, #fff, #f9fafb);
           box-shadow: 0 6px 18px rgba(15, 23, 42, 0.08);
           margin: 20px 0 26px;
+          max-width: 640px;
         }
         .forces-controls {
           display: flex;
@@ -328,13 +389,8 @@ export default function StickFigureForcesDemo() {
           border: 1px solid #c7d2fe;
           font-weight: 600;
         }
-        .forces-controls input[type="checkbox"] {
-          accent-color: #4f46e5;
-        }
-        .control-hint {
-          font-size: 13px;
-          color: #6b7280;
-        }
+        .forces-controls input[type="checkbox"] { accent-color: #4f46e5; }
+        .control-hint { font-size: 13px; color: #6b7280; }
         .forces-canvas {
           width: 100%;
           max-width: 560px;
@@ -350,26 +406,12 @@ export default function StickFigureForcesDemo() {
           gap: 6px;
           align-items: start;
         }
-        .readout-detail {
-          margin-left: 8px;
-          color: #64748b;
-          font-size: 13px;
-        }
+        .readout-detail { margin-left: 8px; color: #64748b; font-size: 13px; }
         .forces-legend {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 12px;
-          margin-top: 8px;
-          font-size: 13px;
-          color: #334155;
+          display: flex; flex-wrap: wrap; gap: 12px; margin-top: 8px;
+          font-size: 13px; color: #334155;
         }
-        .legend-box {
-          display: inline-block;
-          width: 12px;
-          height: 12px;
-          border-radius: 3px;
-          margin-right: 6px;
-        }
+        .legend-box { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 6px; }
       `}</style>
     </div>
   );
@@ -377,8 +419,8 @@ export default function StickFigureForcesDemo() {
 
 function drawArrow(ctx, anchor, force, color, label) {
   const dx = force.x * ARROW_SCALE;
-  const dy = -force.y * ARROW_SCALE; // canvas y-axis is inverted
-  const length = Math.hypot(dx, dy);
+  const dy = -force.y * ARROW_SCALE; // canvas y inverted
+  const L = Math.hypot(dx, dy);
 
   ctx.save();
   ctx.strokeStyle = color;
@@ -386,7 +428,7 @@ function drawArrow(ctx, anchor, force, color, label) {
   ctx.lineWidth = 3;
   ctx.lineCap = "round";
 
-  if (length < 0.5) {
+  if (L < 0.5) {
     ctx.beginPath();
     ctx.arc(anchor.x, anchor.y, 3, 0, Math.PI * 2);
     ctx.fill();
@@ -396,17 +438,17 @@ function drawArrow(ctx, anchor, force, color, label) {
     ctx.lineTo(anchor.x + dx, anchor.y + dy);
     ctx.stroke();
 
-    const angle = Math.atan2(dy, dx);
+    const ang = Math.atan2(dy, dx);
     const head = 10;
     ctx.beginPath();
     ctx.moveTo(anchor.x + dx, anchor.y + dy);
     ctx.lineTo(
-      anchor.x + dx - head * Math.cos(angle - Math.PI / 6),
-      anchor.y + dy - head * Math.sin(angle - Math.PI / 6)
+      anchor.x + dx - head * Math.cos(ang - Math.PI / 6),
+      anchor.y + dy - head * Math.sin(ang - Math.PI / 6)
     );
     ctx.lineTo(
-      anchor.x + dx - head * Math.cos(angle + Math.PI / 6),
-      anchor.y + dy - head * Math.sin(angle + Math.PI / 6)
+      anchor.x + dx - head * Math.cos(ang + Math.PI / 6),
+      anchor.y + dy - head * Math.sin(ang + Math.PI / 6)
     );
     ctx.closePath();
     ctx.fill();
@@ -419,6 +461,5 @@ function drawArrow(ctx, anchor, force, color, label) {
     const labelY = anchor.y + dy + (dy < 0 ? -8 : 8);
     ctx.fillText(label, labelX, labelY);
   }
-
   ctx.restore();
 }
