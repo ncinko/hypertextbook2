@@ -10,6 +10,7 @@ const routes = [
   '/kinematics',
   '/forces',
   '/vectors',
+  '/electric-circuits',
 ];
 
 (async function generate() {

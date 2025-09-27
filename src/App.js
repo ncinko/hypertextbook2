@@ -7,6 +7,7 @@ import IdealGas from './IdealGas';
 import Oscillations from "./pages/Oscillations";
 import ElectricField from "./pages/ElectricField";
 import ElectricPotential from "./pages/ElectricPotential"
+import ElectricCircuits from "./pages/ElectricCircuits";
 import RotationalDynamics from "./pages/RotationalDynamics"
 import Chaos from "./pages/Chaos"
 import Momentum from "./pages/Momentum"
@@ -47,6 +48,7 @@ export default function App() {
         <div className="dropdown-content">
           <Link to="/electric-field">Electric Field</Link>
           <Link to="/electric-potential">Electric Potential</Link>
+          <Link to="/electric-circuits">Electric Circuits</Link>
         </div>
       </div>
 
@@ -70,6 +72,7 @@ export default function App() {
 				<Route path="/oscillations" element={<Oscillations />} />
                 <Route path="/electric-field" element={<ElectricField/>} />
                 <Route path="/electric-potential" element={<ElectricPotential/>} />
+                <Route path="/electric-circuits" element={<ElectricCircuits />} />
                 <Route path="/rotational-dynamics" element={<RotationalDynamics/>} />
                 <Route path="/chaos" element={<Chaos/>} />
                 <Route path="/momentum" element={<Momentum/>} />
