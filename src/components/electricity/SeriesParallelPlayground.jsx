@@ -284,7 +284,7 @@ export default function SeriesParallelPlayground({ width = 940, height = 580 }) 
         {/* On-canvas numeric readout */}
         <g transform={`translate(${xRight - 38 * g}, ${yBottom - 8 * g})`}>
           <rect x={-8} y={-8} width={9 * g} height={7 * g} rx={12} fill="rgba(16,24,36,0.6)" stroke="rgba(160,200,255,0.2)" />
-          <text x={12} y={40} fontSize={16} fill="#cfe7ff">R_total = {isFinite(Rtot) ? fexp(Rtot, 'Ω') : 'open'}</text>
+          <text x={12} y={40} fontSize={16} fill="#cfe7ff">R_total = {isFinite(Rtot) ? `${Math.round(Rtot)} Ω` : 'open'}</text>
           <text x={12} y={60} fontSize={16} fill="#cfe7ff">I_total = {fexp(I, 'A')}</text>
           <text x={12} y={80} fontSize={16} fill="#ffdca8">P_bulb = {fexp(P_bulb, 'W')}</text>
           <text x={12} y={100} fontSize={16} fill="#cfe7ff">P_batt = {fexp(P_batt, 'W')}</text>

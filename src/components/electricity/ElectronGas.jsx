@@ -1,205 +1,115 @@
 import React, { useRef, useEffect, useMemo, useState } from "react";
 
-// ElectronGasDrude.jsx
-// Visually appealing Drude-like electron gas with e–e and lattice scattering
-// — focus: smooth animation, glow, trails, and an obvious E-field acceleration.
-// Physics (coarse):
-//   • Between collisions: dv/dt = (q/m) E  (constant E here)
-//   • Lattice scattering: Poisson process with mean time tauL, randomize direction
-//   • Electron–electron scattering: short-range elastic-style swaps via spatial hashing
-//   • Toroidal boundaries (wrap) so flow is continuous across edges
-//
-// Notes for future iterations:
-//   – Replace tauL slider with something more tangible (mean free path; mobility)
-//   – Add temperature/phonon visualization by jittering lattice nodes & changing color
-//   – Show drift-velocity readout and current density estimates
-//   – Hook into your app's UI components; here we only render a minimal control bar
+// ElectronGas.jsx — bigger, hazier electrons; simplified controls
 
-const TAU_DEFAULT = 0.35; // mean time between lattice collisions (s, sim units)
-const TAU_EE = 0.12;      // characteristic e–e scattering time (soft)
-const Q_OVER_M = 1.0;     // q/m in sim units; scales acceleration from E
-const BASE_SPEED = 60;    // initial thermal speed (px/s, sim units)
-const ELECTRON_RADIUS = 2.0;
-const EE_RADIUS = 9;      // proximity for e–e scatter (px)
-const TRAIL_DECAY = 0.1; // lower = longer trails
-const LATTICE_SPACING = 28; // px
-const LATTICE_DISORDER = 0.25; // fraction of spacing for random offset
+const TAU_DEFAULT = 0.45;
+const ELECTRON_RADIUS = 3.2; // larger radius
+const Q_OVER_M = 0.35;
+const TRAIL_FADE = 0.10; // faster trail fade
 
-// Utility
-const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
+// Physics constants (scaled)
+const MAX_SPEED = 120;
+const E_FROM_DRAG = 7.0;
+const MAX_E = 1000;
+
+const isiPadSafari = (() => {
+  const ua = navigator.userAgent || "";
+  const isIOS = /iPad|iPhone|iPod/.test(ua) || (/(Macintosh).*Version\/.*Safari/.test(ua) && "ontouchend" in document);
+  const isSafari = /Safari\//.test(ua) && !/Chrome\//.test(ua) && !/CriOS\//.test(ua);
+  return isIOS && isSafari;
+})();
+
+const clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
+const clampMag = (vx, vy, max) => {
+  const s = Math.hypot(vx, vy);
+  if (s <= max || s === 0) return [vx, vy];
+  const k = max / s; return [vx * k, vy * k];
+};
 
 export default function ElectronGas({
   width = 900,
   height = 540,
-  density = 0.00055, // electrons per pixel
-  initialE = { x: 300, y: 0 }, // px/s^2 in sim units
+  density = 0.00055,
+  initialE = { x: 250, y: 0 },
   background = "#081018",
 }) {
   const canvasRef = useRef(null);
   const trailRef = useRef(null);
+
   const [running, setRunning] = useState(true);
   const [E, setE] = useState(initialE);
   const [tauL, setTauL] = useState(TAU_DEFAULT);
-  const [eeStrength, setEeStrength] = useState(1.0);
 
-  // Derived counts
-  const N = useMemo(() => Math.max(30, Math.floor(width * height * density)), [width, height, density]);
+  const dragRef = useRef(null);
 
-  // Build a pseudo-hex lattice (with gentle disorder)
-  const lattice = useMemo(() => {
-    const pts = [];
-    const dx = LATTICE_SPACING;
-    const dy = Math.sqrt(3) * dx * 0.5;
-    const cols = Math.ceil(width / dx) + 2;
-    const rows = Math.ceil(height / dy) + 2;
-    for (let j = 0; j < rows; j++) {
-      for (let i = 0; i < cols; i++) {
-        const ox = (j % 2) * (dx * 0.5);
-        let x = i * dx + ox;
-        let y = j * dy;
-        // subtle static disorder to hint at phonons/imperfections
-        x += (Math.random() - 0.5) * dx * LATTICE_DISORDER;
-        y += (Math.random() - 0.5) * dx * LATTICE_DISORDER;
-        if (x >= -20 && x <= width + 20 && y >= -20 && y <= height + 20) {
-          pts.push({ x, y });
-        }
-      }
-    }
-    return pts;
-  }, [width, height]);
+  const safariScale = isiPadSafari ? 0.72 : 1.0;
+  const N = useMemo(() => Math.max(30, Math.floor(width * height * density * safariScale)), [width, height, density, safariScale]);
 
-  // Particles state
   const electronsRef = useRef([]);
   const lastTimeRef = useRef(null);
 
-  // Spatial hash for e–e interactions
-  const cellSize = EE_RADIUS * 1.25;
-  const gridRef = useRef(new Map());
-
   const reseed = () => {
-    const arr = new Array(N).fill(0).map(() => {
-      const angle = Math.random() * Math.PI * 2;
-      const speed = BASE_SPEED * (0.6 + 0.8 * Math.random());
-      return {
-        x: Math.random() * width,
-        y: Math.random() * height,
-        vx: Math.cos(angle) * speed,
-        vy: Math.sin(angle) * speed,
-        tSinceL: Math.random() * tauL, // stagger lattice-collision clocks
-        hue: 190 + Math.random() * 30, // bluish
-      };
-    });
+    const arr = [];
+    for (let i = 0; i < N; i++) {
+      const x = Math.random() * width;
+      const y = Math.random() * height;
+      const theta = Math.random() * Math.PI * 2;
+      const speed = 28 + Math.random() * 20;
+      arr.push({
+        x, y,
+        vx: speed * Math.cos(theta),
+        vy: speed * Math.sin(theta),
+        tSinceL: Math.random() * tauL,
+        hue: 200 + (Math.random() * 60),
+      });
+    }
     electronsRef.current = arr;
   };
 
-  // Build/clear trail buffer
   useEffect(() => {
     reseed();
-    const trail = trailRef.current;
-    if (trail) {
-      const tctx = trail.getContext("2d");
-      tctx.clearRect(0, 0, width, height);
-    }
+    const t = trailRef.current;
+    if (t) t.getContext("2d").clearRect(0, 0, width, height);
     lastTimeRef.current = null;
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [width, height, N]);
 
-  // Helpers for spatial hashing
-  const keyFor = (x, y) => `${Math.floor(x / cellSize)}_${Math.floor(y / cellSize)}`;
-  const buildGrid = (arr) => {
-    const grid = new Map();
-    for (let i = 0; i < arr.length; i++) {
-      const p = arr[i];
-      const k = keyFor(p.x, p.y);
-      if (!grid.has(k)) grid.set(k, []);
-      grid.get(k).push(i);
-    }
-    gridRef.current = grid;
-  };
-
-  // Draw helpers
-  const drawLattice = (ctx) => {
+  const drawElectronsMain = (ctx, arr) => {
     ctx.save();
-    for (const { x, y } of lattice) {
-      const r = 1.6;
-      const grad = ctx.createRadialGradient(x, y, 0, x, y, r * 5);
-      grad.addColorStop(0, "rgba(200,220,255,0.18)");
-      grad.addColorStop(1, "rgba(200,220,255,0)");
-      ctx.fillStyle = grad;
-      ctx.beginPath();
-      ctx.arc(x, y, r * 5, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = "rgba(180,200,255,0.25)";
-      ctx.beginPath();
-      ctx.arc(x, y, r, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    ctx.restore();
-  };
-
-  const drawEVector = (ctx) => {
-    const cx = width - 140;
-    const cy = 70;
-    const ex = E.x * 0.7; // scale for glyph
-    const ey = E.y * 0.7;
-    const len = Math.hypot(ex, ey);
-    ctx.save();
-    ctx.translate(cx, cy);
-    ctx.strokeStyle = "#7dd3fc"; // cyan-ish
-    ctx.lineWidth = 3;
-    ctx.globalAlpha = 0.9;
-    ctx.beginPath();
-    ctx.moveTo(0, 0);
-    ctx.lineTo(ex, ey);
-    ctx.stroke();
-    // arrowhead
-    if (len > 0.001) {
-      const nx = ex / len;
-      const ny = ey / len;
-      ctx.beginPath();
-      ctx.moveTo(ex, ey);
-      ctx.lineTo(ex - 8 * nx + 6 * ny, ey - 8 * ny - 6 * nx);
-      ctx.lineTo(ex - 8 * nx - 6 * ny, ey - 8 * ny + 6 * nx);
-      ctx.closePath();
-      ctx.fillStyle = "#7dd3fc";
-      ctx.fill();
-    }
-    ctx.font = "12px Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif";
-    ctx.fillStyle = "#a8dadc";
-    ctx.fillText("E-field", -10, -12);
-    ctx.restore();
-  };
-
-  const drawElectrons = (ctx, arr) => {
-    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
     for (const p of arr) {
       const r = ELECTRON_RADIUS;
-      // soft glow
-      const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, r * 5);
-      g.addColorStop(0, `hsla(${p.hue}, 90%, 70%, 0.9)`);
-      g.addColorStop(0.4, `hsla(${p.hue}, 90%, 60%, 0.35)`);
-      g.addColorStop(1, `hsla(${p.hue}, 90%, 60%, 0)`);
+      const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, r * 10);
+g.addColorStop(0.0, `hsla(${p.hue}, 90%, 75%, 0.5)`);
+g.addColorStop(0.3, `hsla(${p.hue}, 90%, 65%, 0.15)`);
+g.addColorStop(1.0, `hsla(${p.hue}, 90%, 60%, 0)`);
       ctx.fillStyle = g;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, r * 5, 0, Math.PI * 2);
-      ctx.fill();
+      ctx.beginPath(); ctx.arc(p.x, p.y, r * 10, 0, Math.PI * 2); ctx.fill();
 
-      ctx.fillStyle = `hsla(${p.hue}, 95%, 85%, 0.95)`;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
-      ctx.fill();
+      ctx.fillStyle = `hsla(${p.hue}, 75%, 75%, 0.85)`;
+      ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2); ctx.fill();
     }
     ctx.restore();
   };
 
-  // Main animation loop
+  const drawElectronsTrail = (tctx, arr) => {
+    tctx.save();
+    tctx.globalCompositeOperation = "source-over";
+    for (const p of arr) {
+      tctx.globalAlpha = 0.25; // hazier trails
+      tctx.fillStyle = `hsla(${p.hue}, 95%, 70%, 1)`;
+      tctx.beginPath(); tctx.arc(p.x, p.y, 1.8, 0, Math.PI * 2); tctx.fill(); // larger trail dots
+    }
+    tctx.globalAlpha = 1;
+    tctx.restore();
+  };
+
   useEffect(() => {
     const canvas = canvasRef.current;
     const trail = trailRef.current;
     if (!canvas || !trail) return;
 
-    const ctx = canvas.getContext("2d");
-    const tctx = trail.getContext("2d");
+    const ctx = canvas.getContext("2d", { alpha: false, desynchronized: true });
+    const tctx = trail.getContext("2d", { alpha: true, desynchronized: true });
 
     let rafId;
 
@@ -210,189 +120,124 @@ export default function ElectronGas({
         return;
       }
       const last = lastTimeRef.current == null ? t : lastTimeRef.current;
-      let dt = (t - last) / 1000; // seconds
-      dt = clamp(dt, 0, 0.05); // clamp to avoid huge jumps
+      let dt = (t - last) / 1000;
+      dt = clamp(dt, 0, 0.05);
       lastTimeRef.current = t;
 
       const arr = electronsRef.current;
 
-      // semi-persistent trails
-      tctx.fillStyle = `rgba(8,16,24,${TRAIL_DECAY})`;
+      tctx.save();
+      tctx.globalCompositeOperation = "destination-out";
+      tctx.fillStyle = `rgba(0,0,0,${TRAIL_FADE})`;
       tctx.fillRect(0, 0, width, height);
+      tctx.restore();
 
-      // Advance particles
       for (let i = 0; i < arr.length; i++) {
         const p = arr[i];
-
-        // Acceleration by E between collisions
         p.vx += Q_OVER_M * E.x * dt;
         p.vy += Q_OVER_M * E.y * dt;
 
-        // Lattice scattering as Poisson process
         p.tSinceL += dt;
-        const collideNow = Math.random() < 1 - Math.exp(-p.tSinceL / tauL);
-        if (collideNow) {
-          const speed = Math.hypot(p.vx, p.vy);
-          // randomize direction; preserve some speed (slight energy exchange)
+        if (p.tSinceL >= -Math.log(1.0 - Math.random()) * tauL) {
           const th = Math.random() * Math.PI * 2;
-          const keep = 0.85 + 0.1 * Math.random();
-          p.vx = keep * speed * Math.cos(th);
-          p.vy = keep * speed * Math.sin(th);
+          const speed = (22 + Math.random() * 16);
+          p.vx = speed * Math.cos(th);
+          p.vy = speed * Math.sin(th);
           p.tSinceL = 0;
-          p.hue = 190 + Math.random() * 30; // twinkle a bit on collisions
         }
 
-        // Integrate position
+        [p.vx, p.vy] = clampMag(p.vx, p.vy, MAX_SPEED);
+
         p.x += p.vx * dt;
         p.y += p.vy * dt;
-
-        // Toroidal boundary conditions
         if (p.x < 0) p.x += width; else if (p.x >= width) p.x -= width;
         if (p.y < 0) p.y += height; else if (p.y >= height) p.y -= height;
       }
 
-      // Electron–electron scattering (soft, local)
-      buildGrid(arr);
-      const eeRate = 1 - Math.exp(-dt / TAU_EE);
-      if (eeStrength > 0 && eeRate > 0) {
-        for (let i = 0; i < arr.length; i++) {
-          if (Math.random() > eeRate * eeStrength) continue;
-          const a = arr[i];
-          const kx = Math.floor(a.x / cellSize);
-          const ky = Math.floor(a.y / cellSize);
-          // search 3x3 neighboring cells
-          let partner = -1;
-          for (let gx = kx - 1; gx <= kx + 1 && partner < 0; gx++) {
-            for (let gy = ky - 1; gy <= ky + 1 && partner < 0; gy++) {
-              const bucket = gridRef.current.get(`${gx}_${gy}`);
-              if (!bucket) continue;
-              for (const j of bucket) {
-                if (j === i) continue;
-                const b = arr[j];
-                const dx = b.x - a.x;
-                const dy = b.y - a.y;
-                const d2 = dx * dx + dy * dy;
-                if (d2 < EE_RADIUS * EE_RADIUS) {
-                  partner = j;
-                  break;
-                }
-              }
-            }
-          }
-          if (partner >= 0) {
-            // Simple elastic-like exchange along the normal
-            const b = arr[partner];
-            const dx = b.x - a.x;
-            const dy = b.y - a.y;
-            const d = Math.hypot(dx, dy) || 1;
-            const nx = dx / d;
-            const ny = dy / d;
-            const va_n = a.vx * nx + a.vy * ny;
-            const vb_n = b.vx * nx + b.vy * ny;
-            // swap normal components (equal masses)
-            const dvn = vb_n - va_n;
-            a.vx += dvn * nx;
-            a.vy += dvn * ny;
-            b.vx -= dvn * nx;
-            b.vy -= dvn * ny;
-            // tiny tangential randomization to prevent locking
-            const jitter = 0.05;
-            const tx = -ny, ty = nx;
-            a.vx += (Math.random() - 0.5) * jitter * tx;
-            a.vy += (Math.random() - 0.5) * jitter * ty;
-            b.vx += (Math.random() - 0.5) * jitter * tx;
-            b.vy += (Math.random() - 0.5) * jitter * ty;
-          }
-        }
-      }
-
-      // Compose frame
-      // 1) copy trails buffer to main
       ctx.clearRect(0, 0, width, height);
       ctx.fillStyle = background;
       ctx.fillRect(0, 0, width, height);
-      ctx.globalCompositeOperation = "lighter";
+
       ctx.drawImage(trail, 0, 0);
-      ctx.globalCompositeOperation = "source-over";
+      drawElectronsMain(ctx, arr);
+      drawElectronsTrail(tctx, arr);
 
-      // 2) lattice
-      drawLattice(ctx);
-
-      // 3) electrons (also paint trails buffer for next frame)
-      drawElectrons(ctx, arr);
-      drawElectrons(tctx, arr);
-
-      // 4) E vector glyph
-      drawEVector(ctx);
+      const d = dragRef.current;
+      if (d) {
+        ctx.save();
+        ctx.strokeStyle = "rgba(255,255,255,0.9)";
+        ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.moveTo(d.x0, d.y0); ctx.lineTo(d.x1, d.y1); ctx.stroke();
+        const ang = Math.atan2(d.y1 - d.y0, d.x1 - d.x0);
+        const ah = 8;
+        ctx.beginPath();
+        ctx.moveTo(d.x1, d.y1);
+        ctx.lineTo(d.x1 - ah * Math.cos(ang - 0.35), d.y1 - ah * Math.sin(ang - 0.35));
+        ctx.lineTo(d.x1 - ah * Math.cos(ang + 0.35), d.y1 - ah * Math.sin(ang + 0.35));
+        ctx.closePath(); ctx.fillStyle = "rgba(255,255,255,0.9)"; ctx.fill();
+        ctx.restore();
+      }
 
       rafId = requestAnimationFrame(step);
     };
 
     rafId = requestAnimationFrame(step);
     return () => cancelAnimationFrame(rafId);
-  }, [running, E, tauL, eeStrength, width, height, background]);
+  }, [running, E, tauL, width, height, background]);
 
-  // UI Handlers
-  const onDragE = (evt) => {
-    const rect = evt.currentTarget.getBoundingClientRect();
-    const x = clamp(evt.clientX - rect.left, 0, rect.width);
-    const y = clamp(evt.clientY - rect.top, 0, rect.height);
-    const ex = (x / rect.width - 0.5) * 1000;  // tune range
-    const ey = (y / rect.height - 0.5) * 1000;
+  const setEFromDrag = (dx, dy) => {
+    let ex = dx * E_FROM_DRAG;
+    let ey = dy * E_FROM_DRAG;
+    const m = Math.hypot(ex, ey);
+    if (m > MAX_E) { const k = MAX_E / m; ex *= k; ey *= k; }
     setE({ x: ex, y: ey });
   };
 
+  const onDown = (evt) => {
+    const rect = evt.currentTarget.getBoundingClientRect();
+    const x = clamp(evt.clientX - rect.left, 0, rect.width);
+    const y = clamp(evt.clientY - rect.top, 0, rect.height);
+    dragRef.current = { x0: x, y0: y, x1: x, y1: y };
+  };
+  const onMove = (evt) => {
+    if (!dragRef.current) return;
+    const rect = evt.currentTarget.getBoundingClientRect();
+    const x = clamp(evt.clientX - rect.left, 0, rect.width);
+    const y = clamp(evt.clientY - rect.top, 0, rect.height);
+    dragRef.current.x1 = x; dragRef.current.y1 = y;
+    setEFromDrag(x - dragRef.current.x0, y - dragRef.current.y0);
+  };
+  const onUp = () => { dragRef.current = null; };
+  const onLeave = () => { dragRef.current = null; };
+
   return (
-    <div style={{ width, margin: "0 auto", color: "#e8f1ff", fontFamily: "Inter, system-ui, sans-serif" }}>
-      <div style={{ position: "relative", borderRadius: 16, overflow: "hidden", boxShadow: "0 12px 36px rgba(0,0,0,0.45)" }}>
-        {/* Trails layer (accumulates) */}
-        <canvas ref={trailRef} width={width} height={height} style={{ position: "absolute", left: 0, top: 0 }} />
-        {/* Main frame */}
-        <canvas ref={canvasRef} width={width} height={height} style={{ display: "block" }} />
+    <div style={{ position: "relative", width, margin: "0 auto", color: "#e7eef7" }}>
+      <div
+        style={{ position: "relative", width, height, borderRadius: 12, overflow: "hidden", boxShadow: "0 4px 22px rgba(0,0,0,0.35)" }}
+        onMouseDown={onDown}
+        onMouseMove={onMove}
+        onMouseUp={onUp}
+        onMouseLeave={onLeave}
+        onTouchStart={(e) => { const t = e.touches[0]; if(!t) return; const rect = e.currentTarget.getBoundingClientRect(); const x=t.clientX-rect.left, y=t.clientY-rect.top; dragRef.current={x0:x,y0:y,x1:x,y1:y}; }}
+        onTouchMove={(e) => { const t = e.touches[0]; if(!t||!dragRef.current) return; const rect = e.currentTarget.getBoundingClientRect(); const x=t.clientX-rect.left, y=t.clientY-rect.top; dragRef.current.x1=x; dragRef.current.y1=y; setEFromDrag(x-dragRef.current.x0, y-dragRef.current.y0); }}
+        onTouchEnd={onUp}
+      >
+        <canvas ref={canvasRef} width={width} height={height} style={{ display: "block", width: "100%", height: "100%" }} />
+        <canvas ref={trailRef} width={width} height={height} style={{ position: "absolute", inset: 0, pointerEvents: "none" }} />
 
-        {/* Minimal HUD */}
-        <div style={{ position: "absolute", left: 12, top: 10, display: "flex", gap: 12, alignItems: "center", background: "rgba(12,16,24,0.5)", padding: "8px 10px", borderRadius: 10, backdropFilter: "blur(6px)", border: "1px solid rgba(130,180,250,0.15)" }}>
-          <button
-            onClick={() => setRunning(r => !r)}
-            style={{
-              background: running ? "#10b981" : "#ef4444",
-              color: "white",
-              border: "none",
-              borderRadius: 8,
-              padding: "6px 10px",
-              cursor: "pointer",
-              fontWeight: 600,
-            }}
-          >{running ? "Pause" : "Play"}</button>
-
-          <button
-            onClick={reseed}
-            style={{ background: "#0ea5e9", color: "white", border: "none", borderRadius: 8, padding: "6px 10px", cursor: "pointer", fontWeight: 600 }}
-          >Reseed</button>
+        {/* Controls */}
+        <div style={{ position: "absolute", left: 12, top: 12, display: "flex", gap: 10, alignItems: "center", background: "rgba(12,20,28,0.35)", padding: "8px 10px", borderRadius: 10, backdropFilter: "blur(6px)" }}>
+          <button onClick={() => setRunning(r => !r)} style={{ background: running ? "#0b7" : "#444", color: "white", border: "none", borderRadius: 8, padding: "6px 10px", cursor: "pointer", fontWeight: 600 }}>{running ? "Pause" : "Play"}</button>
+          <button onClick={reseed} style={{ background: "#0ea5e9", color: "white", border: "none", borderRadius: 8, padding: "6px 10px", cursor: "pointer", fontWeight: 600 }}>Reseed</button>
 
           <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <span style={{ opacity: 0.85 }}>τ<sub>L</sub></span>
-            <input type="range" min={0.08} max={0.8} step={0.02} value={tauL}
-              onChange={(e) => setTauL(parseFloat(e.target.value))}
-            />
+            <input type="range" min={0.08} max={0.8} step={0.01} value={tauL} onChange={(e) => setTauL(parseFloat(e.target.value))} />
           </label>
-
-          
         </div>
-
-        {/* Drag area to set E vector */}
-        <div
-          onMouseDown={onDragE}
-          onMouseMove={(e) => e.buttons === 1 && onDragE(e)}
-          title="Drag here to set E"
-          style={{ position: "absolute", right: 12, top: 12, width: 160, height: 120, borderRadius: 12, border: "1px dashed rgba(125,211,252,0.35)", cursor: "crosshair", background: "rgba(12,20,28,0.35)", backdropFilter: "blur(6px)" }}
-        />
-
-        {/* Footer gloss */}
-        
       </div>
-      <p style={{ marginTop: 0, fontSize: 13, opacity: 0.8 }}>
-        Tip: click+drag in the top-right panel to set the electric field direction/magnitude. Use τ<sub>L</sub> to control lattice scattering.
+      <p style={{ marginTop: 6, fontSize: 13, opacity: 0.8 }}>
+        Tip: click and drag anywhere to set the electric field (arrow = direction, length = strength).
       </p>
     </div>
   );

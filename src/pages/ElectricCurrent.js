@@ -50,8 +50,7 @@ export default function ElectricCurrent() {
           <h2>Microscopic picture of conduction</h2>
           <p>
             In the classical Drude model, metals host a dense gas of conduction electrons that ricochet off the ionic lattice. Each collision resets an
-            electron&apos;s random thermal velocity, but a net electric field biases the motion to produce a slight drift.
-            The interactive below shows that drift emerging from repeated collisions.
+            electron&apos;s random thermal velocity, but a net electric field biases the motion to produce a slight drift.  Click and drag below to set the field direction and strength.
           </p>
 
           <ElectronGas />
