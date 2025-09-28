@@ -3,8 +3,9 @@ import React from "react";
 import { MathJax, MathJaxContext } from "better-react-mathjax";
 import HiddenQuestion from "../components/shared/HiddenQuestion";
 import ElectronGas from "../components/electricity/ElectronGas";
-import SeriesCircuitExplorer from "../components/electricity/SeriesCircuitExplorer";
+import SeriesParallelPlayground from "../components/electricity/SeriesParallelPlayground";
 import HiddenExposition from "../components/HiddenExposition";
+
 
 export default function ElectricCurrent() {
   return (
@@ -122,12 +123,17 @@ export default function ElectricCurrent() {
 
           <h2>Macroscopic circuits</h2>
           <p>
-            Circuit components are macroscopic guides for the electric field. Batteries set potential differences, resistors limit
-            current, and loads like lamps turn electrical energy into light or heat. Ohm&apos;s law applied to each component can be used
-            to predict how much current flows through each branch of the circuit.
+            Circuit components act as macroscopic guides for the electric field.  If you imagine following a single charge carrier throughout the circuit,
+            the corresponding potential energy changes as it moves with or against the field.  Rather than considering the finer details of the field, it is simpler
+            to track the potential differences across components.
+          </p>
+          <p>
+            A battery or power supply provides a potential difference that ultimately drives current through the circuit.  Resistors, light bulbs, and other components
+            limit and direct the flow of current; they have a corresponding drop in electric potential. Ohm&apos;s law applied to each component can be use to find the various potential differences, 
+            as well as predict how much current flows through each branch of the circuit.
           </p>
 
-        
+          <SeriesParallelPlayground />
 
           <h2>Practice</h2>
           <div className="exposition-list">
@@ -136,15 +142,30 @@ export default function ElectricCurrent() {
                 <span>
                   A copper wire <MathJax inline>{" \\( 0.10 \\)"}</MathJax> m long and
                   <MathJax inline>{" \\( 1.0\\,\\text{mm}^2 \\)"}</MathJax> in cross-sectional area carries an electric field of
-                  <MathJax inline>{" \\( 1.2\\times 10^4 \\)"}</MathJax> V/m. Estimate the drift speed if
+                  <MathJax inline>{" \\( 2.0 \\)"}</MathJax> V/m. Estimate the drift speed if
                   <MathJax inline>{" \\( \\tau = 2.5\\times10^{-14}\\,\\text{s} \\)"}</MathJax>.
                 </span>
               }
             >
               <MathJax>{`
-                The drift speed follows \\( v_d = -\\frac{e E \\tau}{m_e}. \\)
-                Using \\( e = 1.60\\times10^{-19}\\,\\text{C} \\) and \\( m_e = 9.11\\times10^{-31}\\,\\text{kg} \\)
-                gives \\( |v_d| = 1.60\\times10^{-19} \\cdot 1.2\\times10^{4} \\cdot 2.5\\times10^{-14} / 9.11\\times10^{-31} \\approx 0.53\\,\\text{mm/s}. \\)
+                The drift speed follows \\( v_d = \\frac{e E \\tau}{m_e}. \\)
+                Using \\( e = 1.60\\times10^{-19}\\,\\text{C} \\) and \\( m_e = 9.11\\times10^{-31}\\,\\text{kg} \\) gives
+                \\( v_d = \\frac{1.60\\times10^{-19} \\cdot 2.0 \\cdot 2.5\\times10^{-14}}{9.11\\times10^{-31}} \\approx 8.8\\times10^{-3}\\,\\text{m/s}. \\)
+              `}</MathJax>
+            </HiddenQuestion>
+
+            <HiddenQuestion
+              title={
+                <span>
+                  Copper has a conductivity of <MathJax inline>{" \\( 5.8\\times10^7\\,\\text{S/m} \\)"}</MathJax>.  Find the resistance of the above piece of wire, and estimate
+                  the current using the given electric field and Ohm's Law.
+                </span>
+              }
+            >
+              <MathJax>{`
+                The resistance is \\( R = \\frac{L}{\\sigma A} = \\frac{0.10}{5.8\\times10^7 \\cdot 1.0\\times10^{-6}} \\approx 1.7\\times10^{-3}\\,\\Omega. \\)
+                The potential difference is \\( \\Delta V = EL = 2.0 \\cdot 0.10 = 0.20\\,\\text{V} \\) so the current is
+                \\( I = \\frac{\\Delta V}{R} = \\frac{0.20}{1.7\\times10^{-3}} \\approx 120\\,\\text{A}. \\)    
               `}</MathJax>
             </HiddenQuestion>
 

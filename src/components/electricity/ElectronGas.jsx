@@ -21,7 +21,7 @@ const Q_OVER_M = 1.0;     // q/m in sim units; scales acceleration from E
 const BASE_SPEED = 60;    // initial thermal speed (px/s, sim units)
 const ELECTRON_RADIUS = 2.0;
 const EE_RADIUS = 9;      // proximity for e–e scatter (px)
-const TRAIL_DECAY = 0.08; // lower = longer trails
+const TRAIL_DECAY = 0.1; // lower = longer trails
 const LATTICE_SPACING = 28; // px
 const LATTICE_DISORDER = 0.25; // fraction of spacing for random offset
 
@@ -31,7 +31,7 @@ const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
 export default function ElectronGas({
   width = 900,
   height = 540,
-  density = 0.00065, // electrons per pixel
+  density = 0.00055, // electrons per pixel
   initialE = { x: 300, y: 0 }, // px/s^2 in sim units
   background = "#081018",
 }) {
