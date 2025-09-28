@@ -1,89 +1,51 @@
 import React, { useRef, useEffect, useMemo, useState } from "react";
 
-// ElectronGasDrude.jsx (v2)
-// Visual-first Drude-like electron gas with e–lattice and e–e scattering,
-// constant uniform E accelerating between collisions, PLUS physical readouts
-// (drift speed, current density, conductivity/resistivity) with copper/resistor modes.
+// ElectronGasDrude.jsx
+// Visually appealing Drude-like electron gas with e–e and lattice scattering
+// — focus: smooth animation, glow, trails, and an obvious E-field acceleration.
+// Physics (coarse):
+//   • Between collisions: dv/dt = (q/m) E  (constant E here)
+//   • Lattice scattering: Poisson process with mean time tauL, randomize direction
+//   • Electron–electron scattering: short-range elastic-style swaps via spatial hashing
+//   • Toroidal boundaries (wrap) so flow is continuous across edges
 //
-// Notes
-// - The particle animation is illustrative; readouts come from Drude relations using
-//   material parameters per mode, not from particle velocities.
-// - "Scattering (visual) τ_L" controls how often particles randomize direction in the
-//   canvas; it does not directly set the physical τ used in readouts.
+// Notes for future iterations:
+//   – Replace tauL slider with something more tangible (mean free path; mobility)
+//   – Add temperature/phonon visualization by jittering lattice nodes & changing color
+//   – Show drift-velocity readout and current density estimates
+//   – Hook into your app's UI components; here we only render a minimal control bar
 
-// ===================== Physical constants & helpers =====================
-const ELECTRON_CHARGE = 1.602176634e-19; // C
-const ELECTRON_MASS = 9.1093837015e-31;  // kg (effective mass assumed = m_e)
-
-// Material presets
-const MATERIALS = {
-  copper: {
-    label: "Copper",
-    n: 8.5e28,           // electrons per m^3 (≈ one per atom)
-    tau: 2.5e-14,        // s (room temp order-of-magnitude)
-    mEff: ELECTRON_MASS,
-    tint: 205,           // bluish hue used for electrons
-  },
-  resistor: {
-    label: "Resistor (nichrome-like)",
-    n: 1.0e28,           // lower free carrier density
-    tau: 3.0e-15,        // shorter relaxation time (higher resistivity)
-    mEff: ELECTRON_MASS,
-    tint: 205,
-  },
-};
-
-// Map from simulation E (px/s^2) to physical E (V/m).
-// The user drags in a small box giving |E_sim| ~ 0..~110. Choose 100 V/m per sim unit so
-// typical values land in 0..~1e4 V/m, realistic for bulk conductors.
-const E_SCALE_V_PER_M_PER_SIM = 100; // V/m per (px/s^2)
-
-// ===================== Visual tuning =====================
-const TAU_L_DEFAULT = 0.35; // mean time between visual lattice collisions (sim sec)
-const TAU_EE = 0.12;        // characteristic e–e scattering time (sim sec)
-const Q_OVER_M_SIM = 1.0;   // q/m factor in sim units (accel from E)
-const BASE_SPEED = 60;      // initial thermal speed (px/s)
+const TAU_DEFAULT = 0.35; // mean time between lattice collisions (s, sim units)
+const TAU_EE = 0.12;      // characteristic e–e scattering time (soft)
+const Q_OVER_M = 1.0;     // q/m in sim units; scales acceleration from E
+const BASE_SPEED = 60;    // initial thermal speed (px/s, sim units)
 const ELECTRON_RADIUS = 2.0;
-const EE_RADIUS = 9;        // px proximity for e–e scatter
-const TRAIL_DECAY = 0.08;   // lower = longer trails
+const EE_RADIUS = 9;      // proximity for e–e scatter (px)
+const TRAIL_DECAY = 0.08; // lower = longer trails
 const LATTICE_SPACING = 28; // px
-const LATTICE_DISORDER = 0.25; // fraction of spacing for static jitter
+const LATTICE_DISORDER = 0.25; // fraction of spacing for random offset
 
+// Utility
 const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
 
-export default function ElectronGasDrude({
+export default function ElectronGas({
   width = 900,
   height = 540,
-  density = 0.00065, // electrons per pixel for visuals
-  initialE = { x: 60, y: 0 }, // px/s^2 (sim)
+  density = 0.00065, // electrons per pixel
+  initialE = { x: 300, y: 0 }, // px/s^2 in sim units
   background = "#081018",
 }) {
   const canvasRef = useRef(null);
   const trailRef = useRef(null);
   const [running, setRunning] = useState(true);
-  const [E, setE] = useState(initialE);     // sim units
-  const [tauL, setTauL] = useState(TAU_L_DEFAULT); // visual lattice scattering
-  const [mode, setMode] = useState("copper");
-
-  // e–e strength fixed high by default (requested)
-  const eeStrength = 1.5;
-
-  const material = MATERIALS[mode];
-  const { n, tau, mEff, tint } = material;
-
-  // Physical readouts (Drude)
-  const E_mag_sim = Math.hypot(E.x, E.y);
-  const E_phys = E_mag_sim * E_SCALE_V_PER_M_PER_SIM;        // V/m
-  const mu = (ELECTRON_CHARGE * tau) / mEff;                  // mobility (m^2/V·s)
-  const v_d = mu * E_phys;                                    // drift speed (m/s)
-  const sigma = n * ELECTRON_CHARGE * ELECTRON_CHARGE * tau / mEff; // S/m
-  const resistivity = 1 / sigma;                              // Ω·m
-  const J = n * ELECTRON_CHARGE * v_d;                        // A/m^2 (magnitude)
+  const [E, setE] = useState(initialE);
+  const [tauL, setTauL] = useState(TAU_DEFAULT);
+  const [eeStrength, setEeStrength] = useState(1.0);
 
   // Derived counts
   const N = useMemo(() => Math.max(30, Math.floor(width * height * density)), [width, height, density]);
 
-  // Pseudo-hex lattice (with static disorder)
+  // Build a pseudo-hex lattice (with gentle disorder)
   const lattice = useMemo(() => {
     const pts = [];
     const dx = LATTICE_SPACING;
@@ -95,6 +57,7 @@ export default function ElectronGasDrude({
         const ox = (j % 2) * (dx * 0.5);
         let x = i * dx + ox;
         let y = j * dy;
+        // subtle static disorder to hint at phonons/imperfections
         x += (Math.random() - 0.5) * dx * LATTICE_DISORDER;
         y += (Math.random() - 0.5) * dx * LATTICE_DISORDER;
         if (x >= -20 && x <= width + 20 && y >= -20 && y <= height + 20) {
@@ -105,11 +68,11 @@ export default function ElectronGasDrude({
     return pts;
   }, [width, height]);
 
-  // Particles
+  // Particles state
   const electronsRef = useRef([]);
   const lastTimeRef = useRef(null);
 
-  // Spatial hash
+  // Spatial hash for e–e interactions
   const cellSize = EE_RADIUS * 1.25;
   const gridRef = useRef(new Map());
 
@@ -122,22 +85,26 @@ export default function ElectronGasDrude({
         y: Math.random() * height,
         vx: Math.cos(angle) * speed,
         vy: Math.sin(angle) * speed,
-        tSinceL: Math.random() * tauL,
-        hue: tint + Math.random() * 20,
+        tSinceL: Math.random() * tauL, // stagger lattice-collision clocks
+        hue: 190 + Math.random() * 30, // bluish
       };
     });
     electronsRef.current = arr;
   };
 
+  // Build/clear trail buffer
   useEffect(() => {
     reseed();
     const trail = trailRef.current;
-    if (trail) trail.getContext("2d").clearRect(0, 0, width, height);
+    if (trail) {
+      const tctx = trail.getContext("2d");
+      tctx.clearRect(0, 0, width, height);
+    }
     lastTimeRef.current = null;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [width, height, N, mode]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [width, height, N]);
 
-  // Spatial hashing helpers
+  // Helpers for spatial hashing
   const keyFor = (x, y) => `${Math.floor(x / cellSize)}_${Math.floor(y / cellSize)}`;
   const buildGrid = (arr) => {
     const grid = new Map();
@@ -150,7 +117,7 @@ export default function ElectronGasDrude({
     gridRef.current = grid;
   };
 
-  // Drawing
+  // Draw helpers
   const drawLattice = (ctx) => {
     ctx.save();
     for (const { x, y } of lattice) {
@@ -173,18 +140,19 @@ export default function ElectronGasDrude({
   const drawEVector = (ctx) => {
     const cx = width - 140;
     const cy = 70;
-    const ex = E.x * 0.7;
+    const ex = E.x * 0.7; // scale for glyph
     const ey = E.y * 0.7;
     const len = Math.hypot(ex, ey);
     ctx.save();
     ctx.translate(cx, cy);
-    ctx.strokeStyle = "#7dd3fc";
+    ctx.strokeStyle = "#7dd3fc"; // cyan-ish
     ctx.lineWidth = 3;
     ctx.globalAlpha = 0.9;
     ctx.beginPath();
     ctx.moveTo(0, 0);
     ctx.lineTo(ex, ey);
     ctx.stroke();
+    // arrowhead
     if (len > 0.001) {
       const nx = ex / len;
       const ny = ey / len;
@@ -198,7 +166,7 @@ export default function ElectronGasDrude({
     }
     ctx.font = "12px Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif";
     ctx.fillStyle = "#a8dadc";
-    ctx.fillText("E-field (drag)", -22, -12);
+    ctx.fillText("E-field", -10, -12);
     ctx.restore();
   };
 
@@ -206,6 +174,7 @@ export default function ElectronGasDrude({
     ctx.save();
     for (const p of arr) {
       const r = ELECTRON_RADIUS;
+      // soft glow
       const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, r * 5);
       g.addColorStop(0, `hsla(${p.hue}, 90%, 70%, 0.9)`);
       g.addColorStop(0.4, `hsla(${p.hue}, 90%, 60%, 0.35)`);
@@ -223,7 +192,7 @@ export default function ElectronGasDrude({
     ctx.restore();
   };
 
-  // Animation loop
+  // Main animation loop
   useEffect(() => {
     const canvas = canvasRef.current;
     const trail = trailRef.current;
@@ -241,8 +210,8 @@ export default function ElectronGasDrude({
         return;
       }
       const last = lastTimeRef.current == null ? t : lastTimeRef.current;
-      let dt = (t - last) / 1000;
-      dt = clamp(dt, 0, 0.05);
+      let dt = (t - last) / 1000; // seconds
+      dt = clamp(dt, 0, 0.05); // clamp to avoid huge jumps
       lastTimeRef.current = t;
 
       const arr = electronsRef.current;
@@ -251,45 +220,47 @@ export default function ElectronGasDrude({
       tctx.fillStyle = `rgba(8,16,24,${TRAIL_DECAY})`;
       tctx.fillRect(0, 0, width, height);
 
-      // Advance particles under E, scatter off lattice, then e–e
+      // Advance particles
       for (let i = 0; i < arr.length; i++) {
         const p = arr[i];
 
-        // Acceleration by E between collisions (sim units)
-        p.vx += Q_OVER_M_SIM * E.x * dt;
-        p.vy += Q_OVER_M_SIM * E.y * dt;
+        // Acceleration by E between collisions
+        p.vx += Q_OVER_M * E.x * dt;
+        p.vy += Q_OVER_M * E.y * dt;
 
-        // Lattice scattering (Poisson)
+        // Lattice scattering as Poisson process
         p.tSinceL += dt;
         const collideNow = Math.random() < 1 - Math.exp(-p.tSinceL / tauL);
         if (collideNow) {
           const speed = Math.hypot(p.vx, p.vy);
+          // randomize direction; preserve some speed (slight energy exchange)
           const th = Math.random() * Math.PI * 2;
           const keep = 0.85 + 0.1 * Math.random();
           p.vx = keep * speed * Math.cos(th);
           p.vy = keep * speed * Math.sin(th);
           p.tSinceL = 0;
-          p.hue = tint + Math.random() * 20;
+          p.hue = 190 + Math.random() * 30; // twinkle a bit on collisions
         }
 
-        // Integrate
+        // Integrate position
         p.x += p.vx * dt;
         p.y += p.vy * dt;
 
-        // Toroidal wrap
+        // Toroidal boundary conditions
         if (p.x < 0) p.x += width; else if (p.x >= width) p.x -= width;
         if (p.y < 0) p.y += height; else if (p.y >= height) p.y -= height;
       }
 
-      // e–e scattering (soft, local) — fixed high strength
+      // Electron–electron scattering (soft, local)
       buildGrid(arr);
       const eeRate = 1 - Math.exp(-dt / TAU_EE);
-      if (eeRate > 0) {
+      if (eeStrength > 0 && eeRate > 0) {
         for (let i = 0; i < arr.length; i++) {
           if (Math.random() > eeRate * eeStrength) continue;
           const a = arr[i];
           const kx = Math.floor(a.x / cellSize);
           const ky = Math.floor(a.y / cellSize);
+          // search 3x3 neighboring cells
           let partner = -1;
           for (let gx = kx - 1; gx <= kx + 1 && partner < 0; gx++) {
             for (let gy = ky - 1; gy <= ky + 1 && partner < 0; gy++) {
@@ -300,7 +271,8 @@ export default function ElectronGasDrude({
                 const b = arr[j];
                 const dx = b.x - a.x;
                 const dy = b.y - a.y;
-                if (dx * dx + dy * dy < EE_RADIUS * EE_RADIUS) {
+                const d2 = dx * dx + dy * dy;
+                if (d2 < EE_RADIUS * EE_RADIUS) {
                   partner = j;
                   break;
                 }
@@ -308,7 +280,8 @@ export default function ElectronGasDrude({
             }
           }
           if (partner >= 0) {
-            const b = electronsRef.current[partner];
+            // Simple elastic-like exchange along the normal
+            const b = arr[partner];
             const dx = b.x - a.x;
             const dy = b.y - a.y;
             const d = Math.hypot(dx, dy) || 1;
@@ -316,10 +289,15 @@ export default function ElectronGasDrude({
             const ny = dy / d;
             const va_n = a.vx * nx + a.vy * ny;
             const vb_n = b.vx * nx + b.vy * ny;
-            const dvn = vb_n - va_n; // swap normal components
-            a.vx += dvn * nx; a.vy += dvn * ny;
-            b.vx -= dvn * nx; b.vy -= dvn * ny;
-            const jitter = 0.05; const tx = -ny, ty = nx;
+            // swap normal components (equal masses)
+            const dvn = vb_n - va_n;
+            a.vx += dvn * nx;
+            a.vy += dvn * ny;
+            b.vx -= dvn * nx;
+            b.vy -= dvn * ny;
+            // tiny tangential randomization to prevent locking
+            const jitter = 0.05;
+            const tx = -ny, ty = nx;
             a.vx += (Math.random() - 0.5) * jitter * tx;
             a.vy += (Math.random() - 0.5) * jitter * ty;
             b.vx += (Math.random() - 0.5) * jitter * tx;
@@ -329,15 +307,22 @@ export default function ElectronGasDrude({
       }
 
       // Compose frame
+      // 1) copy trails buffer to main
       ctx.clearRect(0, 0, width, height);
       ctx.fillStyle = background;
       ctx.fillRect(0, 0, width, height);
       ctx.globalCompositeOperation = "lighter";
       ctx.drawImage(trail, 0, 0);
       ctx.globalCompositeOperation = "source-over";
+
+      // 2) lattice
       drawLattice(ctx);
+
+      // 3) electrons (also paint trails buffer for next frame)
       drawElectrons(ctx, arr);
       drawElectrons(tctx, arr);
+
+      // 4) E vector glyph
       drawEVector(ctx);
 
       rafId = requestAnimationFrame(step);
@@ -345,28 +330,27 @@ export default function ElectronGasDrude({
 
     rafId = requestAnimationFrame(step);
     return () => cancelAnimationFrame(rafId);
-  }, [running, E, tauL, eeStrength, width, height, background, tint]);
+  }, [running, E, tauL, eeStrength, width, height, background]);
 
-  // UI: drag to set E
+  // UI Handlers
   const onDragE = (evt) => {
     const rect = evt.currentTarget.getBoundingClientRect();
     const x = clamp(evt.clientX - rect.left, 0, rect.width);
     const y = clamp(evt.clientY - rect.top, 0, rect.height);
-    const ex = (x / rect.width - 0.5) * 220;
-    const ey = (y / rect.height - 0.5) * 220;
+    const ex = (x / rect.width - 0.5) * 1000;  // tune range
+    const ey = (y / rect.height - 0.5) * 1000;
     setE({ x: ex, y: ey });
   };
-
-  // Pretty formatting
-  const fmt = (x, unit) => `${x.toExponential(2)} ${unit}`;
 
   return (
     <div style={{ width, margin: "0 auto", color: "#e8f1ff", fontFamily: "Inter, system-ui, sans-serif" }}>
       <div style={{ position: "relative", borderRadius: 16, overflow: "hidden", boxShadow: "0 12px 36px rgba(0,0,0,0.45)" }}>
+        {/* Trails layer (accumulates) */}
         <canvas ref={trailRef} width={width} height={height} style={{ position: "absolute", left: 0, top: 0 }} />
+        {/* Main frame */}
         <canvas ref={canvasRef} width={width} height={height} style={{ display: "block" }} />
 
-        {/* Control bar */}
+        {/* Minimal HUD */}
         <div style={{ position: "absolute", left: 12, top: 10, display: "flex", gap: 12, alignItems: "center", background: "rgba(12,16,24,0.5)", padding: "8px 10px", borderRadius: 10, backdropFilter: "blur(6px)", border: "1px solid rgba(130,180,250,0.15)" }}>
           <button
             onClick={() => setRunning(r => !r)}
@@ -381,23 +365,22 @@ export default function ElectronGasDrude({
             }}
           >{running ? "Pause" : "Play"}</button>
 
-          <button onClick={reseed} style={{ background: "#0ea5e9", color: "white", border: "none", borderRadius: 8, padding: "6px 10px", cursor: "pointer", fontWeight: 600 }}>Reseed</button>
+          <button
+            onClick={reseed}
+            style={{ background: "#0ea5e9", color: "white", border: "none", borderRadius: 8, padding: "6px 10px", cursor: "pointer", fontWeight: 600 }}
+          >Reseed</button>
 
           <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={{ opacity: 0.85 }}>Scattering (visual) τ<sub>L</sub></span>
+            <span style={{ opacity: 0.85 }}>τ<sub>L</sub></span>
             <input type="range" min={0.08} max={0.8} step={0.02} value={tauL}
               onChange={(e) => setTauL(parseFloat(e.target.value))}
             />
           </label>
 
-          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <span style={{ opacity: 0.85 }}>Mode:</span>
-            <button onClick={() => setMode("copper")} style={{ padding: "6px 10px", borderRadius: 8, border: mode === "copper" ? "2px solid #93c5fd" : "1px solid rgba(255,255,255,0.2)", background: "rgba(14,20,28,0.4)", color: "#e8f1ff", cursor: "pointer" }}>Copper</button>
-            <button onClick={() => setMode("resistor")} style={{ padding: "6px 10px", borderRadius: 8, border: mode === "resistor" ? "2px solid #93c5fd" : "1px solid rgba(255,255,255,0.2)", background: "rgba(14,20,28,0.4)", color: "#e8f1ff", cursor: "pointer" }}>Resistor</button>
-          </div>
+          
         </div>
 
-        {/* Drag area to set E */}
+        {/* Drag area to set E vector */}
         <div
           onMouseDown={onDragE}
           onMouseMove={(e) => e.buttons === 1 && onDragE(e)}
@@ -405,22 +388,11 @@ export default function ElectronGasDrude({
           style={{ position: "absolute", right: 12, top: 12, width: 160, height: 120, borderRadius: 12, border: "1px dashed rgba(125,211,252,0.35)", cursor: "crosshair", background: "rgba(12,20,28,0.35)", backdropFilter: "blur(6px)" }}
         />
 
-        {/* Readouts panel */}
-        <div style={{ position: "absolute", left: 12, bottom: 12, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, background: "rgba(12,16,24,0.5)", padding: "10px 12px", borderRadius: 12, border: "1px solid rgba(130,180,250,0.15)", backdropFilter: "blur(6px)", fontSize: 12, lineHeight: 1.35 }}>
-          <div style={{ gridColumn: "1 / -1", opacity: 0.9, marginBottom: 4 }}>
-            <strong>{MATERIALS[mode].label}</strong> • n = {fmt(n, "m^-3")} • τ = {fmt(tau, "s")}
-          </div>
-          <div>E = {fmt(E_phys, "V/m")}</div>
-          <div>μ = {fmt(mu, "m^2/(V·s)")}</div>
-          <div>Drift speed |v_d| = {fmt(v_d, "m/s")}</div>
-          <div>Current density |J| = {fmt(J, "A/m^2")}</div>
-          <div>σ = {fmt(sigma, "S/m")}</div>
-          <div>ρ = {fmt(resistivity, "Ω·m")}</div>
-          <div>Electrons (visual): {N}</div>
-        </div>
+        {/* Footer gloss */}
+        
       </div>
-      <p style={{ marginTop: 10, fontSize: 13, opacity: 0.8 }}>
-        Tip: click+drag in the top-right panel to set the electric field. Mode switches material parameters used in readouts. The visual scattering slider affects the look but not the computed conductivity.
+      <p style={{ marginTop: 0, fontSize: 13, opacity: 0.8 }}>
+        Tip: click+drag in the top-right panel to set the electric field direction/magnitude. Use τ<sub>L</sub> to control lattice scattering.
       </p>
     </div>
   );

@@ -325,10 +325,9 @@ function drawHawks(ctx) {
         <h1 ref={titleRef} style={{ fontSize: 48, margin: 0, transition: "transform 0.05s linear" }}>Welcome to the Physics Nook</h1>
         <p style={{ fontSize: 18, opacity: 0.9, marginTop: 8 }}>Explore interactive simulations for a variety of topics.</p>
         <div style={{ marginTop: 16, display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
-          <Link to="/kinematics2" style={{ padding: "10px 14px", borderRadius: 12, background: "#1f2937", color: "white", textDecoration: "none" }}>2D Kinematics</Link>
+          <Link to="/forces" style={{ padding: "10px 14px", borderRadius: 12, background: "#1f2937", color: "white", textDecoration: "none" }}>Forces</Link>
           <Link to="/vectors" style={{ padding: "10px 14px", borderRadius: 12, background: "#1f2937", color: "white", textDecoration: "none" }}>Vectors</Link>
-          <Link to="/electric-potential" style={{ padding: "10px 14px", borderRadius: 12, background: "#1f2937", color: "white", textDecoration: "none" }}>Electric Potential</Link>
-          <Link to="/electric-circuits" style={{ padding: "10px 14px", borderRadius: 12, background: "#1f2937", color: "white", textDecoration: "none" }}>Electric Circuits</Link>
+          <Link to="/electric-current" style={{ padding: "10px 14px", borderRadius: 12, background: "#1f2937", color: "white", textDecoration: "none" }}>Electric Current</Link>
         </div>
       </div>
     </div>

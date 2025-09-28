@@ -2,9 +2,9 @@
 import React from "react";
 import { MathJax, MathJaxContext } from "better-react-mathjax";
 import HiddenQuestion from "../components/shared/HiddenQuestion";
-import StickFigureForcesDemo from "../components/mechanics/StickFigureForcesDemo";
-import SimplePlatformer from "../components/mechanics/SimplePlatformer";
+
 import Platformer from "../components/mechanics/Platformer";
+import Platformer2 from "../components/mechanics/Platformer2";
 
 export default function Forces() {
   return (
@@ -57,7 +57,7 @@ export default function Forces() {
               The forces on these blocks can be tricky to visualize, especially frictional forces.  The interactive below allows you to apply forces to a block and see how it responds.  You can also see the free-body diagram of the block, which shows all the forces acting on it.
           </p>
 
-          <Platformer />
+          <Platformer2 />
 
           <h2>Practice</h2>
           <div className="exposition-list">
