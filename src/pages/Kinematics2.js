@@ -1,10 +1,12 @@
 // src/pages/Kinematics2D.js
 import React, { useState } from "react";
+import { Link } from "react-router-dom";
 import { MathJax, MathJaxContext } from "better-react-mathjax";
 import Kinematics2DGame from "../components/Kinematics2DGame"; 
 import ProjectileLauncher from "../components/ProjectileLauncher";
 import LaunchDecomposition from "../components/LaunchDecomposition";
-import HiddenExposition from "../components/HiddenExposition";
+import HiddenExposition from "../components/shared/HiddenExposition";
+import HiddenQuestion from "../components/shared/HiddenQuestion";
 
 const Kinematics2D = () => {
   const [showAnswer1, setShowAnswer1] = useState(false);
@@ -20,8 +22,8 @@ const Kinematics2D = () => {
 
           <h2>Introduction</h2>
           <p>
-            In two dimensions, motion is described using vectors. Position, velocity,
-            and acceleration each have both <strong>x</strong> and <strong>y</strong> components.  Common scenarios that require a 2D description include projectiles, cars on banked curves, and orbits of planets.
+            In two dimensions, motion is described using <Link to="/vectors">vectors</Link>. Position, velocity,
+            and acceleration each have both <strong>x</strong> and <strong>y</strong> components.  Scenarios that require a 2D description include projectiles, cars on banked curves, and orbits of planets.
           </p>
 
           <h2>Key Concepts</h2>
@@ -83,7 +85,7 @@ const Kinematics2D = () => {
             <p>
               The speed is the magnitude of the velocity vector:
             </p>
-            <MathJax>{"\\[ |\\vec{v}| = \\sqrt{v_x^2 + v_y^2} = \\sqrt{(3)^2 + (8)^2} =\\approx 8.54 \\,\\frac{\\text{m}}{\\text{s}} \\]"}</MathJax>
+            <MathJax>{"\\[ |\\vec{v}| = \\sqrt{v_x^2 + v_y^2} = \\sqrt{(3)^2 + (8)^2} \\approx 8.54 \\,\\frac{\\text{m}}{\\text{s}} \\]"}</MathJax>
             <p>
               So the boat is moving at approximately 8.5 m/s at that instant.
             </p>
@@ -130,69 +132,50 @@ const Kinematics2D = () => {
           </p>
           <Kinematics2DGame />
 
-          <h2>Practice Problems</h2>
-          <ol className="mathjax-list">
-            <li
-              onClick={() => setShowAnswer1(s => !s)}
-              style={{ cursor: "pointer", fontWeight: "600", color: "#222" }}
-            >
-              A soccer ball is kicked at 20 m/s at an angle of 30°. What are the initial velocity components?
-            </li>
-            {showAnswer1 && (
-              <p>
-                Initial components:{" "}
-                <MathJax inline>{"\\( v_{0x} = v_0 \\cos \\theta = 20 \\cos 30^\\circ \\approx 17.3 \\,\\text{m/s} \\)"}</MathJax>,{" "}
-                <MathJax inline>{"\\( v_{0y} = v_0 \\sin \\theta = 20 \\sin 30^\\circ = 10 \\,\\text{m/s} \\)"}</MathJax>.
-              </p>
-            )}
+          <h2>Practice</h2>
+<div className="exposition-list">
+  <HiddenQuestion
+    title={
+      <span>
+        A soccer ball is kicked at 20 m/s at an angle of 30°. What are the initial velocity components?
+      </span>
+    }
+  >
+    <MathJax>{`
+      Initial components: 
+      \\( v_{0x} = v_0 \\cos\\theta = 20\\cos 30^\\circ \\approx 17.3\\,\\text{m/s} \\), 
 
-            <li
-              onClick={() => setShowAnswer2(s => !s)}
-              style={{ cursor: "pointer", fontWeight: "600", color: "#222" }}
-            >
-              How long will it take the ball to reach its maximum height?
-            </li>
-            {showAnswer2 && (
-              <p>
-                The vertical velocity becomes zero at max height:{" "}
-                <MathJax inline>{"\\( 0 = v_{0y} - g t \\)"}</MathJax> so{" "}
-                <MathJax inline>{"\\( t = v_{0y}/g = 10/9.8 \\approx 1.02 \\,\\text{s} \\)"}</MathJax>. 
-              </p>
-            )}
+      \\( v_{0y} = v_0 \\sin\\theta = 20\\sin 30^\\circ = 10\\,\\text{m/s} \\).
+    `}</MathJax>
+    
+  </HiddenQuestion>
 
-            <li
-              onClick={() => setShowAnswer3(s => !s)}
-              style={{ cursor: "pointer", fontWeight: "600", color: "#222" }}
-            >
-              What is the total flight time until the ball lands (same height as launch)?
-            </li>
-            {showAnswer3 && (
-              <p>
-                The total time is double the time to max height:{" "}
-                <MathJax inline>{"\\( T = 2 t = 2.04 \\,\\text{s} \\)"}</MathJax>.
-                This can also be found by solving{" "}
-                <MathJax inline>{"\\( 0 = v_{0y} T - \\tfrac{1}{2} g T^2 \\)"}</MathJax> for{" "}
-                <MathJax inline>{"\\( T \\)"}</MathJax>.
-              </p>
-            )}
+  <HiddenQuestion
+    title={<span>How long will it take the ball to reach its maximum height?</span>}
+  >
+    <MathJax>{`
+      At max height, \\( v_y=0 \\): \\( 0 = v_{0y} - g t \\Rightarrow t = v_{0y}/g = 10/9.8 \\approx 1.02\\,\\text{s}. \\)
+    `}</MathJax>
+  </HiddenQuestion>
 
-            <li
-              onClick={() => setShowAnswer4(s => !s)}
-              style={{ cursor: "pointer", fontWeight: "600", color: "#222" }}
-            >
-              What is the horizontal range of the ball?
-            </li>
-            {showAnswer4 && (
-              <p>
-                The horizontal range is{" "}
-                <MathJax inline>{"\\( R = v_{0x} T = 17.3 \\times 2.04 \\approx 35.3 \\,\\text{m} \\)"}</MathJax>.
-              </p>
-            )}            
-            <li>
-            </li>
+  <HiddenQuestion
+    title={<span>What is the total time the ball spends in the air, assuming the field is flat?</span>}
+  >
+    <MathJax>{`
+      Symmetry gives \\( T = 2t \\approx 2.04\\,\\text{s} \\).
+      Equivalently, solve \\( 0 = v_{0y}T - \\tfrac{1}{2} g T^2 \\) for \\( T \\).
+    `}</MathJax>
+  </HiddenQuestion>
 
-          </ol>
-        </div>
+  <HiddenQuestion
+    title={<span>What is the horizontal range of the ball?</span>}
+  >
+    <MathJax>{`
+      \\( R = v_{0x} T = 17.3 \\times 2.04 \\approx 35.3\\,\\text{m}. \\)
+    `}</MathJax>
+  </HiddenQuestion>
+</div>
+</div>
       </MathJaxContext>
     </div>
   );

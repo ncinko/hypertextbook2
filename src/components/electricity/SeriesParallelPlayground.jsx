@@ -140,7 +140,8 @@ export default function SeriesParallelPlayground({ width = 940, height = 580 }) 
           <path d={`M ${xSplitR} ${yB} H ${xRight}`} style={{ strokeDasharray: sIB ? dash : "none", strokeDashoffset: sIB ? phase(IB, +1) : 0, opacity: wireOpacity(IB) }} />
 
           {/* Right vertical feeder to bottom return */}
-          <path d={`M ${xRight} ${yA} V ${yBottom}`} style={{ strokeDasharray: sIAB ? dash : "none", strokeDashoffset: sIAB ? phase(IA + IB, +1) : 0, opacity: wireOpacity(IA + IB) }} />
+          <path d={`M ${xRight} ${yA} V ${yB}`} style={{ strokeDasharray: sIA ? dash : "none", strokeDashoffset: sIA ? phase(IA, +1) : 0, opacity: wireOpacity(IA) }} />
+          <path d={`M ${xRight} ${yB} V ${yBottom}`} style={{ strokeDasharray: sIAB ? dash : "none", strokeDashoffset: sIAB ? phase(IA + IB, +1) : 0, opacity: wireOpacity(IA + IB) }} />
 
           {/* Bottom return to battery (right to left) */}
           <path d={`M ${xRight} ${yBottom} H ${xBatt}`} style={{ strokeDasharray: sI ? dash : "none", strokeDashoffset: sI ? phase(I, +1) : 0, opacity: wireOpacity(I) }} />
