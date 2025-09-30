@@ -190,7 +190,7 @@ g.addColorStop(1.0, `hsla(${p.hue}, 90%, 60%, 0)`);
     let ey = dy * E_FROM_DRAG;
     const m = Math.hypot(ex, ey);
     if (m > MAX_E) { const k = MAX_E / m; ex *= k; ey *= k; }
-    setE({ x: ex, y: ey });
+    setE({ x: -ex, y: -ey });
   };
 
   const onDown = (evt) => {
