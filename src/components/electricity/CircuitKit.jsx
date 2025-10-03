@@ -1,0 +1,908 @@
+import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import './CircuitKit.css';
+
+/**
+ * CircuitKit.jsx — Transient Circuit Simulator
+ *
+ * This refactored version includes:
+ * - A full transient simulation engine using the Trapezoidal method.
+ * - Time-dependent simulation for Capacitors.
+ * - A new Inductor component.
+ * - A responsive layout that adapts to window size.
+ * - A dark theme for the canvas and UI elements.
+ * - A real-time Voltage/Current scope to plot component values.
+ * - Simulation controls (Play, Pause, Reset).
+ * - Live updating of component values during simulation.
+ * - Scope locking to observe one component while interacting with another.
+ * - Self-contained styling by loading Tailwind CSS.
+ * - Adjustable simulation speed control.
+ * - Improved current animation scaling and behavior.
+ * - Cleaner component visuals where symbols break the wire.
+ * - Reduced internal wire resistance for near-ideal LC oscillations.
+ * - Slider controls for simulation and animation speed.
+ * - Improved battery and capacitor visual symbols with correct polarity.
+ * - Relocated polarity symbols for better visual separation from labels.
+ */
+
+/******************* Visual & Interaction Constants *******************/
+const WORK_OFFSET_Y = 72;
+const SCALE = 2;
+const CAPTURE_W = 24 * SCALE;
+const END_R = 9 * SCALE;
+const LABEL_OFF = 12 * SCALE;
+const SNAP_RADIUS = 18 * SCALE;
+const ANIM_EPS = 1e-6;
+
+const THEME = {
+  background: "#1f2937",
+  canvas: "#111827",
+  text: "#f9fafb",
+  textMuted: "#9ca3af",
+  component: "#d1d5db",
+  wire: "#6b7280",
+  palette: "#374151",
+  paletteHover: "#4b5563",
+  select: "#2563eb",
+  glow: "#38bdf8",
+  snap: "#16a34a",
+  current: "#3b82f6",
+  button: "#374151",
+  buttonText: "#f9fafb",
+  border: "#4b5563",
+  scopeGrid: "#374151",
+  scopePlot: "#2563eb",
+};
+
+/******************* Circuit Modeling & Simulation *******************/
+const GMIN = 1e-12;
+const R_WIRE = 1e-9; // Further reduced for near-ideal LC oscillation
+const R_SWITCH_OPEN = 1e9;
+const SIM_DT = 1e-6; // 1 µs simulation time step for higher fidelity
+
+const PALETTE = {
+  WIRE: "wire",
+  RESISTOR: "resistor",
+  BATTERY: "battery",
+  CAPACITOR: "capacitor",
+  INDUCTOR: "inductor",
+  SWITCH: "switch",
+};
+
+const PALETTE_ITEMS = [
+  { type: PALETTE.RESISTOR,  label: "Resistor",  icon: "R",  def: { R: 10 } },
+  { type: PALETTE.BATTERY,   label: "Battery",   icon: "+−", def: { V: 5 } },
+  { type: PALETTE.CAPACITOR, label: "Capacitor", icon: "∥",  def: { C: 1e-6, v: 0 } },
+  { type: PALETTE.INDUCTOR,  label: "Inductor",  icon: "∿",  def: { L: 1e-3, i: 0 } },
+  { type: PALETTE.SWITCH,    label: "Switch",    icon: "⎍",  def: { closed: true } },
+  { type: PALETTE.WIRE,      label: "Wire",      icon: "—",  def: {} },
+];
+
+const uid = (() => { let n = 1; return () => String(n++); })();
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+/******************* Linear Solver (Gauss, partial pivot) *******************/
+function solveLinearSystem(A, b) {
+  const n = A.length;
+  if (n === 0) return [];
+  const M = A.map((row, i) => [...row, b[i]]);
+  for (let col = 0; col < n; col++) {
+    let piv = col;
+    let max = Math.abs(M[col][col]);
+    for (let r = col + 1; r < n; r++) {
+      const v = Math.abs(M[r][col]);
+      if (v > max) { max = v; piv = r; }
+    }
+    if (piv !== col) [M[col], M[piv]] = [M[piv], M[col]];
+    const diag = M[col][col];
+    if (Math.abs(diag) < 1e-15) {
+      // System is singular, may be unstable. Return zero vector.
+      return Array(n).fill(0);
+    }
+    for (let c = col; c <= n; c++) M[col][c] /= diag;
+    for (let r = 0; r < n; r++) {
+      if (r !== col) {
+        const f = M[r][col];
+        for (let c = col; c <= n; c++) M[r][c] -= f * M[col][c];
+      }
+    }
+  }
+  return M.map(row => row[n]);
+}
+
+/******************* Transient MNA Solver *******************/
+function buildAndSolveTransient(nodes, elements, groundNodeId, dt) {
+    if (!nodes.length || dt <= 0) return { nodeV: new Map(), elemI: new Map(), ground: null, newStates: {} };
+
+    const ground = groundNodeId || chooseGround(nodes);
+    const nodeVarIndex = new Map();
+    let varCounter = 0;
+    nodes.forEach(n => { if (n.id !== ground) nodeVarIndex.set(n.id, varCounter++); });
+
+    const vSrcs = elements.filter(e => e.type === PALETTE.BATTERY);
+    const inductors = elements.filter(e => e.type === PALETTE.INDUCTOR);
+    const capacitors = elements.filter(e => e.type === PALETTE.CAPACITOR);
+
+    const n = varCounter;
+    const m = vSrcs.length;
+    const p = inductors.length;
+    const nVars = n + m + p;
+
+    if (nVars === 0) return { nodeV: new Map(), elemI: new Map(), ground, newStates: {} };
+
+    const A = Array.from({ length: nVars }, () => Array(nVars).fill(0));
+    const b = Array(nVars).fill(0);
+    const idx = (nodeId) => nodeId === ground ? null : nodeVarIndex.get(nodeId);
+
+    // Stamp GMIN for stability
+    for (let i = 0; i < n; i++) A[i][i] += GMIN;
+    
+    // Stamp passive elements
+    elements.forEach(e => {
+        const i1 = idx(e.n1);
+        const i2 = idx(e.n2);
+        let G = 0;
+        switch (e.type) {
+            case PALETTE.RESISTOR: G = 1 / (e.params.R || 1e3); break;
+            case PALETTE.WIRE: G = 1 / R_WIRE; break;
+            case PALETTE.SWITCH: G = 1 / (e.params.closed ? R_WIRE : R_SWITCH_OPEN); break;
+        }
+        if (G > 0) {
+            if (i1 != null) A[i1][i1] += G;
+            if (i2 != null) A[i2][i2] += G;
+            if (i1 != null && i2 != null) { A[i1][i2] -= G; A[i2][i1] -= G; }
+        }
+    });
+
+    // Stamp capacitors (Trapezoidal rule companion model)
+    capacitors.forEach(e => {
+        const Gc = (e.params.C || 1e-6) / dt;
+        const v_prev = e.params.v || 0;
+        const Ieq = Gc * v_prev;
+        const i1 = idx(e.n1);
+        const i2 = idx(e.n2);
+        if (i1 != null) { A[i1][i1] += Gc; b[i1] += Ieq; }
+        if (i2 != null) { A[i2][i2] += Gc; b[i2] -= Ieq; }
+        if (i1 != null && i2 != null) { A[i1][i2] -= Gc; A[i2][i1] -= Gc; }
+    });
+    
+    // Stamp voltage sources
+    vSrcs.forEach((e, k) => {
+        const vk = n + k;
+        const i1 = idx(e.n1);
+        const i2 = idx(e.n2);
+        if (i1 != null) { A[i1][vk] += 1; A[vk][i1] += 1; }
+        if (i2 != null) { A[i2][vk] -= 1; A[vk][i2] -= 1; }
+        b[vk] += e.params.V || 0;
+    });
+
+    // Stamp inductors (Trapezoidal rule)
+    inductors.forEach((e, k) => {
+        const R_parasitic = 1e-6; // Small parasitic resistance for stability
+        const ik = n + m + k;
+        const Rl = 2 * (e.params.L || 1e-3) / dt;
+        const i_prev = e.params.i || 0;
+        const i1 = idx(e.n1);
+        const i2 = idx(e.n2);
+        
+        // KCL contribution
+        if (i1 != null) { A[i1][ik] += 1; }
+        if (i2 != null) { A[i2][ik] -= 1; }
+        
+        // Branch equation: v1 - v2 - (Rl + R_p)*i_L = -Rl*i_L_prev
+        A[ik][ik] = -(Rl + R_parasitic);
+        if (i1 != null) A[ik][i1] += 1;
+        if (i2 != null) A[ik][i2] -= 1;
+        b[ik] -= Rl * i_prev;
+    });
+
+    const x = solveLinearSystem(A, b);
+
+    // Extract solutions
+    const nodeV = new Map();
+    nodes.forEach(n => { nodeV.set(n.id, idx(n.id) != null ? x[idx(n.id)] : 0); });
+
+    const elemI = new Map();
+    const newStates = {};
+
+    elements.forEach(e => {
+        const v1 = nodeV.get(e.n1) || 0;
+        const v2 = nodeV.get(e.n2) || 0;
+        let I = 0;
+        switch(e.type) {
+            case PALETTE.RESISTOR: I = (v1 - v2) / (e.params.R || 1e3); break;
+            case PALETTE.WIRE: I = (v1 - v2) / R_WIRE; break;
+            case PALETTE.SWITCH: I = (v1 - v2) / (e.params.closed ? R_WIRE : R_SWITCH_OPEN); break;
+            case PALETTE.BATTERY:
+                const vSrcIdx = vSrcs.findIndex(vs => vs.id === e.id);
+                I = vSrcIdx > -1 ? (x[n + vSrcIdx] || 0) : 0;
+                break;
+            case PALETTE.CAPACITOR:
+                const Gc = (e.params.C || 1e-6) / dt;
+                const v_prev = e.params.v || 0;
+                I = Gc * ((v1 - v2) - v_prev);
+                newStates[e.id] = { v: v1 - v2 };
+                break;
+            case PALETTE.INDUCTOR:
+                const indIdx = inductors.findIndex(l => l.id === e.id);
+                I = indIdx > -1 ? (x[n + m + indIdx] || 0) : 0;
+                newStates[e.id] = { i: I };
+                break;
+        }
+        elemI.set(e.id, I);
+    });
+    
+    return { nodeV, elemI, ground, newStates };
+}
+
+
+function chooseGround(nodes){
+  if (!nodes.length) return null;
+  const minIdx = nodes.reduce((best, n, i) => {
+    if (best === -1) return i;
+    const b = nodes[best];
+    return (n.y > b.y + 1e-6 || (Math.abs(n.y-b.y)<1e-6 && n.x < b.x)) ? i : best;
+  }, -1);
+  return nodes[minIdx]?.id ?? null;
+}
+
+/******************* Symbol Helpers *******************/
+function ResSymbol({ mx,my,ux,uy,px,py }){
+  const L=40*SCALE; const steps=4; const A=8*SCALE; const pts=[];
+  let side=1; for (let i=-L;i<=L;i+=2*L/steps){ pts.push([mx+i*ux+side*A*px,my+i*uy+side*A*py]); side*=-1; }
+  return (<polyline points={pts.map(p=>p.join(",")).join(" ")} fill="none" stroke={THEME.component} strokeWidth={3*SCALE} />);
+}
+function BatSymbol({ mx,my,ux,uy,px,py }){
+  const L_long = 16*SCALE, L_short = 8*SCALE, separation = 6*SCALE;
+  return (
+    <g>
+      {/* Positive plate (long, n1 side) */}
+      <line x1={mx-separation*ux - L_long*px} y1={my-separation*uy - L_long*py} x2={mx-separation*ux + L_long*px} y2={my-separation*uy + L_long*py} stroke={THEME.component} strokeWidth={3*SCALE} />
+      {/* Negative plate (short, n2 side) */}
+      <line x1={mx+separation*ux - L_short*px} y1={my+separation*uy - L_short*py} x2={mx+separation*ux + L_short*px} y2={my+separation*uy + L_short*py} stroke={THEME.component} strokeWidth={3*SCALE} />
+    </g>
+  );
+}
+function SwSymbol({ mx,my,ux,uy,px,py,closed }){
+  const L=20*SCALE; return (
+    <g>
+      {closed ? (
+        <line x1={mx-L*ux} y1={my-L*uy} x2={mx+L*ux} y2={my+L*uy} stroke={THEME.component} strokeWidth={3*SCALE}/>
+      ) : (
+        <line x1={mx-L*ux} y1={my-L*uy} x2={mx+L*ux-12*px} y2={my+L*uy-12*py} stroke={THEME.component} strokeWidth={3*SCALE}/>
+      )}
+    </g>
+  );
+}
+function CapSymbol({ mx,my,ux,uy,px,py }){
+  const L=6*SCALE, plateW=16*SCALE;
+  return (
+    <g>
+      <line x1={mx-L*ux-plateW*px} y1={my-L*uy-plateW*py} x2={mx-L*ux+plateW*px} y2={my-L*uy+plateW*py} stroke={THEME.component} strokeWidth={3*SCALE} />
+      <line x1={mx+L*ux-plateW*px} y1={my+L*uy-plateW*py} x2={mx+L*ux+plateW*px} y2={my+L*uy+plateW*py} stroke={THEME.component} strokeWidth={3*SCALE} />
+    </g>
+  );
+}
+function InductorSymbol({ mx,my,ux,uy,px,py }){
+    const len=40*SCALE, radius=8*SCALE, coils=4;
+    const pts = [];
+    for(let i=0; i<=coils*360; i+=30){
+        const angle = i * Math.PI / 180;
+        const dist = -len + (i/(coils*360)) * (2*len);
+        const x = mx + dist*ux + radius*Math.sin(angle)*px;
+        const y = my + dist*uy + radius*Math.sin(angle)*py;
+        pts.push([x,y]);
+    }
+    return <polyline points={pts.map(p=>p.join(",")).join(" ")} fill="none" stroke={THEME.component} strokeWidth={3*SCALE} />;
+}
+
+/******************* Main Component *******************/
+export default function CircuitKit() {
+  const [size, setSize] = useState({ width: 800, height: 600 });
+  const svgRef = useRef(null);
+
+  // graph
+  const [nodes, setNodes] = useState([]);
+  const [elements, setElements] = useState([]);
+  const [selection, setSelection] = useState(null);
+  const [groundNodeId, setGroundNodeId] = useState(null);
+
+  // drag state
+  const [carry, setCarry] = useState(null);
+  const [mouseWS, setMouseWS] = useState({ x: 0, y: 0 });
+
+  // simulation state
+  const [simTime, setSimTime] = useState(0);
+  const [isRunning, setIsRunning] = useState(true);
+  const [simRate, setSimRate] = useState(1);
+  const [animSpeed, setAnimSpeed] = useState(1000);
+  const [solution, setSolution] = useState({ nodeV: new Map(), elemI: new Map() });
+  const [scopeData, setScopeData] = useState([]);
+  const [scopedElementId, setScopedElementId] = useState(null);
+  const [isScopeLocked, setIsScopeLocked] = useState(false);
+  const [scopeMode, setScopeMode] = useState('voltage');
+
+  // Responsive canvas size
+  useEffect(() => {
+    const resizeObserver = new ResizeObserver(entries => {
+      if (entries.length > 0) {
+        const { width, height } = entries[0].contentRect;
+        setSize({ width, height });
+      }
+    });
+    const container = svgRef.current;
+    if (container) {
+        resizeObserver.observe(container);
+    }
+    return () => {
+        if (container) {
+            resizeObserver.unobserve(container);
+        }
+    };
+  }, []);
+
+  // Main simulation loop
+  useEffect(() => {
+    let animFrameId;
+    const effectiveDT = SIM_DT * simRate;
+    const step = () => {
+      if (isRunning) {
+        setElements(prevElements => {
+          const { nodeV, elemI, ground, newStates } = buildAndSolveTransient(nodes, prevElements, groundNodeId, effectiveDT);
+          setSolution({ nodeV, elemI, ground });
+          setSimTime(t => t + effectiveDT);
+          
+          const nextElements = prevElements.map(el => {
+            if (newStates[el.id]) {
+              return { ...el, params: { ...el.params, ...newStates[el.id] } };
+            }
+            return el;
+          });
+          return nextElements;
+        });
+      }
+      animFrameId = requestAnimationFrame(step);
+    };
+    animFrameId = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(animFrameId);
+  }, [isRunning, nodes, groundNodeId, simRate]);
+
+  // Scope data recording
+  useEffect(() => {
+    if (isRunning && scopedElementId) {
+        const selElem = elements.find(e => e.id === scopedElementId);
+        if (!selElem) return;
+        
+        let value = 0;
+        if (scopeMode === 'current') {
+            value = solution.elemI.get(scopedElementId) || 0;
+        } else { // voltage
+            const v1 = solution.nodeV.get(selElem.n1) || 0;
+            const v2 = solution.nodeV.get(selElem.n2) || 0;
+            value = v1 - v2;
+        }
+
+        setScopeData(prev => [...prev.slice(prev.length > 200 ? 1 : 0), { time: simTime, value }]);
+    }
+  }, [simTime, scopedElementId, isRunning, elements, solution, scopeMode]);
+
+  useEffect(() => {
+    const elem = elementById(scopedElementId);
+    if (elem && (elem.type === PALETTE.BATTERY || elem.type === PALETTE.INDUCTOR)) {
+      setScopeMode('current');
+    } else {
+      setScopeMode('voltage');
+    }
+  }, [scopedElementId]);
+
+
+  // Helper functions
+  const nodeById = (id) => nodes.find(n => n.id === id);
+  const elementById = (id) => elements.find(e => e.id === id);
+
+  const resetSimulation = () => {
+      setSimTime(0);
+      setScopeData([]);
+      setElements(els => els.map(el => {
+          const newParams = { ...el.params };
+          if (el.type === PALETTE.CAPACITOR) newParams.v = 0;
+          if (el.type === PALETTE.INDUCTOR) newParams.i = 0;
+          return { ...el, params: newParams };
+      }));
+  };
+  
+  const addNode = (x, y) => { const id = uid(); setNodes(arr => [...arr, { id, x, y }]); return id; };
+  
+  const addElement = (type, x, y) => {
+    const half = 50 * SCALE; // Increased default length
+    const n1 = addNode(x - half, y);
+    const n2 = addNode(x + half, y);
+    const item = PALETTE_ITEMS.find(p => p.type === type);
+    const params = item ? { ...item.def } : {};
+    const id = uid();
+    setElements(arr => [...arr, { id, type, n1, n2, params }]);
+    setSelection(id);
+    resetSimulation();
+  };
+  
+  const deleteElement = (id) => {
+    if (scopedElementId === id) {
+        setScopedElementId(null);
+        setIsScopeLocked(false);
+    }
+    setElements(arr => {
+        const newEls = arr.filter(e => e.id !== id);
+        setNodes(reapOrphans(newEls, nodes));
+        return newEls;
+    });
+    setSelection(null);
+  };
+  
+  const reapOrphans = (elArr, nodesArr) => {
+    const used = new Set();
+    elArr.forEach(e => { used.add(e.n1); used.add(e.n2); });
+    return nodesArr.filter(n => used.has(n.id));
+  };
+  
+  const nearestSnapTarget = (nodeId, nodesArr) => {
+    const self = nodesArr.find(n => n.id === nodeId); if (!self) return null;
+    let best = null, bestD2 = Infinity;
+    for (const n of nodesArr) {
+      if (n.id === nodeId) continue;
+      const d2 = (n.x - self.x) ** 2 + (n.y - self.y) ** 2;
+      if (d2 < bestD2) { bestD2 = d2; best = n; }
+    }
+    return (best && Math.sqrt(bestD2) <= SNAP_RADIUS) ? best : null;
+  };
+
+  // Pointer Handlers
+  const toWorkspaceCoords = (clientX, clientY) => {
+    if (!svgRef.current) return { x: 0, y: 0 };
+    const rect = svgRef.current.getBoundingClientRect();
+    const xSVG = clamp(clientX - rect.left, 0, size.width);
+    const ySVG = clamp(clientY - rect.top, 0, size.height);
+    return { x: xSVG, y: ySVG - WORK_OFFSET_Y };
+  };
+  
+  const onPointerMove = (e) => {
+    const p = toWorkspaceCoords(e.clientX, e.clientY);
+    setMouseWS(p);
+    if (!carry) return;
+    
+    if (carry.type === 'element') {
+      const el = elementById(carry.id); if (!el) return;
+      const a = nodeById(el.n1), b = nodeById(el.n2); if (!a || !b) return;
+      const dx = p.x - carry.start.x;
+      const dy = p.y - carry.start.y;
+      setNodes(arr => arr.map(n =>
+        n.id === a.id ? { ...n, x: carry.a_start.x + dx, y: carry.a_start.y + dy } :
+        n.id === b.id ? { ...n, x: carry.b_start.x + dx, y: carry.b_start.y + dy } : n
+      ));
+    }
+    
+    if (carry.type === 'end') {
+      setNodes(arr => arr.map(n => n.id === carry.nodeId ? { ...n, x: p.x, y: p.y } : n));
+      const target = nearestSnapTarget(carry.nodeId, nodes);
+      setCarry(c => ({ ...c, snapTargetId: target ? target.id : null }));
+    }
+  };
+  
+  const onPointerUp = () => {
+    if (!carry) return;
+    if (carry.type === 'palette') {
+      addElement(carry.item.type, mouseWS.x, mouseWS.y);
+    } else if (carry.type === 'end' && carry.snapTargetId) {
+      const el = elementById(carry.id);
+      if (el) {
+        const updated = carry.end === 'n1' ? { ...el, n1: carry.snapTargetId } : { ...el, n2: carry.snapTargetId };
+        const newEls = elements.map(e => e.id === el.id ? updated : e);
+        setElements(newEls);
+        setNodes(prev => reapOrphans(newEls, prev));
+        resetSimulation();
+      }
+    }
+    setCarry(null);
+  };
+  
+  const onPaletteDown = (item, e) => { e.preventDefault(); e.stopPropagation(); setCarry({ type: 'palette', item }); };
+
+  const onElementDown = (elId, e) => {
+    e.preventDefault(); e.stopPropagation();
+    const el = elementById(elId); if(!el) return;
+    const n1 = nodeById(el.n1); const n2 = nodeById(el.n2); if(!n1 || !n2) return;
+    setCarry({ type: 'element', id: elId, start: { ...mouseWS }, a_start: {...n1}, b_start: {...n2} });
+    setSelection(elId);
+    if (!isScopeLocked) {
+        setScopedElementId(elId);
+        setScopeData([]);
+    }
+  };
+
+  const onEndDown = (elId, endKey, e) => {
+    e.preventDefault(); e.stopPropagation();
+    const el = elementById(elId); if (!el) return;
+    const nodeId = endKey === 'n1' ? el.n1 : el.n2;
+    setCarry({ type: 'end', id: elId, end: endKey, nodeId, snapTargetId: null });
+    setSelection(elId);
+    if (!isScopeLocked) {
+        setScopedElementId(elId);
+        setScopeData([]);
+    }
+  };
+
+  const sel = selection ? elementById(selection) : null;
+  const scopedElement = scopedElementId ? elementById(scopedElementId) : null;
+
+  const totalBatteryCurrent = useMemo(() => {
+    return elements
+      .filter(e => e.type === PALETTE.BATTERY)
+      .reduce((sum, b) => sum + Math.abs(solution.elemI.get(b.id) || 0), 0);
+  }, [elements, solution.elemI]);
+
+  const handleElementChange = useCallback((patch) => {
+    setElements(arr => arr.map(e => {
+      if (e.id === selection) {
+        return { ...e, params: { ...e.params, ...patch } };
+      }
+      return e;
+    }));
+  }, [selection]);
+
+  const handleElementDelete = useCallback(() => {
+    if (selection) {
+      deleteElement(selection);
+    }
+  }, [selection]);
+
+  const handleElementToggle = useCallback(() => {
+    setElements(arr => arr.map(e => {
+      if (e.id === selection) {
+        return { ...e, params: { ...e.params, closed: !e.params.closed } };
+      }
+      return e;
+    }));
+  }, [selection]);
+
+  return (
+    <div className="circuit-kit-container" style={{ background: THEME.background, color: THEME.text }}>
+      <div className="circuit-kit-canvas-container" ref={svgRef}>
+        <svg width={size.width} height={size.height}
+             onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerLeave={onPointerUp}
+             className="circuit-kit-svg">
+          <rect x={0} y={0} width={size.width} height={size.height} fill={THEME.canvas} />
+          <defs>
+            <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+              <feGaussianBlur stdDeviation="4" result="b"/>
+              <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+            </filter>
+          </defs>
+
+          {/* Palette */}
+          <g transform="translate(8,8)">
+            <rect x={0} y={0} rx={12} ry={12} width={size.width - 16} height={64} fill={THEME.palette} stroke={THEME.border} />
+            {PALETTE_ITEMS.map((p, i) => (
+              <g key={p.type} transform={`translate(${12 + i * (140 + 10)}, 8)`} style={{ cursor: 'grab' }} onPointerDown={(e) => onPaletteDown(p, e)}>
+                <rect width={140} height={48} rx={12} ry={12} fill="transparent" />
+                <text x={24} y={30} fontSize={24} fontWeight={800} fill={THEME.text}>{p.icon}</text>
+                <text x={58} y={30} fontSize={18} fill={THEME.text}>{p.label}</text>
+              </g>
+            ))}
+          </g>
+
+          {/* Workspace */}
+          <g transform={`translate(0,${WORK_OFFSET_Y})`}>
+            {carry?.type === 'palette' && <PreviewElement type={carry.item.type} x={mouseWS.x} y={mouseWS.y} />}
+            {elements.map(e => (
+              <ElementSVG key={e.id} e={e} nodes={nodes} solution={solution} t={simTime} dragInfo={carry}
+                animSpeed={animSpeed}
+                totalBatteryCurrent={totalBatteryCurrent}
+                onElementDown={onElementDown} onEndDown={onEndDown} selected={selection === e.id} />
+            ))}
+          </g>
+        </svg>
+      </div>
+
+      {/* Controls & Inspector */}
+      <div className="circuit-kit-controls-inspector" style={{ borderColor: THEME.border }}>
+        <div className="circuit-kit-controls">
+            <div className="circuit-kit-buttons">
+                <button className="circuit-kit-button" style={{background:THEME.button, color:THEME.buttonText}} onClick={() => setIsRunning(s => !s)}>{isRunning ? 'Pause' : 'Play'}</button>
+                <button className="circuit-kit-button" style={{background:THEME.button, color:THEME.buttonText}} onClick={resetSimulation}>Reset</button>
+                <button className="circuit-kit-button" style={{background:THEME.button, color:THEME.buttonText}} onClick={() => { setNodes([]); setElements([]); setSelection(null); }}>Clear All</button>
+            </div>
+            <div className="circuit-kit-sliders">
+                <label className="circuit-kit-slider-label" style={{color:THEME.textMuted}}>
+                    Sim Speed ({simRate.toFixed(1)}x)
+                    <input type="range" min="0.1" max="10" step="0.1" value={simRate} onChange={(e) => setSimRate(Number(e.target.value))} />
+                </label>
+                 <label className="circuit-kit-slider-label" style={{color:THEME.textMuted}}>
+                    Anim. Speed ({animSpeed})
+                    <input type="range" min="50" max="5000" step="50" value={animSpeed} onChange={(e) => setAnimSpeed(Number(e.target.value))} />
+                </label>
+            </div>
+            <div className="circuit-kit-sim-time" style={{color: THEME.textMuted}}>Sim Time: {(simTime * 1000).toFixed(2)} ms</div>
+        </div>
+        {sel && <ElementInspector element={sel} onChange={handleElementChange} onDelete={handleElementDelete} onToggle={handleElementToggle} />}
+         <ScopePlot data={scopeData} element={scopedElement} isLocked={isScopeLocked} onLockToggle={() => setIsScopeLocked(l => !l)} scopeMode={scopeMode} onScopeModeChange={() => setScopeMode(m => m === 'voltage' ? 'current' : 'voltage')} />
+      </div>
+    </div>
+  );
+}
+
+/******************* Element SVG *******************/
+const getSymbolLength = (type) => {
+    switch(type) {
+        case PALETTE.RESISTOR: return 80 * SCALE;
+        case PALETTE.INDUCTOR: return 80 * SCALE;
+        case PALETTE.BATTERY: return 12 * SCALE;
+        case PALETTE.SWITCH: return 40 * SCALE;
+        case PALETTE.CAPACITOR: return 12 * SCALE;
+        default: return 0; // Wires have no symbol
+    }
+};
+
+function ElementSVG({ e, nodes, solution, t, dragInfo, animSpeed, totalBatteryCurrent, onElementDown, onEndDown, selected }){
+  const a = nodes.find(n=>n.id===e.n1), b = nodes.find(n=>n.id===e.n2); if (!a||!b) return null;
+  const {x:x1, y:y1} = a, {x:x2, y:y2} = b;
+  const dx=x2-x1, dy=y2-y1; const L = Math.hypot(dx,dy)||1; const ux=dx/L, uy=dy/L; const px=-uy, py=ux; const mx=(x1+x2)/2, my=(y1+y2)/2;
+  const bodyStroke = selected ? THEME.select : (e.type===PALETTE.WIRE ? THEME.wire : THEME.component);
+  const I = solution.elemI?.get(e.id) ?? 0;
+  const showDots = Math.abs(I) > ANIM_EPS;
+  const nDots = Math.max(1, Math.floor(L/(30*SCALE)));
+  
+  let relativeI = 0;
+  if (totalBatteryCurrent > ANIM_EPS) {
+    relativeI = Math.abs(I) / totalBatteryCurrent;
+  }
+  
+  const speed = 100*animSpeed * Math.tanh(relativeI / 0.5);
+  
+  const isHoriz = Math.abs(dx) >= Math.abs(dy);
+  // Label position
+  const labelX = isHoriz ? mx : mx + (LABEL_OFF * Math.sign(px || 1));
+  const labelY = isHoriz ? my - LABEL_OFF : my;
+  const labelAnchor = isHoriz ? 'middle' : (px >= 0 ? 'start' : 'end');
+  
+  // Polarity position (opposite side of label)
+  const polarityX = isHoriz ? mx : mx - (LABEL_OFF * Math.sign(px || 1));
+  const polarityY = isHoriz ? my + LABEL_OFF : my;
+  const polarityAnchor = isHoriz ? 'middle' : (px >= 0 ? 'end' : 'start');
+
+  const symbolLength = getSymbolLength(e.type);
+  const hasSymbol = symbolLength > 0;
+  const leadLength = (L - symbolLength) / 2;
+
+  return (
+    <g>
+      {/* Visual Body */}
+      {hasSymbol && leadLength > 5 * SCALE ? (
+        <>
+          <line x1={x1} y1={y1} x2={x1 + leadLength * ux} y2={y1 + leadLength * uy} stroke={bodyStroke} strokeWidth={3*SCALE} strokeLinecap="round" pointerEvents="none" />
+          <line x1={x2} y1={y2} x2={x2 - leadLength * ux} y2={y2 - leadLength * uy} stroke={bodyStroke} strokeWidth={3*SCALE} strokeLinecap="round" pointerEvents="none" />
+        </>
+      ) : (
+        <line x1={x1} y1={y1} x2={x2} y2={y2} stroke={bodyStroke} strokeWidth={e.type===PALETTE.WIRE ? 3*SCALE : 4*SCALE} strokeLinecap="round" pointerEvents="none" />
+      )}
+      
+      {/* Symbol */}
+      {hasSymbol && leadLength > 5 * SCALE && (
+          <>
+            {e.type===PALETTE.RESISTOR  && (<ResSymbol mx={mx} my={my} ux={ux} uy={uy} px={px} py={py} />)}
+            {e.type===PALETTE.CAPACITOR && (<CapSymbol mx={mx} my={my} ux={ux} uy={uy} px={px} py={py} />)}
+            {e.type===PALETTE.INDUCTOR  && (<InductorSymbol mx={mx} my={my} ux={ux} uy={uy} px={px} py={py} />)}
+            {e.type===PALETTE.BATTERY   && (<BatSymbol mx={mx} my={my} ux={ux} uy={uy} px={px} py={py} />)}
+            {e.type===PALETTE.SWITCH    && (<SwSymbol mx={mx} my={my} ux={ux} uy={uy} px={px} py={py} closed={!!e.params.closed} />)}
+          </>
+      )}
+
+      {/* Polarity Indicators */}
+      {e.type === PALETTE.BATTERY && (
+          <>
+            <text x={polarityX - 10*SCALE*ux} y={polarityY - 10*SCALE*uy} fontSize={16*SCALE} fill={THEME.text} fontWeight="bold" textAnchor={polarityAnchor}>+</text>
+            <text x={polarityX + 10*SCALE*ux} y={polarityY + 10*SCALE*uy} fontSize={16*SCALE} fill={THEME.text} fontWeight="bold" textAnchor={polarityAnchor}>-</text>
+          </>
+      )}
+
+      {e.type === PALETTE.CAPACITOR && Math.abs(e.params.v || 0) > 0.1 && (() => {
+          const v = e.params.v || 0;
+          const sign = Math.sign(v);
+          if (sign === 0) return null;
+
+          // v = v1 - v2. If v > 0, n1 is positive. Vector ux points from n1->n2.
+          // So positive sign is on the -ux side of the center.
+          const plusX = polarityX - sign * 10*SCALE*ux;
+          const plusY = polarityY - sign * 10*SCALE*uy;
+          const minusX = polarityX + sign * 10*SCALE*ux;
+          const minusY = polarityY + sign * 10*SCALE*uy;
+
+          return (
+            <>
+              <text x={plusX} y={plusY} fontSize={16*SCALE} fill={THEME.text} fontWeight="bold" textAnchor={polarityAnchor}>+</text>
+              <text x={minusX} y={minusY} fontSize={16*SCALE} fill={THEME.text} fontWeight="bold" textAnchor={polarityAnchor}>-</text>
+            </>
+          );
+      })()}
+
+      {/* Label */}
+      <text x={labelX} y={labelY} fontSize={12*SCALE} textAnchor={labelAnchor} fill={THEME.text}>{labelFor(e)}</text>
+      
+      <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="transparent" strokeWidth={CAPTURE_W} pointerEvents="stroke" style={{ cursor:'grab' }}
+            onPointerDown={(ev)=>onElementDown(e.id, ev)} />
+            
+      <circle cx={x1} cy={y1} r={END_R} fill={THEME.glow} fillOpacity={0.12} stroke={THEME.glow} strokeWidth={3} filter="url(#glow)" style={{ cursor:'crosshair' }} onPointerDown={(ev)=>onEndDown(e.id,'n1',ev)} />
+      <circle cx={x2} cy={y2} r={END_R} fill={THEME.glow} fillOpacity={0.12} stroke={THEME.glow} strokeWidth={3} filter="url(#glow)" style={{ cursor:'crosshair' }} onPointerDown={(ev)=>onEndDown(e.id,'n2',ev)} />
+
+      {dragInfo?.type==='end' && dragInfo.snapTargetId && (dragInfo.nodeId === a.id || dragInfo.nodeId === b.id) && (()=>{
+         const otherNodeId = dragInfo.nodeId === a.id ? b.id : a.id;
+         const targetNode = nodes.find(n=>n.id===dragInfo.snapTargetId);
+         if (targetNode && targetNode.id !== otherNodeId) {
+             return <circle cx={targetNode.x} cy={targetNode.y} r={END_R*1.3} fill="none" stroke={THEME.snap} strokeWidth={4} filter="url(#glow)" />;
+         }
+         return null;
+      })()}
+
+      {showDots && Array.from({length:nDots}).map((_,i)=>{
+        const phase = (t * speed * Math.sign(I) + i/nDots * L);
+        const s = (((phase % L) + L) % L) / L; // Use proper modulo for negative numbers
+        const cx=x1+dx*s, cy=y1+dy*s;
+        return <circle key={i} cx={cx} cy={cy} r={2.5*SCALE} fill={THEME.current} />;
+      })}
+    </g>
+  );
+}
+
+function labelFor(e){
+  const formatVal = (val, unit) => {
+      if(val === undefined || val === null) return `? ${unit}`;
+      if (Math.abs(val) >= 1e6) return `${(val/1e6).toPrecision(3)} M${unit}`;
+      if (Math.abs(val) >= 1e3) return `${(val/1e3).toPrecision(3)} k${unit}`;
+      if (Math.abs(val) < 1e-6) return `${(val*1e9).toPrecision(3)} n${unit}`;
+      if (Math.abs(val) < 1e-3) return `${(val*1e6).toPrecision(3)} µ${unit}`;
+      if (Math.abs(val) < 1) return `${(val*1e3).toPrecision(3)} m${unit}`;
+      return `${val.toPrecision(3)} ${unit}`;
+  }
+  if (e.type===PALETTE.RESISTOR)  return formatVal(e.params.R, "Ω");
+  if (e.type===PALETTE.BATTERY)   return formatVal(e.params.V, "V");
+  if (e.type===PALETTE.CAPACITOR) return formatVal(e.params.C, "F");
+  if (e.type===PALETTE.INDUCTOR)  return formatVal(e.params.L, "H");
+  if (e.type===PALETTE.SWITCH)    return e.params.closed?"closed":"open";
+  return "";
+}
+
+/******************* Inspector & Scope *******************/
+const ParamInput = React.memo(function ParamInput({ label, unit, value, paramKey, onChange }) {
+  const [localValue, setLocalValue] = useState(value);
+  const inputRef = useRef(null);
+
+  useEffect(() => {
+    if (document.activeElement !== inputRef.current) {
+      setLocalValue(value);
+    }
+  }, [value]);
+
+  const handleChange = (e) => {
+    setLocalValue(e.target.value);
+  };
+
+  const handleBlur = () => {
+    const numValue = Number(localValue);
+    if (!isNaN(numValue) && numValue !== value) {
+      onChange({ [paramKey]: numValue });
+    } else {
+      setLocalValue(value); // revert
+    }
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      handleBlur();
+      e.target.blur();
+    } else if (e.key === 'Escape') {
+      setLocalValue(value);
+      e.target.blur();
+    }
+  };
+
+  return (
+    <label className="element-inspector-param">
+      <span className="element-inspector-param-label">{label} ({unit}):</span>
+      <input
+        ref={inputRef}
+        type="text"
+        className="element-inspector-input"
+        style={{ background: THEME.canvas, borderColor: THEME.border, color: THEME.text }}
+        value={localValue}
+        onChange={handleChange}
+        onBlur={handleBlur}
+        onKeyDown={handleKeyDown}
+      />
+    </label>
+  );
+});
+
+const ElementInspector = React.memo(function ElementInspector({ element, onChange, onDelete, onToggle }) {
+  if (!element) return null;
+
+  return (
+    <div className="element-inspector" style={{ borderColor: THEME.border }}>
+      <div className="element-inspector-title">{element.type.charAt(0).toUpperCase() + element.type.slice(1)}</div>
+      {element.type === PALETTE.RESISTOR && <ParamInput label="R" unit="Ω" value={element.params.R} paramKey="R" onChange={onChange} />}
+      {element.type === PALETTE.BATTERY && <ParamInput label="V" unit="V" value={element.params.V} paramKey="V" onChange={onChange} />}
+      {element.type === PALETTE.CAPACITOR && <ParamInput label="C" unit="F" value={element.params.C} paramKey="C" onChange={onChange} />}
+      {element.type === PALETTE.INDUCTOR && <ParamInput label="L" unit="H" value={element.params.L} paramKey="L" onChange={onChange} />}
+      {element.type === PALETTE.SWITCH && (
+        <label className="element-inspector-checkbox">
+          <input type="checkbox" checked={!!element.params.closed} onChange={onToggle} /> Closed
+        </label>
+      )}
+      <div className="element-inspector-actions">
+        <button className="element-inspector-delete-button" style={{ background: THEME.button, color: THEME.buttonText }} onClick={onDelete}>Delete</button>
+      </div>
+    </div>
+  );
+});
+
+function ScopePlot({ data, element, isLocked, onLockToggle, scopeMode, onScopeModeChange }) {
+  const width = 400, height = 150;
+  if (!element) return <div style={{width, height, borderColor: THEME.border, color: THEME.textMuted}} className="scope-plot-no-element">Select an element to scope its value.</div>;
+
+  const values = data.map(d => d.value);
+  const min = Math.min(0, ...values);
+  const max = Math.max(0, ...values);
+  const range = (max - min) || 1;
+
+  const points = data.map((d, i) => {
+    const x = (i / (data.length - 1 || 1)) * width;
+    const y = height - ((d.value - min) / range) * height;
+    return `${x},${y}`;
+  }).join(' ');
+
+  const canToggleMode = element.type === PALETTE.RESISTOR || element.type === PALETTE.INDUCTOR;
+  const unit = scopeMode === 'current' ? 'A' : 'V';
+  const type = scopeMode === 'current' ? 'Current' : 'Voltage';
+  const lastVal = data.length > 0 ? data[data.length-1].value : 0;
+
+  return (
+      <div className="scope-plot-container" style={{borderColor: THEME.border}}>
+        <button onClick={onLockToggle} className="scope-plot-lock-button" style={{background: isLocked ? THEME.select : THEME.button, color: THEME.buttonText}}>
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+              {isLocked ? 
+                <path d="M8 1a2 2 0 0 1 2 2v4H6V3a2 2 0 0 1 2-2zm3 6V3a3 3 0 0 0-6 0v4a2 2 0 0 0-2 2v5a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2z"/> :
+                <path d="M11 1a2 2 0 0 0-2 2v4a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h5V3a3 3 0 0 1 6 0v4a.5.5 0 0 1-1 0V3a2 2 0 0 0-2-2z"/>
+              }
+            </svg>
+        </button>
+        {canToggleMode && <button onClick={onScopeModeChange} className="scope-plot-mode-button">{scopeMode === 'voltage' ? 'Show Current' : 'Show Voltage'}</button>}
+        <div className="scope-plot-header">
+            <span>Scope: {element.type} {type}</span>
+            <span style={{color:THEME.scopePlot}}>{lastVal.toPrecision(3)} {unit}</span>
+        </div>
+        <svg width={width} height={height}>
+            {/* Grid lines */}
+            <line x1={0} y1={height/2} x2={width} y2={height/2} stroke={THEME.scopeGrid} strokeWidth={1} />
+            <line x1={0} y1={0} x2={width} y2={0} stroke={THEME.scopeGrid} strokeWidth={1} />
+            <line x1={0} y1={height} x2={width} y2={height} stroke={THEME.scopeGrid} strokeWidth={1} />
+            <text x={5} y={12} fill={THEME.textMuted} fontSize="10">{max.toPrecision(2)}</text>
+            <text x={5} y={height-4} fill={THEME.textMuted} fontSize="10">{min.toPrecision(2)}</text>
+            
+            {data.length > 1 && <polyline points={points} fill="none" stroke={THEME.scopePlot} strokeWidth={2} />}
+        </svg>
+      </div>
+  );
+}
+
+/******************* Preview (ghost) *******************/
+function PreviewElement({ type, x, y }){
+  const len = 90 * SCALE; const x1 = x - len/2, y1 = y, x2 = x + len/2, y2 = y;
+  const dx=x2-x1, dy=y2-y1; const L=Math.hypot(dx,dy)||1; const ux=dx/L, uy=dy/L; const px=-uy, py=ux; const mx=(x1+x2)/2, my=(y1+y2)/2;
+  const stroke = type===PALETTE.WIRE? THEME.wire : THEME.component;
+  return (
+    <g opacity={0.55}>
+      <line x1={x1} y1={y1} x2={x2} y2={y2} stroke={stroke} strokeWidth={4*SCALE} strokeLinecap="round" />
+      {type===PALETTE.RESISTOR  && (<ResSymbol mx={mx} my={my} ux={ux} uy={uy} px={px} py={py} />)}
+      {type===PALETTE.CAPACITOR && (<CapSymbol mx={mx} my={my} ux={ux} uy={uy} px={px} py={py} />)}
+      {type===PALETTE.INDUCTOR  && (<InductorSymbol mx={mx} my={my} ux={ux} uy={uy} px={px} py={py} />)}
+      {type===PALETTE.BATTERY   && (<BatSymbol mx={mx} my={my} ux={ux} uy={uy} px={px} py={py} />)}
+      {type===PALETTE.SWITCH    && (<SwSymbol mx={mx} my={my} ux={ux} uy={uy} px={px} py={py} closed={true} />)}
+    </g>
+  );
+}

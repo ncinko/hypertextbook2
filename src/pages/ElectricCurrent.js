@@ -5,7 +5,7 @@ import HiddenQuestion from "../components/shared/HiddenQuestion";
 import ElectronGas from "../components/electricity/ElectronGas";
 import SeriesParallelPlayground from "../components/electricity/SeriesParallelPlayground";
 import HiddenExposition from "../components/HiddenExposition";
-
+import CircuitKit from "../components/electricity/CircuitKit";
 
 export default function ElectricCurrent() {
   return (
@@ -133,6 +133,35 @@ export default function ElectricCurrent() {
           </p>
 
           <SeriesParallelPlayground />
+          <HiddenExposition title="How does energy flow in a circuit?">
+          <p>
+            The power delivered to a component is the rate of change of potential energy.  For a charge <MathJax inline>{" \\( q \\)"}</MathJax> moving through a potential difference
+            <MathJax inline>{" \\( \\Delta V \\)"}</MathJax>, the change in potential energy is <MathJax inline>{" \\( \\Delta U = q \\Delta V \\)"}</MathJax>.  If the charge moves through the component in time
+            <MathJax inline>{" \\( \\Delta t \\)"}</MathJax>, the power delivered is
+          </p>
+          <MathJax>{` 
+            \\[
+              P = \\frac{\\Delta U}{\\Delta t} = \\frac{q \\Delta V}{\\Delta t} = I \\Delta V
+            \\]
+          `}</MathJax>
+          <p>
+            Here, we used the definition of current <MathJax inline>{" \\( I = \\frac{q}{\\Delta t} \\)"}</MathJax>.  This expression shows that components with larger potential differences or more current dissipate more power.
+          </p>
+          <p>
+            For example, a resistor with resistance <MathJax inline>{" \\( R \\)"}</MathJax> has a potential difference <MathJax inline>{" \\( \\Delta V = IR \\)"}</MathJax>, so the power dissipated is
+          </p>
+          <MathJax>{` 
+            \\[
+              P = I \\Delta V = I^2 R
+            \\]
+          `}</MathJax>
+          <p>This power is converted into thermal energy, heating up the resistor.</p>
+          </HiddenExposition>
+          <p>
+            The arrangement of components in a circuit determines how current and energy flows throughout.  
+            Below is an interactive kit where you can build simple circuits and measure current and voltage.
+          </p>
+          <CircuitKit />
 
           <h2>Practice</h2>
           <div className="exposition-list">

@@ -1,0 +1,166 @@
+/* CircuitKit.css */
+
+.circuit-kit-container {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100%;
+  font-family: sans-serif;
+}
+
+.circuit-kit-canvas-container {
+  flex-grow: 1;
+  position: relative;
+}
+
+.circuit-kit-svg {
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+.circuit-kit-controls-inspector {
+  flex-shrink: 0;
+  padding: 0.5rem;
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+  border-top-width: 1px;
+}
+
+.circuit-kit-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.circuit-kit-buttons {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-end;
+}
+
+.circuit-kit-button {
+  padding: 0.5rem 1rem;
+  border-radius: 0.25rem;
+}
+
+.circuit-kit-sliders {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 1rem;
+  row-gap: 0.5rem;
+}
+
+.circuit-kit-slider-label {
+  font-size: 0.75rem;
+  line-height: 1rem;
+  display: flex;
+  flex-direction: column;
+}
+
+.circuit-kit-sim-time {
+  font-size: 0.75rem;
+  line-height: 1rem;
+}
+
+.element-inspector {
+  padding: 0.75rem;
+  border-width: 1px;
+  border-radius: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.element-inspector-title {
+  font-weight: 700;
+  margin-bottom: 0.25rem;
+  font-size: 1.125rem;
+  line-height: 1.75rem;
+}
+
+.element-inspector-param {
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.element-inspector-param-label {
+  width: 2.5rem;
+}
+
+.element-inspector-input {
+  border-width: 1px;
+  padding: 0.25rem 0.5rem;
+  width: 8rem;
+  border-radius: 0.25rem;
+}
+
+.element-inspector-checkbox {
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+}
+
+.element-inspector-actions {
+  margin-top: 0.5rem;
+}
+
+.element-inspector-delete-button {
+    padding: 0.25rem 0.75rem;
+    border-radius: 0.25rem;
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+}
+
+.scope-plot-no-element {
+  border-width: 1px;
+  border-radius: 0.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}
+
+.scope-plot-container {
+  border-width: 1px;
+  border-radius: 0.5rem;
+  padding: 0.5rem;
+  position: relative;
+}
+
+.scope-plot-lock-button {
+  position: absolute;
+  top: 0.25rem;
+  right: 0.25rem;
+  padding: 0.25rem;
+  border-radius: 0.25rem;
+}
+
+.scope-plot-header {
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  font-weight: 700;
+  display: flex;
+  justify-content: space-between;
+  padding-right: 2rem;
+}
+
+.scope-plot-mode-button {
+  position: absolute;
+  top: 0.25rem;
+  right: 8rem; /* Position it to the left of the lock button */
+  padding: 0.25rem;
+  border-radius: 0.25rem;
+  background-color: #374151; /* THEME.button */
+  color: #f9fafb; /* THEME.buttonText */
+  border: none;
+  cursor: pointer;
+}
