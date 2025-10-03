@@ -31,7 +31,7 @@ const CAPTURE_W = 24 * SCALE;
 const END_R = 9 * SCALE;
 const LABEL_OFF = 12 * SCALE;
 const SNAP_RADIUS = 18 * SCALE;
-const ANIM_EPS = 1e-6;
+const ANIM_EPS = 1e-5;
 
 const THEME = {
   background: "#1f2937",
@@ -653,13 +653,17 @@ function ElementSVG({ e, nodes, solution, t, dragInfo, animSpeed, totalBatteryCu
   if (totalBatteryCurrent > ANIM_EPS) {
     relativeI = Math.abs(I) / totalBatteryCurrent;
   }
+  else {
+    relativeI = Math.abs(I) > ANIM_EPS ? 1 : 0;
+  }
   
   const speed = 100*animSpeed * Math.tanh(relativeI / 0.5);
   
   const isHoriz = Math.abs(dx) >= Math.abs(dy);
+  const labelOffset = (e.type === PALETTE.BATTERY || e.type === PALETTE.CAPACITOR) ? LABEL_OFF + 6 * SCALE : LABEL_OFF;
   // Label position
-  const labelX = isHoriz ? mx : mx + (LABEL_OFF * Math.sign(px || 1));
-  const labelY = isHoriz ? my - LABEL_OFF : my;
+  const labelX = isHoriz ? mx : mx + (labelOffset * Math.sign(px || 1));
+  const labelY = isHoriz ? my - labelOffset : my;
   const labelAnchor = isHoriz ? 'middle' : (px >= 0 ? 'start' : 'end');
   
   // Polarity position (opposite side of label)
