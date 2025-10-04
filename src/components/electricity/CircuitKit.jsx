@@ -1,5 +1,4 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
-import './CircuitKit.css';
 
 /**
  * CircuitKit.jsx — Transient Circuit Simulator
@@ -22,6 +21,7 @@ import './CircuitKit.css';
  * - Slider controls for simulation and animation speed.
  * - Improved battery and capacitor visual symbols with correct polarity.
  * - Relocated polarity symbols for better visual separation from labels.
+ * - Added a pre-built circuit menu with an RC charging/discharging example.
  */
 
 /******************* Visual & Interaction Constants *******************/
@@ -31,7 +31,7 @@ const CAPTURE_W = 24 * SCALE;
 const END_R = 9 * SCALE;
 const LABEL_OFF = 12 * SCALE;
 const SNAP_RADIUS = 18 * SCALE;
-const ANIM_EPS = 1e-5;
+const ANIM_EPS = 1e-4; // Increased to reduce jitter
 
 const THEME = {
   background: "#1f2937",
@@ -53,6 +53,145 @@ const THEME = {
   scopePlot: "#2563eb",
 };
 
+/******************* Embedded CSS Styles *******************/
+const StyleInjector = () => (
+    <style>{`
+        .circuit-kit-container {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            width: 100%;
+            font-family: sans-serif;
+        }
+        .circuit-kit-canvas-container {
+            flex-grow: 1;
+            position: relative;
+        }
+        .circuit-kit-svg {
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+        .circuit-kit-controls-inspector {
+            flex-shrink: 0;
+            padding: 0.5rem;
+            display: flex;
+            gap: 1rem;
+            align-items: flex-start;
+            border-top-width: 1px;
+        }
+        .circuit-kit-controls {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+        .circuit-kit-buttons {
+            display: flex;
+            gap: 0.5rem;
+            align-items: flex-end;
+            flex-wrap: wrap;
+        }
+        .circuit-kit-button {
+            padding: 0.5rem 1rem;
+            border-radius: 0.25rem;
+            cursor: pointer;
+        }
+        .circuit-kit-sliders {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 1rem 0.5rem;
+        }
+        .circuit-kit-slider-label {
+            font-size: 0.75rem;
+            display: flex;
+            flex-direction: column;
+        }
+        .circuit-kit-sim-time {
+            font-size: 0.75rem;
+        }
+        .element-inspector {
+            padding: 0.75rem;
+            border-width: 1px;
+            border-radius: 0.5rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+        .element-inspector-title {
+            font-weight: bold;
+            margin-bottom: 0.25rem;
+            font-size: 1.125rem;
+        }
+        .element-inspector-param {
+            font-size: 0.875rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .element-inspector-param-label {
+            width: 2.5rem;
+        }
+        .element-inspector-input {
+            border-width: 1px;
+            padding: 0.25rem 0.5rem;
+            width: 8rem;
+            border-radius: 0.25rem;
+        }
+        .element-inspector-checkbox {
+             font-size: 0.875rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            cursor: pointer;
+        }
+        .element-inspector-actions {
+            margin-top: 0.5rem;
+        }
+        .element-inspector-delete-button {
+            padding: 0.25rem 0.75rem;
+            border-radius: 0.25rem;
+            font-size: 0.875rem;
+            cursor: pointer;
+        }
+        .scope-plot-container {
+            border-width: 1px;
+            border-radius: 0.5rem;
+            padding: 0.5rem;
+            position: relative;
+        }
+        .scope-plot-no-element {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.875rem;
+        }
+        .scope-plot-lock-button {
+            position: absolute;
+            top: 0.25rem;
+            right: 0.25rem;
+            padding: 0.25rem;
+            border-radius: 0.25rem;
+        }
+        .scope-plot-mode-button {
+            position: absolute;
+            top: 0.25rem;
+            left: 0.25rem;
+            padding: 0.1rem 0.25rem;
+            font-size: 0.75rem;
+            border-radius: 0.25rem;
+            background: #4b5563;
+            color: #f9fafb;
+        }
+        .scope-plot-header {
+            font-size: 0.875rem;
+            font-weight: bold;
+            display: flex;
+            justify-content: space-between;
+            padding-right: 2rem;
+        }
+    `}</style>
+);
+
 /******************* Circuit Modeling & Simulation *******************/
 const GMIN = 1e-12;
 const R_WIRE = 1e-9; // Further reduced for near-ideal LC oscillation
@@ -71,7 +210,7 @@ const PALETTE = {
 const PALETTE_ITEMS = [
   { type: PALETTE.RESISTOR,  label: "Resistor",  icon: "R",  def: { R: 10 } },
   { type: PALETTE.BATTERY,   label: "Battery",   icon: "+−", def: { V: 5 } },
-  { type: PALETTE.CAPACITOR, label: "Capacitor", icon: "∥",  def: { C: 1e-6, v: 0 } },
+  { type: PALETTE.CAPACITOR, label: "Capacitor", icon: "∥",  def: { C: 1e-6, v: 0, i: 0 } },
   { type: PALETTE.INDUCTOR,  label: "Inductor",  icon: "∿",  def: { L: 1e-3, i: 0 } },
   { type: PALETTE.SWITCH,    label: "Switch",    icon: "⎍",  def: { closed: true } },
   { type: PALETTE.WIRE,      label: "Wire",      icon: "—",  def: {} },
@@ -79,6 +218,41 @@ const PALETTE_ITEMS = [
 
 const uid = (() => { let n = 1; return () => String(n++); })();
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+/******************* Pre-built Circuit Generators *******************/
+function generateRCChargeDischargeCircuit() {
+    // Use a fresh UID generator for each circuit build
+    const l_uid = (() => { let n = 1; return () => `rc_${n++}`; })();
+    const cx = 550, cy = 250;
+
+    // Wider and repositioned nodes
+    const nodeA = { id: l_uid(), x: cx - 350, y: cy - 150 }; // Top of battery
+    const nodeB = { id: l_uid(), x: cx - 350, y: cy + 150 }; // Ground
+    const nodeC = { id: l_uid(), x: cx - 100, y: cy - 150 }; // Junction after charging resistor
+    const nodeD = { id: l_uid(), x: cx - 100, y: cy + 150 }; // Junction for switch and ground wire
+    const nodeE = { id: l_uid(), x: cx + 150, y: cy - 150 }; // Top of capacitor
+    const nodeF = { id: l_uid(), x: cx + 150, y: cy + 150 }; // Bottom of capacitor
+    const nodeG = { id: l_uid(), x: cx - 250, y: cy + 150 }; // Switch node
+
+    const nodes = [nodeA, nodeB, nodeC, nodeD, nodeE, nodeF, nodeG];
+
+    const elements = [
+        // Battery (flipped) and charging resistor
+        { id: l_uid(), type: PALETTE.BATTERY,   n1: nodeA.id, n2: nodeB.id, params: { V: 10 } },
+        { id: l_uid(), type: PALETTE.RESISTOR,  n1: nodeA.id, n2: nodeC.id, params: { R: 10 } },
+
+        // Capacitor and its connection
+        { id: l_uid(), type: PALETTE.CAPACITOR, n1: nodeC.id, n2: nodeD.id, params: { C: 5e-5, v: 0 } },
+        { id: l_uid(), type: PALETTE.WIRE,      n1: nodeC.id, n2: nodeE.id, params: {} },
+        { id: l_uid(), type: PALETTE.WIRE,      n1: nodeF.id, n2: nodeD.id, params: {} }, // Connect to ground
+
+        // Discharge path with switch at bottom-left
+        { id: l_uid(), type: PALETTE.SWITCH,    n1: nodeB.id, n2: nodeD.id, params: { closed: false } },
+        { id: l_uid(), type: PALETTE.RESISTOR,  n1: nodeE.id, n2: nodeF.id, params: { R: 100 } },
+    ];
+    return { nodes, elements };
+}
+
 
 /******************* Linear Solver (Gauss, partial pivot) *******************/
 function solveLinearSystem(A, b) {
@@ -155,14 +329,22 @@ function buildAndSolveTransient(nodes, elements, groundNodeId, dt) {
 
     // Stamp capacitors (Trapezoidal rule companion model)
     capacitors.forEach(e => {
-        const Gc = (e.params.C || 1e-6) / dt;
+        const Gc = 2 * (e.params.C || 1e-6) / dt;
         const v_prev = e.params.v || 0;
-        const Ieq = Gc * v_prev;
+        const i_prev = e.params.i || 0;
+        const Ieq = Gc * v_prev + i_prev;
+
         const i1 = idx(e.n1);
         const i2 = idx(e.n2);
-        if (i1 != null) { A[i1][i1] += Gc; b[i1] += Ieq; }
-        if (i2 != null) { A[i2][i2] += Gc; b[i2] -= Ieq; }
+
+        // Stamp conductance
+        if (i1 != null) A[i1][i1] += Gc;
+        if (i2 != null) A[i2][i2] += Gc;
         if (i1 != null && i2 != null) { A[i1][i2] -= Gc; A[i2][i1] -= Gc; }
+
+        // Stamp history current source
+        if (i1 != null) b[i1] += Ieq;
+        if (i2 != null) b[i2] -= Ieq;
     });
     
     // Stamp voltage sources
@@ -214,13 +396,15 @@ function buildAndSolveTransient(nodes, elements, groundNodeId, dt) {
             case PALETTE.SWITCH: I = (v1 - v2) / (e.params.closed ? R_WIRE : R_SWITCH_OPEN); break;
             case PALETTE.BATTERY:
                 const vSrcIdx = vSrcs.findIndex(vs => vs.id === e.id);
-                I = vSrcIdx > -1 ? (x[n + vSrcIdx] || 0) : 0;
+                I = vSrcIdx > -1 ? -(x[n + vSrcIdx] || 0) : 0;
                 break;
             case PALETTE.CAPACITOR:
-                const Gc = (e.params.C || 1e-6) / dt;
-                const v_prev = e.params.v || 0;
-                I = Gc * ((v1 - v2) - v_prev);
-                newStates[e.id] = { v: v1 - v2 };
+                const v_new = v1 - v2;
+                const Gc_calc = 2 * (e.params.C || 1e-6) / dt;
+                const v_prev_calc = e.params.v || 0;
+                const i_prev_calc = e.params.i || 0;
+                I = Gc_calc * (v_new - v_prev_calc) - i_prev_calc;
+                newStates[e.id] = { v: v_new, i: I };
                 break;
             case PALETTE.INDUCTOR:
                 const indIdx = inductors.findIndex(l => l.id === e.id);
@@ -313,8 +497,8 @@ export default function CircuitKit() {
   // simulation state
   const [simTime, setSimTime] = useState(0);
   const [isRunning, setIsRunning] = useState(true);
-  const [simRate, setSimRate] = useState(1);
-  const [animSpeed, setAnimSpeed] = useState(1000);
+  const [simRate, setSimRate] = useState(2.5);
+  const [animSpeed, setAnimSpeed] = useState(3000);
   const [solution, setSolution] = useState({ nodeV: new Map(), elemI: new Map() });
   const [scopeData, setScopeData] = useState([]);
   const [scopedElementId, setScopedElementId] = useState(null);
@@ -404,7 +588,7 @@ export default function CircuitKit() {
       setScopeData([]);
       setElements(els => els.map(el => {
           const newParams = { ...el.params };
-          if (el.type === PALETTE.CAPACITOR) newParams.v = 0;
+          if (el.type === PALETTE.CAPACITOR) { newParams.v = 0; newParams.i = 0; }
           if (el.type === PALETTE.INDUCTOR) newParams.i = 0;
           return { ...el, params: newParams };
       }));
@@ -453,6 +637,16 @@ export default function CircuitKit() {
     }
     return (best && Math.sqrt(bestD2) <= SNAP_RADIUS) ? best : null;
   };
+  
+  const loadPrebuiltCircuit = (generator) => {
+    setIsRunning(false);
+    setSelection(null);
+    const { nodes: newNodes, elements: newElements } = generator();
+    setNodes(newNodes);
+    setElements(newElements);
+    setTimeout(resetSimulation, 0); 
+  };
+
 
   // Pointer Handlers
   const toWorkspaceCoords = (clientX, clientY) => {
@@ -532,11 +726,10 @@ export default function CircuitKit() {
   const sel = selection ? elementById(selection) : null;
   const scopedElement = scopedElementId ? elementById(scopedElementId) : null;
 
-  const totalBatteryCurrent = useMemo(() => {
-    return elements
-      .filter(e => e.type === PALETTE.BATTERY)
-      .reduce((sum, b) => sum + Math.abs(solution.elemI.get(b.id) || 0), 0);
-  }, [elements, solution.elemI]);
+  const maxCurrent = useMemo(() => {
+    if (!solution.elemI || solution.elemI.size === 0) return 0;
+    return Math.max(0, ...Array.from(solution.elemI.values()).map(Math.abs));
+  }, [solution.elemI]);
 
   const handleElementChange = useCallback((patch) => {
     setElements(arr => arr.map(e => {
@@ -564,6 +757,7 @@ export default function CircuitKit() {
 
   return (
     <div className="circuit-kit-container" style={{ background: THEME.background, color: THEME.text }}>
+        <StyleInjector />
       <div className="circuit-kit-canvas-container" ref={svgRef}>
         <svg width={size.width} height={size.height}
              onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerLeave={onPointerUp}
@@ -594,7 +788,7 @@ export default function CircuitKit() {
             {elements.map(e => (
               <ElementSVG key={e.id} e={e} nodes={nodes} solution={solution} t={simTime} dragInfo={carry}
                 animSpeed={animSpeed}
-                totalBatteryCurrent={totalBatteryCurrent}
+                maxCurrent={maxCurrent}
                 onElementDown={onElementDown} onEndDown={onEndDown} selected={selection === e.id} />
             ))}
           </g>
@@ -608,6 +802,7 @@ export default function CircuitKit() {
                 <button className="circuit-kit-button" style={{background:THEME.button, color:THEME.buttonText}} onClick={() => setIsRunning(s => !s)}>{isRunning ? 'Pause' : 'Play'}</button>
                 <button className="circuit-kit-button" style={{background:THEME.button, color:THEME.buttonText}} onClick={resetSimulation}>Reset</button>
                 <button className="circuit-kit-button" style={{background:THEME.button, color:THEME.buttonText}} onClick={() => { setNodes([]); setElements([]); setSelection(null); }}>Clear All</button>
+                <button className="circuit-kit-button" style={{background:THEME.button, color:THEME.buttonText}} onClick={() => loadPrebuiltCircuit(generateRCChargeDischargeCircuit)}>Load RC Circuit</button>
             </div>
             <div className="circuit-kit-sliders">
                 <label className="circuit-kit-slider-label" style={{color:THEME.textMuted}}>
@@ -640,24 +835,21 @@ const getSymbolLength = (type) => {
     }
 };
 
-function ElementSVG({ e, nodes, solution, t, dragInfo, animSpeed, totalBatteryCurrent, onElementDown, onEndDown, selected }){
+function ElementSVG({ e, nodes, solution, t, dragInfo, animSpeed, maxCurrent, onElementDown, onEndDown, selected }){
   const a = nodes.find(n=>n.id===e.n1), b = nodes.find(n=>n.id===e.n2); if (!a||!b) return null;
   const {x:x1, y:y1} = a, {x:x2, y:y2} = b;
   const dx=x2-x1, dy=y2-y1; const L = Math.hypot(dx,dy)||1; const ux=dx/L, uy=dy/L; const px=-uy, py=ux; const mx=(x1+x2)/2, my=(y1+y2)/2;
   const bodyStroke = selected ? THEME.select : (e.type===PALETTE.WIRE ? THEME.wire : THEME.component);
   const I = solution.elemI?.get(e.id) ?? 0;
-  const showDots = Math.abs(I) > ANIM_EPS;
+  const showDots = Math.abs(I) > (maxCurrent * 0.005 + ANIM_EPS);
   const nDots = Math.max(1, Math.floor(L/(30*SCALE)));
   
   let relativeI = 0;
-  if (totalBatteryCurrent > ANIM_EPS) {
-    relativeI = Math.abs(I) / totalBatteryCurrent;
-  }
-  else {
-    relativeI = Math.abs(I) > ANIM_EPS ? 1 : 0;
+  if (maxCurrent > ANIM_EPS) {
+    relativeI = Math.abs(I) / maxCurrent;
   }
   
-  const speed = 100*animSpeed * Math.tanh(relativeI / 0.5);
+  const speed = 100*animSpeed /(1+ Math.exp(relativeI / 0.5));
   
   const isHoriz = Math.abs(dx) >= Math.abs(dy);
   const labelOffset = (e.type === PALETTE.BATTERY || e.type === PALETTE.CAPACITOR) ? LABEL_OFF + 6 * SCALE : LABEL_OFF;
@@ -745,7 +937,8 @@ function ElementSVG({ e, nodes, solution, t, dragInfo, animSpeed, totalBatteryCu
       })()}
 
       {showDots && Array.from({length:nDots}).map((_,i)=>{
-        const phase = (t * speed * Math.sign(I) + i/nDots * L);
+        const animationSign = e.type === PALETTE.BATTERY ? -Math.sign(I) : Math.sign(I);
+        const phase = (t * speed * animationSign + i/nDots * L);
         const s = (((phase % L) + L) % L) / L; // Use proper modulo for negative numbers
         const cx=x1+dx*s, cy=y1+dy*s;
         return <circle key={i} cx={cx} cy={cy} r={2.5*SCALE} fill={THEME.current} />;
