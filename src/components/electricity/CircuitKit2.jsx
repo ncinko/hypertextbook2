@@ -446,10 +446,6 @@ export default function CircuitKit() {
   const [elements, setElements] = useState([]);
   const [selection, setSelection] = useState([]);
   const [groundNodeId, setGroundNodeId] = useState(null);
-  const [selectionBox, setSelectionBox] = useState(null);
-  const nextIdRef = useRef(1000000);
-  const allocNodeId = () => `n${nextIdRef.current++}`;
-
 
   // drag state
   const [carry, setCarry] = useState(null);
@@ -591,7 +587,7 @@ useEffect(() => {
     const params = item ? { ...item.def } : {};
     const id = uid();
     setElements(arr => [...arr, { id, type, n1, n2, params }]);
-    setSelection([id]);
+    setSelection(id);
     resetSimulation();
   };
   
@@ -605,7 +601,7 @@ useEffect(() => {
         setNodes(reapOrphans(newEls, nodes));
         return newEls;
     });
-    setSelection([]);
+    setSelection(null);
   };
   
   const reapOrphans = (elArr, nodesArr) => {
@@ -627,7 +623,7 @@ useEffect(() => {
   
   const loadPrebuiltCircuit = (generator) => {
     setIsRunning(false);
-    setSelection([]);
+    setSelection(null);
     const { nodes: newNodes, elements: newElements } = generator();
     setNodes(newNodes);
     setElements(newElements);
@@ -635,52 +631,7 @@ useEffect(() => {
   };
 
 
-  
-  // Selection helpers
-  const rectFromPoints = (a, b) => {
-    const x = Math.min(a.x, b.x), y = Math.min(a.y, b.y);
-    const w = Math.abs(a.x - b.x), h = Math.abs(a.y - b.y);
-    return { x, y, w, h };
-  };
-  const lineIntersectsRect = (x1, y1, x2, y2, rx, ry, rw, rh) => {
-    const inside = (x, y) => x >= rx && x <= rx + rw && y >= ry && y <= ry + rh;
-    if (inside(x1, y1) || inside(x2, y2)) return true;
-    const p = [-(x2 - x1), (x2 - x1), -(y2 - y1), (y2 - y1)];
-    const q = [x1 - rx, rx + rw - x1, y1 - ry, ry + rh - y1];
-    let u0 = 0, u1 = 1;
-    for (let i = 0; i < 4; i++) {
-      if (p[i] === 0) { if (q[i] < 0) return false; }
-      else {
-        const t = q[i] / p[i];
-        if (p[i] < 0) u0 = Math.max(u0, t); else u1 = Math.min(u1, t);
-        if (u0 > u1) return false;
-      }
-    }
-    return true;
-  };
-  const elementsInRect = (rect) => {
-    const { x: rx, y: ry, w: rw, h: rh } = rect;
-    const picked = [];
-    for (const e of elements) {
-      const a = nodeById(e.n1), b = nodeById(e.n2);
-      if (!a || !b) continue;
-      if (lineIntersectsRect(a.x, a.y, b.x, b.y, rx, ry, rw, rh)) picked.push(e.id);
-    }
-    return picked;
-  };
-
-    const breakElementFree = (elId) => {
-    const el = elementById(elId);
-    if (!el) return;
-    const a = nodeById(el.n1);
-    const b = nodeById(el.n2);
-    if (!a || !b) return;
-    const n1 = allocNodeId();
-    const n2 = allocNodeId();
-    setNodes(arr => [...arr, { id: n1, x: a.x, y: a.y }, { id: n2, x: b.x, y: b.y }]);
-    setElements(arr => arr.map(e => e.id === elId ? { ...e, n1, n2 } : e));
-  };
-// Pointer Handlers
+  // Pointer Handlers
   const toWorkspaceCoords = (clientX, clientY) => {
     if (!svgRef.current) return { x: 0, y: 0 };
     const rect = svgRef.current.getBoundingClientRect();
@@ -689,24 +640,10 @@ useEffect(() => {
     return { x: xSVG, y: ySVG - WORK_OFFSET_Y };
   };
   
-  
-  const onWorkspaceDown = (e) => {
-    if (carry) return;
-    const p = toWorkspaceCoords(e.clientX, e.clientY);
-    setCarry({ type: 'selectbox', start: p, last: p });
-    setSelectionBox({ x: p.x, y: p.y, w: 0, h: 0 });
-  };
-const onPointerMove = (e) => {
+  const onPointerMove = (e) => {
     const p = toWorkspaceCoords(e.clientX, e.clientY);
     setMouseWS(p);
     if (!carry) return;
-    
-    if (carry.type === 'selectbox') {
-      const rect = rectFromPoints(carry.start, p);
-      setSelectionBox(rect);
-      setCarry(c => ({ ...c, last: p }));
-      return;
-    }
     
     if (carry.type === 'element') {
       const el = elementById(carry.id); if (!el) return;
@@ -719,16 +656,6 @@ const onPointerMove = (e) => {
       ));
     }
     
-    if (carry.type === 'group') {
-      const dx = p.x - carry.start.x;
-      const dy = p.y - carry.start.y;
-      setNodes(arr => arr.map(n => {
-        const s = carry.nodeStarts ? carry.nodeStarts.get(n.id) : null;
-        return s ? { ...n, x: s.x + dx, y: s.y + dy } : n;
-      }));
-      return;
-    }
-    
     if (carry.type === 'end') {
       setNodes(arr => arr.map(n => n.id === carry.nodeId ? { ...n, x: p.x, y: p.y } : n));
       const target = nearestSnapTarget(carry.nodeId, nodes);
@@ -736,42 +663,21 @@ const onPointerMove = (e) => {
     }
   };
   
-  const onPointerUp = (e) => {
+  const onPointerUp = () => {
     if (!carry) return;
-    if (carry.type === 'selectbox') {
-      const rect = selectionBox;
-      setSelectionBox(null);
-      if (!rect || (rect.w < 4 && rect.h < 4)) {
-        setSelection([]);
-      } else {
-        setSelection(elementsInRect(rect));
-      }
-      setCarry(null);
-      return;
-    }
     if (carry.type === 'palette') {
       addElement(carry.item.type, mouseWS.x, mouseWS.y);
-      setCarry(null);
-      return;
-    }
-    if (carry.type === 'end') {
-      if (carry.snapTargetId) {
-        const el = elementById(carry.id);
-        if (el) {
-          const updated = carry.end === 'n1' ? { ...el, n1: carry.snapTargetId } : { ...el, n2: carry.snapTargetId };
-          const newEls = elements.map(e => e.id === el.id ? updated : e);
-          setElements(newEls);
-          setNodes(prev => reapOrphans(newEls, prev));
-          resetSimulation();
-        }
+    } else if (carry.type === 'end' && carry.snapTargetId) {
+      const el = elementById(carry.id);
+      if (el) {
+        const updated = carry.end === 'n1' ? { ...el, n1: carry.snapTargetId } : { ...el, n2: carry.snapTargetId };
+        const newEls = elements.map(e => e.id === el.id ? updated : e);
+        setElements(newEls);
+        setNodes(prev => reapOrphans(newEls, prev));
+        resetSimulation();
       }
-      setCarry(null);
-      return;
     }
-    if (carry.type === 'element' || carry.type === 'group') {
-      setCarry(null);
-      return;
-    }
+    setCarry(null);
   };
   
   const onPaletteDown = (item, e) => { e.preventDefault(); e.stopPropagation(); setCarry({ type: 'palette', item }); };
@@ -779,32 +685,9 @@ const onPointerMove = (e) => {
   const onElementDown = (elId, e) => {
     e.preventDefault(); e.stopPropagation();
     const el = elementById(elId); if(!el) return;
-    // SHIFT-CLICK: break element free
-    if (e.shiftKey) {
-      const a0 = nodeById(el.n1), b0 = nodeById(el.n2);
-      if (!a0 || !b0) return;
-      breakElementFree(elId);
-      setSelection([elId]);
-      setCarry({ type: 'element', id: elId, start: { ...mouseWS }, a_start: { x: a0.x, y: a0.y }, b_start: { x: b0.x, y: b0.y } });
-      if (!isScopeLocked) { setScopedElementId(elId); setScopeData([]); }
-      return;
-    }
     const n1 = nodeById(el.n1); const n2 = nodeById(el.n2); if(!n1 || !n2) return;
-const isInCurrent = selection.includes(elId);
-    const multi = selection.length > 1;
-    if (isInCurrent && multi) {
-      const nodeStarts = new Map();
-      for (const sid of selection) {
-        const se = elementById(sid); if (!se) continue;
-        const aN = nodeById(se.n1), bN = nodeById(se.n2);
-        if (aN && !nodeStarts.has(aN.id)) nodeStarts.set(aN.id, { x: aN.x, y: aN.y });
-        if (bN && !nodeStarts.has(bN.id)) nodeStarts.set(bN.id, { x: bN.x, y: bN.y });
-      }
-      setCarry({ type: 'group', start: { ...mouseWS }, nodeStarts });
-    } else {
-      setSelection([elId]);
-      setCarry({ type: 'element', id: elId, start: { ...mouseWS }, a_start: {...n1}, b_start: {...n2} });
-    }
+    setCarry({ type: 'element', id: elId, start: { ...mouseWS }, a_start: {...n1}, b_start: {...n2} });
+    setSelection(elId);
     if (!isScopeLocked) {
         setScopedElementId(elId);
         setScopeData([]);
@@ -816,14 +699,14 @@ const isInCurrent = selection.includes(elId);
     const el = elementById(elId); if (!el) return;
     const nodeId = endKey === 'n1' ? el.n1 : el.n2;
     setCarry({ type: 'end', id: elId, end: endKey, nodeId, snapTargetId: null });
-    setSelection([elId]);
+    setSelection(elId);
     if (!isScopeLocked) {
         setScopedElementId(elId);
         setScopeData([]);
     }
   };
 
-  const sel = selection.length === 1 ? elementById(selection[0]) : null;
+  const sel = selection ? elementById(selection) : null;
   const scopedElement = scopedElementId ? elementById(scopedElementId) : null;
 
   const maxCurrent = useMemo(() => {
@@ -832,19 +715,28 @@ const isInCurrent = selection.includes(elId);
   }, [solution.elemI]);
 
   const handleElementChange = useCallback((patch) => {
-    if (!sel) return;
-    setElements(arr => arr.map(e => e.id === sel.id ? { ...e, params: { ...e.params, ...patch } } : e));
-  }, [sel]);
+    setElements(arr => arr.map(e => {
+      if (e.id === selection) {
+        return { ...e, params: { ...e.params, ...patch } };
+      }
+      return e;
+    }));
+  }, [selection]);
 
   const handleElementDelete = useCallback(() => {
-    if (!sel) return;
-    deleteElement(sel.id);
-  }, [sel]);
+    if (selection) {
+      deleteElement(selection);
+    }
+  }, [selection]);
 
   const handleElementToggle = useCallback(() => {
-    if (!sel) return;
-    setElements(arr => arr.map(e => e.id === sel.id ? { ...e, params: { ...e.params, closed: !e.params.closed } } : e));
-  }, [sel]);
+    setElements(arr => arr.map(e => {
+      if (e.id === selection) {
+        return { ...e, params: { ...e.params, closed: !e.params.closed } };
+      }
+      return e;
+    }));
+  }, [selection]);
 
   return (
     <div className="circuit-kit-container">
@@ -873,24 +765,13 @@ const isInCurrent = selection.includes(elId);
           </g>
 
           {/* Workspace */}
-          <g transform={`translate(0,${WORK_OFFSET_Y})`} onPointerDown={onWorkspaceDown}>
-            {/* Invisible hit-rect to capture empty-space drags for marquee */}
-            <rect
-              data-workspace-hit
-              x={0}
-              y={0}
-              width={size.width}
-              height={size.height - WORK_OFFSET_Y}
-              fill="transparent"
-              pointerEvents="all"
-              onPointerDown={onWorkspaceDown}
-            />
+          <g transform={`translate(0,${WORK_OFFSET_Y})`}>
             {carry?.type === 'palette' && <PreviewElement type={carry.item.type} x={mouseWS.x} y={mouseWS.y} />}
             {elements.map(e => (
               <ElementSVG key={e.id} e={e} nodes={nodes} solution={solution} t={visTime} dragInfo={carry}
                 animSpeed={animSpeed}
                 maxCurrent={maxCurrent}
-                onElementDown={onElementDown} onEndDown={onEndDown} selected={selection.includes(e.id)} showDebug={showDebug} />
+                onElementDown={onElementDown} onEndDown={onEndDown} selected={selection === e.id} showDebug={showDebug} />
             ))}
             {showNodeVoltages && nodes.map(n => {
               const voltage = solution.nodeV.get(n.id);
@@ -918,7 +799,7 @@ const isInCurrent = selection.includes(elId);
             <div class="circuit-kit-buttons">
                 <button class="circuit-kit-button" onClick={() => setIsRunning(s => !s)}>{isRunning ? 'Pause' : 'Play'}</button>
                 <button class="circuit-kit-button" onClick={resetSimulation}>Reset</button>
-                <button class="circuit-kit-button" onClick={() => { setNodes([]); setElements([]); setSelection([]); }}>Clear All</button>
+                <button class="circuit-kit-button" onClick={() => { setNodes([]); setElements([]); setSelection(null); }}>Clear All</button>
                 <button class="circuit-kit-button" onClick={() => loadPrebuiltCircuit(generateRCChargeDischargeCircuit)}>Load RC Circuit</button>
                 <button className="circuit-kit-button" onClick={() => setShowNodeVoltages(s => !s)}>{showNodeVoltages ? 'Hide' : 'Show'} Voltages</button>
             </div>
@@ -1260,6 +1141,4 @@ function PreviewElement({ type, x, y }){
       {type===PALETTE.SWITCH    && (<SwSymbol mx={mx} my={my} ux={ux} uy={uy} px={px} py={py} closed={true} />)}
     </g>
   );
-
-
 }
