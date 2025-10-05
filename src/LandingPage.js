@@ -190,6 +190,9 @@ export default function LandingPage() {
     // merge pass
     let arr=bodiesRef.current, bodies=[]; const merged=new Set();
     for(let i=0;i<arr.length;i++){ if(merged.has(i)) continue; const A=arr[i]; let did=false; for(let j=i+1;j<arr.length;j++){ if(merged.has(j)) continue; const B=arr[j]; const dx=B.x-A.x, dy=B.y-A.y; const dist=Math.hypot(dx,dy); const As=A.size??A.initialSize??10, Bs=B.size??B.initialSize??10; if(dist < (As/2+Bs/2)){
+            if (A.type === 'collapsing' || B.type === 'collapsing') {
+      continue;
+    }
             if(A.type==='bh'&&B.type==='bh'){
               const m=A.mass+B.mass; const x=(A.x*A.mass+B.x*B.mass)/m; const y=(A.y*A.mass+B.y*B.mass)/m; const vx=(A.vx*A.mass+B.vx*B.mass)/m; const vy=(A.vy*A.mass+B.vy*B.mass)/m; const size=Math.sqrt(A.size**2+B.size**2);
               bodies.push({x,y,vx,vy,mass:m,type:'bh',size, fixed:true, gwProgress:0, gwMaxRadius:size*2.5});
