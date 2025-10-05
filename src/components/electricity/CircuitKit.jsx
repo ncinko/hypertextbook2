@@ -69,7 +69,7 @@ const PALETTE = {
 };
 
 const PALETTE_ITEMS = [
-  { type: PALETTE.RESISTOR,  label: "Resistor",  icon: "R",  def: { R: 10 } },
+  { type: PALETTE.RESISTOR,  label: "Resistor",  icon: "Ω",  def: { R: 10 } },
   { type: PALETTE.BATTERY,   label: "Battery",   icon: "+−", def: { V: 5 } },
   { type: PALETTE.CAPACITOR, label: "Capacitor", icon: "∥",  def: { C: 1e-6, v: 0, i: 0 } },
   { type: PALETTE.INDUCTOR,  label: "Inductor",  icon: "∿",  def: { L: 1e-3, i: 0 } },
@@ -363,10 +363,34 @@ function updateElementAnimations(elements, elemI, animSpeed, realDT, nodes, maxA
 
 
 /******************* Symbol Helpers *******************/
-function ResSymbol({ mx,my,ux,uy,px,py }){
-  const L=40*SCALE; const steps=4; const A=8*SCALE; const pts=[];
-  let side=1; for (let i=-L;i<=L;i+=2*L/steps){ pts.push([mx+i*ux+side*A*px,my+i*uy+side*A*py]); side*=-1; }
-  return (<polyline points={pts.map(p=>p.join(",")).join(" ")} fill="none" stroke={THEME.component} strokeWidth={3*SCALE} />);
+function ResSymbol({ mx, my, ux, uy, px, py }) {
+  // Half-length of the symbol along the element axis
+  const L = 30 * SCALE;          // <-- keep this in sync with getSymbolLength (2*L)
+  const steps = 3;               // number of interior peaks (adjust taste)
+  const A = Math.min(8 * SCALE, 0.25 * L); // zig amplitude
+
+  const pts = [];
+  // Vertex spacing along the axis (includes endpoints)
+  const dx = L / steps;          // since total span is 2L, vertex step is L/steps
+  for (let k = 0; k <= 2 * steps; k++) {
+    const x = -L + k * dx;       // from -L to +L
+    // Half-zigs: endpoints on centerline, interior vertices alternate ±A
+    const off = (k === 0 || k === 2 * steps) ? 0 : ((k % 2 === 1) ? +A : -A);
+    const X = mx + x * ux + off * px;
+    const Y = my + x * uy + off * py;
+    pts.push([X, Y]);
+  }
+
+  return (
+    <polyline
+      points={pts.map(p => p.join(",")).join(" ")}
+      fill="none"
+      stroke={THEME.component}
+      strokeWidth={3 * SCALE}
+      strokeLinejoin="round"
+      strokeLinecap="round"
+    />
+  );
 }
 function BatSymbol({ mx,my,ux,uy,px,py }){
   const L_long = 16*SCALE, L_short = 8*SCALE, separation = 6*SCALE;
@@ -802,7 +826,7 @@ useEffect(() => {
 /******************* Element SVG *******************/
 const getSymbolLength = (type) => {
     switch(type) {
-        case PALETTE.RESISTOR: return 80 * SCALE;
+        case PALETTE.RESISTOR: return 60 * SCALE;
         case PALETTE.INDUCTOR: return 80 * SCALE;
         case PALETTE.BATTERY: return 12 * SCALE;
         case PALETTE.SWITCH: return 40 * SCALE;
