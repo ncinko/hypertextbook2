@@ -1057,7 +1057,7 @@ function ElementSVG({ e, nodes, solution, t, dragInfo, animSpeed, maxCurrent, on
           const sPx = (anim.phasePx + i * spacingPx) % L;
           const s = sPx / L;
           const cx = x1 + dx * s, cy = y1 + dy * s;
-          return <circle key={i} cx={cx} cy={cy} r={2.5 * SCALE} fill={THEME.current} />;
+          return <circle key={i} cx={cx} cy={cy} r={2.5 * SCALE} fill={THEME.current} pointerEvents="none" />;
       })}
 
       {/* Debug overlay */}
