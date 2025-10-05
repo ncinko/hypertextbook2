@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import './CircuitKit.css';
 
 /**
  * CircuitKit.jsx — Transient Circuit Simulator
@@ -13,9 +14,8 @@ import React, { useEffect, useMemo, useRef, useState, useCallback } from "react"
  * - Simulation controls (Play, Pause, Reset).
  * - Live updating of component values during simulation.
  * - Scope locking to observe one component while interacting with another.
- * - Self-contained styling by loading Tailwind CSS.
- * - Adjustable simulation speed control.
- * - Improved current animation scaling and behavior.
+ * - Self-contained styling CircuitKit.css.
+ * - Adjustable simulation speed control
  * - Cleaner component visuals where symbols break the wire.
  * - Reduced internal wire resistance for near-ideal LC oscillations.
  * - Slider controls for simulation and animation speed.
@@ -31,7 +31,7 @@ const CAPTURE_W = 24 * SCALE;
 const END_R = 9 * SCALE;
 const LABEL_OFF = 12 * SCALE;
 const SNAP_RADIUS = 18 * SCALE;
-const ANIM_EPS = 1e-4; // Increased to reduce jitter
+const ANIM_EPS = 1e-3; // Increased to reduce jitter
 
 const THEME = {
   background: "#1f2937",
@@ -53,149 +53,10 @@ const THEME = {
   scopePlot: "#2563eb",
 };
 
-/******************* Embedded CSS Styles *******************/
-const StyleInjector = () => (
-    <style>{`
-        .circuit-kit-container {
-            display: flex;
-            flex-direction: column;
-            height: 100vh;
-            width: 100%;
-            font-family: sans-serif;
-        }
-        .circuit-kit-canvas-container {
-            flex-grow: 1;
-            position: relative;
-        }
-        .circuit-kit-svg {
-            position: absolute;
-            top: 0;
-            left: 0;
-        }
-        .circuit-kit-controls-inspector {
-            flex-shrink: 0;
-            padding: 0.5rem;
-            display: flex;
-            gap: 1rem;
-            align-items: flex-start;
-            border-top-width: 1px;
-        }
-        .circuit-kit-controls {
-            display: flex;
-            flex-direction: column;
-            gap: 0.5rem;
-        }
-        .circuit-kit-buttons {
-            display: flex;
-            gap: 0.5rem;
-            align-items: flex-end;
-            flex-wrap: wrap;
-        }
-        .circuit-kit-button {
-            padding: 0.5rem 1rem;
-            border-radius: 0.25rem;
-            cursor: pointer;
-        }
-        .circuit-kit-sliders {
-            display: grid;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 1rem 0.5rem;
-        }
-        .circuit-kit-slider-label {
-            font-size: 0.75rem;
-            display: flex;
-            flex-direction: column;
-        }
-        .circuit-kit-sim-time {
-            font-size: 0.75rem;
-        }
-        .element-inspector {
-            padding: 0.75rem;
-            border-width: 1px;
-            border-radius: 0.5rem;
-            display: flex;
-            flex-direction: column;
-            gap: 0.5rem;
-        }
-        .element-inspector-title {
-            font-weight: bold;
-            margin-bottom: 0.25rem;
-            font-size: 1.125rem;
-        }
-        .element-inspector-param {
-            font-size: 0.875rem;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-        .element-inspector-param-label {
-            width: 2.5rem;
-        }
-        .element-inspector-input {
-            border-width: 1px;
-            padding: 0.25rem 0.5rem;
-            width: 8rem;
-            border-radius: 0.25rem;
-        }
-        .element-inspector-checkbox {
-             font-size: 0.875rem;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            cursor: pointer;
-        }
-        .element-inspector-actions {
-            margin-top: 0.5rem;
-        }
-        .element-inspector-delete-button {
-            padding: 0.25rem 0.75rem;
-            border-radius: 0.25rem;
-            font-size: 0.875rem;
-            cursor: pointer;
-        }
-        .scope-plot-container {
-            border-width: 1px;
-            border-radius: 0.5rem;
-            padding: 0.5rem;
-            position: relative;
-        }
-        .scope-plot-no-element {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 0.875rem;
-        }
-        .scope-plot-lock-button {
-            position: absolute;
-            top: 0.25rem;
-            right: 0.25rem;
-            padding: 0.25rem;
-            border-radius: 0.25rem;
-        }
-        .scope-plot-mode-button {
-            position: absolute;
-            top: 0.25rem;
-            left: 0.25rem;
-            padding: 0.1rem 0.25rem;
-            font-size: 0.75rem;
-            border-radius: 0.25rem;
-            background: #4b5563;
-            color: #f9fafb;
-        }
-        .scope-plot-header {
-            font-size: 0.875rem;
-            font-weight: bold;
-            display: flex;
-            justify-content: space-between;
-            padding-right: 2rem;
-        }
-    `}</style>
-);
-
 /******************* Circuit Modeling & Simulation *******************/
 const GMIN = 1e-12;
 const R_WIRE = 1e-9; // Further reduced for near-ideal LC oscillation
-const R_SWITCH_OPEN = 1e9;
+const R_SWITCH_OPEN = 1e14;
 const SIM_DT = 1e-6; // 1 µs simulation time step for higher fidelity
 
 const PALETTE = {
@@ -221,37 +82,54 @@ const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
 /******************* Pre-built Circuit Generators *******************/
 function generateRCChargeDischargeCircuit() {
-    // Use a fresh UID generator for each circuit build
-    const l_uid = (() => { let n = 1; return () => `rc_${n++}`; })();
-    const cx = 550, cy = 250;
+  const l_uid = (() => { let n = 1; return () => `rc_${n++}`; })();
 
-    // Wider and repositioned nodes
-    const nodeA = { id: l_uid(), x: cx - 350, y: cy - 150 }; // Top of battery
-    const nodeB = { id: l_uid(), x: cx - 350, y: cy + 150 }; // Ground
-    const nodeC = { id: l_uid(), x: cx - 100, y: cy - 150 }; // Junction after charging resistor
-    const nodeD = { id: l_uid(), x: cx - 100, y: cy + 150 }; // Junction for switch and ground wire
-    const nodeE = { id: l_uid(), x: cx + 150, y: cy - 150 }; // Top of capacitor
-    const nodeF = { id: l_uid(), x: cx + 150, y: cy + 150 }; // Bottom of capacitor
-    const nodeG = { id: l_uid(), x: cx - 250, y: cy + 150 }; // Switch node
+  // Grid helper
+  const origin = { x: 350, y: 160 };
+  const dx = 220, dy = 160;
+  const grid = (c, r) => ({ x: origin.x + c * dx, y: origin.y + r * dy });
 
-    const nodes = [nodeA, nodeB, nodeC, nodeD, nodeE, nodeF, nodeG];
+  // Top row: battery+ -> series R -> switch -> cap top
+  // Bottom row: ground bus
+  // Right column (col 3): parallel resistor branch to avoid overlap
+  const nodeA   = { id: l_uid(), ...grid(0,0) }; // Battery +
+  const nodeB   = { id: l_uid(), ...grid(0,2) }; // Battery - / ground
+  const nodeC   = { id: l_uid(), ...grid(1,0) }; // After series R
+  const nodeE   = { id: l_uid(), ...grid(2,0) }; // Cap top
+  const gBus1   = { id: l_uid(), ...grid(1,2) }; // Ground bus mid
+  const gBus2   = { id: l_uid(), ...grid(2,2) }; // Ground bus right
 
-    const elements = [
-        // Battery (flipped) and charging resistor
-        { id: l_uid(), type: PALETTE.BATTERY,   n1: nodeA.id, n2: nodeB.id, params: { V: 10 } },
-        { id: l_uid(), type: PALETTE.RESISTOR,  n1: nodeA.id, n2: nodeC.id, params: { R: 10 } },
+  // New: dedicated branch for the parallel resistor
+  const rTop    = { id: l_uid(), ...grid(3,0) }; // Resistor top (right column)
+  const rBottom = { id: l_uid(), ...grid(3,2) }; // Resistor bottom (right column)
 
-        // Capacitor and its connection
-        { id: l_uid(), type: PALETTE.CAPACITOR, n1: nodeC.id, n2: nodeD.id, params: { C: 5e-5, v: 0 } },
-        { id: l_uid(), type: PALETTE.WIRE,      n1: nodeC.id, n2: nodeE.id, params: {} },
-        { id: l_uid(), type: PALETTE.WIRE,      n1: nodeF.id, n2: nodeD.id, params: {} }, // Connect to ground
+  const nodes = [nodeA, nodeB, nodeC, nodeE, gBus1, gBus2, rTop, rBottom];
 
-        // Discharge path with switch at bottom-left
-        { id: l_uid(), type: PALETTE.SWITCH,    n1: nodeB.id, n2: nodeD.id, params: { closed: false } },
-        { id: l_uid(), type: PALETTE.RESISTOR,  n1: nodeE.id, n2: nodeF.id, params: { R: 100 } },
-    ];
-    return { nodes, elements };
+  const elements = [
+    // Battery
+    { id: l_uid(), type: PALETTE.BATTERY,   n1: nodeA.id, n2: nodeB.id, params: { V: 10 } },
+
+    // Series charge path (top row)
+    { id: l_uid(), type: PALETTE.RESISTOR,  n1: nodeA.id, n2: nodeC.id, params: { R: 10 } },
+    { id: l_uid(), type: PALETTE.SWITCH,    n1: nodeC.id, n2: nodeE.id, params: { closed: true } },
+
+    // Capacitor: vertical at column 2 (no overlap now)
+    { id: l_uid(), type: PALETTE.CAPACITOR, n1: nodeE.id, n2: gBus2.id, params: { C: 5e-6, v: 0 } },
+
+    // Parallel resistor: separate vertical branch at column 3
+    // Bridge from cap top to rTop, and from ground bus to rBottom
+    { id: l_uid(), type: PALETTE.WIRE,      n1: nodeE.id, n2: rTop.id,    params: {} },
+    { id: l_uid(), type: PALETTE.RESISTOR,  n1: rTop.id,  n2: rBottom.id, params: { R: 100 } },
+    { id: l_uid(), type: PALETTE.WIRE,      n1: gBus2.id, n2: rBottom.id, params: {} },
+
+    // Ground bus (bottom row)
+    { id: l_uid(), type: PALETTE.WIRE,      n1: nodeB.id, n2: gBus1.id, params: {} },
+    { id: l_uid(), type: PALETTE.WIRE,      n1: gBus1.id, n2: gBus2.id, params: {} },
+  ];
+
+  return { nodes, elements };
 }
+
 
 
 /******************* Linear Solver (Gauss, partial pivot) *******************/
@@ -396,7 +274,9 @@ function buildAndSolveTransient(nodes, elements, groundNodeId, dt) {
             case PALETTE.SWITCH: I = (v1 - v2) / (e.params.closed ? R_WIRE : R_SWITCH_OPEN); break;
             case PALETTE.BATTERY:
                 const vSrcIdx = vSrcs.findIndex(vs => vs.id === e.id);
-                I = vSrcIdx > -1 ? -(x[n + vSrcIdx] || 0) : 0;
+                // This is the current leaving the positive (n1) terminal.
+                // The animation will show flow from n1 to n2 for positive I.
+                I = vSrcIdx > -1 ? (x[n + vSrcIdx] || 0) : 0;
                 break;
             case PALETTE.CAPACITOR:
                 const v_new = v1 - v2;
@@ -428,6 +308,59 @@ function chooseGround(nodes){
   }, -1);
   return nodes[minIdx]?.id ?? null;
 }
+
+function updateElementAnimations(elements, elemI, animSpeed, realDT, nodes, maxAbsI) {
+  const getLen = (e) => {
+    const a = nodes.find(n => n.id === e.n1);
+    const b = nodes.find(n => n.id === e.n2);
+    if (!a || !b) return 0;
+    return Math.hypot(b.x - a.x, b.y - a.y);
+  };
+
+  // Base speed to keep slow currents visible; scale is in px/s
+  const BASE_PX_S = 12;           // small floor so tiny currents still move
+  const EXP       = 0.6;          // smoothness of relative scaling
+  const EPS_IREF  = 1e-12;        // avoid div by zero
+
+  return elements.map(e => {
+    const Iraw = elemI.get(e.id) || 0;
+
+    // Stop animation on explicitly open switches, avoid jitter near zero
+    const active = (e.type !== PALETTE.SWITCH || !!e.params.closed) && Math.abs(Iraw) > ANIM_EPS;
+    const dir    = Math.sign(Iraw) || 1;
+
+    // Length & spacing for anti-alias cap
+    const L = getLen(e);
+    const nDots = Math.max(1, Math.floor(L / (30 * SCALE)));
+    const spacingPx = nDots > 0 ? (L / nDots) : L || 1;
+
+    // Relative speed across branches
+    const rel = maxAbsI > 0 ? Math.pow(Math.abs(Iraw) / (maxAbsI + EPS_IREF), EXP) : 0;
+    const targetPxPerS = BASE_PX_S + (animSpeed / 10) * rel; // same rough scale as before
+
+    // Per-frame travel in px; clamp to avoid wagon-wheel
+    const maxStepPx = 0.45 * spacingPx;
+    const stepPx = dir * Math.min(targetPxPerS * realDT, maxStepPx);
+
+    // Accumulate phase in px
+    const prevPhase = e.anim?.phasePx || 0;
+    // Keep phase within [0, L) for numerical sanity
+    let phasePx = (prevPhase + (active ? stepPx : 0)) % (L || 1);
+    if (phasePx < 0) phasePx += (L || 1);
+
+    return {
+      ...e,
+      anim: {
+        active,
+        dir,                   // for debug arrow when paused
+        I_disp: Iraw,          // for overlay readout
+        phasePx,               // NEW: accumulated phase in px
+        spacingPx,             // NEW: to position dots uniformly
+      }
+    };
+  });
+}
+
 
 /******************* Symbol Helpers *******************/
 function ResSymbol({ mx,my,ux,uy,px,py }){
@@ -497,9 +430,12 @@ export default function CircuitKit() {
   // simulation state
   const [simTime, setSimTime] = useState(0);
   const [isRunning, setIsRunning] = useState(true);
-  const [simRate, setSimRate] = useState(2.5);
-  const [animSpeed, setAnimSpeed] = useState(3000);
-  const [solution, setSolution] = useState({ nodeV: new Map(), elemI: new Map() });
+  const [simRate, setSimRate] = useState(3.0);
+  const [animSpeed, setAnimSpeed] = useState(1000);
+  
+  const [visTime, setVisTime] = useState(0);
+  const [showDebug, setShowDebug] = useState(false);
+const [solution, setSolution] = useState({ nodeV: new Map(), elemI: new Map() });
   const [scopeData, setScopeData] = useState([]);
   const [scopedElementId, setScopedElementId] = useState(null);
   const [isScopeLocked, setIsScopeLocked] = useState(false);
@@ -525,30 +461,52 @@ export default function CircuitKit() {
   }, []);
 
   // Main simulation loop
-  useEffect(() => {
-    let animFrameId;
-    const effectiveDT = SIM_DT * simRate;
-    const step = () => {
-      if (isRunning) {
-        setElements(prevElements => {
-          const { nodeV, elemI, ground, newStates } = buildAndSolveTransient(nodes, prevElements, groundNodeId, effectiveDT);
-          setSolution({ nodeV, elemI, ground });
-          setSimTime(t => t + effectiveDT);
-          
-          const nextElements = prevElements.map(el => {
-            if (newStates[el.id]) {
-              return { ...el, params: { ...el.params, ...newStates[el.id] } };
-            }
-            return el;
-          });
-          return nextElements;
+useEffect(() => {
+  let animFrameId;
+  let lastTS = performance.now() / 1000;
+  const effectiveDT = SIM_DT * simRate;
+
+  const step = () => {
+    const now = performance.now() / 1000;
+    const realDT = Math.max(0, Math.min(0.1, now - lastTS));
+    lastTS = now;
+    setVisTime(tv => tv + realDT);
+
+    if (isRunning) {
+      setElements(prevElements => {
+        const { nodeV, elemI, ground, newStates } =
+          buildAndSolveTransient(nodes, prevElements, groundNodeId, effectiveDT);
+
+        setSolution({ nodeV, elemI, ground });
+        setSimTime(t => t + effectiveDT);
+
+        // carry state updates for reactive components
+        const nextElements = prevElements.map(el => {
+          if (newStates[el.id]) {
+            return { ...el, params: { ...el.params, ...newStates[el.id] } };
+          }
+          return el;
         });
-      }
-      animFrameId = requestAnimationFrame(step);
-    };
+
+        // NEW: compute max current magnitude for relative scaling
+        let maxAbsI = 0;
+        for (const v of elemI.values()) maxAbsI = Math.max(maxAbsI, Math.abs(v));
+
+        // NEW: phase-based animation update with anti-alias clamp
+        const withAnim = updateElementAnimations(
+          nextElements, elemI, animSpeed, realDT, nodes, maxAbsI
+        );
+        return withAnim;
+      });
+    }
+
     animFrameId = requestAnimationFrame(step);
-    return () => cancelAnimationFrame(animFrameId);
-  }, [isRunning, nodes, groundNodeId, simRate]);
+  };
+
+  animFrameId = requestAnimationFrame(step);
+  return () => cancelAnimationFrame(animFrameId);
+}, [isRunning, nodes, groundNodeId, simRate, animSpeed]);
+
 
   // Scope data recording
   useEffect(() => {
@@ -756,8 +714,7 @@ export default function CircuitKit() {
   }, [selection]);
 
   return (
-    <div className="circuit-kit-container" style={{ background: THEME.background, color: THEME.text }}>
-        <StyleInjector />
+    <div className="circuit-kit-container">
       <div className="circuit-kit-canvas-container" ref={svgRef}>
         <svg width={size.width} height={size.height}
              onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerLeave={onPointerUp}
@@ -786,35 +743,54 @@ export default function CircuitKit() {
           <g transform={`translate(0,${WORK_OFFSET_Y})`}>
             {carry?.type === 'palette' && <PreviewElement type={carry.item.type} x={mouseWS.x} y={mouseWS.y} />}
             {elements.map(e => (
-              <ElementSVG key={e.id} e={e} nodes={nodes} solution={solution} t={simTime} dragInfo={carry}
+              <ElementSVG key={e.id} e={e} nodes={nodes} solution={solution} t={visTime} dragInfo={carry}
                 animSpeed={animSpeed}
                 maxCurrent={maxCurrent}
-                onElementDown={onElementDown} onEndDown={onEndDown} selected={selection === e.id} />
+                onElementDown={onElementDown} onEndDown={onEndDown} selected={selection === e.id} showDebug={showDebug} />
             ))}
+            {nodes.map(n => {
+              const voltage = solution.nodeV.get(n.id);
+              if (voltage === undefined) return null;
+              return (
+                <text
+                  key={`label_${n.id}`}
+                  x={n.x}
+                  y={n.y - 15 * SCALE}
+                  fill={THEME.text}
+                  fontSize={10 * SCALE}
+                  textAnchor="middle"
+                >
+                  {voltage.toFixed(2)}V
+                </text>
+              );
+            })}
           </g>
         </svg>
       </div>
 
       {/* Controls & Inspector */}
-      <div className="circuit-kit-controls-inspector" style={{ borderColor: THEME.border }}>
+      <div className="circuit-kit-controls-inspector">
         <div className="circuit-kit-controls">
             <div className="circuit-kit-buttons">
-                <button className="circuit-kit-button" style={{background:THEME.button, color:THEME.buttonText}} onClick={() => setIsRunning(s => !s)}>{isRunning ? 'Pause' : 'Play'}</button>
-                <button className="circuit-kit-button" style={{background:THEME.button, color:THEME.buttonText}} onClick={resetSimulation}>Reset</button>
-                <button className="circuit-kit-button" style={{background:THEME.button, color:THEME.buttonText}} onClick={() => { setNodes([]); setElements([]); setSelection(null); }}>Clear All</button>
-                <button className="circuit-kit-button" style={{background:THEME.button, color:THEME.buttonText}} onClick={() => loadPrebuiltCircuit(generateRCChargeDischargeCircuit)}>Load RC Circuit</button>
+                <button className="circuit-kit-button" onClick={() => setIsRunning(s => !s)}>{isRunning ? 'Pause' : 'Play'}</button>
+                <button className="circuit-kit-button" onClick={resetSimulation}>Reset</button>
+                <button className="circuit-kit-button" onClick={() => { setNodes([]); setElements([]); setSelection(null); }}>Clear All</button>
+                <button className="circuit-kit-button" onClick={() => loadPrebuiltCircuit(generateRCChargeDischargeCircuit)}>Load RC Circuit</button>
             </div>
             <div className="circuit-kit-sliders">
-                <label className="circuit-kit-slider-label" style={{color:THEME.textMuted}}>
+                <label className="circuit-kit-slider-label">
                     Sim Speed ({simRate.toFixed(1)}x)
                     <input type="range" min="0.1" max="10" step="0.1" value={simRate} onChange={(e) => setSimRate(Number(e.target.value))} />
                 </label>
-                 <label className="circuit-kit-slider-label" style={{color:THEME.textMuted}}>
+                 <label className="circuit-kit-slider-label">
                     Anim. Speed ({animSpeed})
                     <input type="range" min="50" max="5000" step="50" value={animSpeed} onChange={(e) => setAnimSpeed(Number(e.target.value))} />
                 </label>
             </div>
-            <div className="circuit-kit-sim-time" style={{color: THEME.textMuted}}>Sim Time: {(simTime * 1000).toFixed(2)} ms</div>
+                            <label className="circuit-kit-slider-label">
+                    
+                </label>
+<div className="circuit-kit-sim-time">Sim Time: {(simTime * 1000).toFixed(2)} ms</div>
         </div>
         {sel && <ElementInspector element={sel} onChange={handleElementChange} onDelete={handleElementDelete} onToggle={handleElementToggle} />}
          <ScopePlot data={scopeData} element={scopedElement} isLocked={isScopeLocked} onLockToggle={() => setIsScopeLocked(l => !l)} scopeMode={scopeMode} onScopeModeChange={() => setScopeMode(m => m === 'voltage' ? 'current' : 'voltage')} />
@@ -835,41 +811,45 @@ const getSymbolLength = (type) => {
     }
 };
 
-function ElementSVG({ e, nodes, solution, t, dragInfo, animSpeed, maxCurrent, onElementDown, onEndDown, selected }){
+function ElementSVG({ e, nodes, solution, t, dragInfo, animSpeed, maxCurrent, onElementDown, onEndDown, selected, showDebug }){
   const a = nodes.find(n=>n.id===e.n1), b = nodes.find(n=>n.id===e.n2); if (!a||!b) return null;
   const {x:x1, y:y1} = a, {x:x2, y:y2} = b;
-  const dx=x2-x1, dy=y2-y1; const L = Math.hypot(dx,dy)||1; const ux=dx/L, uy=dy/L; const px=-uy, py=ux; const mx=(x1+x2)/2, my=(y1+y2)/2;
+  const dx=x2-x1, dy=y2-y1; const L = Math.max(1e-6, Math.hypot(dx,dy)); // avoid 0
+  const ux=dx/L, uy=dy/L; const px=-uy, py=ux; const mx=(x1+x2)/2, my=(y1+y2)/2;
+
   const bodyStroke = selected ? THEME.select : (e.type===PALETTE.WIRE ? THEME.wire : THEME.component);
-  const I = solution.elemI?.get(e.id) ?? 0;
-  const showDots = Math.abs(I) > (maxCurrent * 0.005 + ANIM_EPS);
-  const nDots = Math.max(1, Math.floor(L/(30*SCALE)));
-  
-  let relativeI = 0;
-  if (maxCurrent > ANIM_EPS) {
-    relativeI = Math.abs(I) / maxCurrent;
-  }
-  
-  const speed = 100*animSpeed /(1+ Math.exp(relativeI / 0.5));
-  
+  const I_disp_live = solution.elemI?.get(e.id) ?? 0;
+
+  // --- NEW: pause-safe anim fallback (so dots show even before first anim update)
+  const defaultSpacing = L / Math.max(1, Math.floor(L / (30 * SCALE)));
+  const anim = e.anim ?? {
+    active: Math.abs(I_disp_live) > ANIM_EPS,
+    dir: Math.sign(I_disp_live) || 1,
+    phasePx: 0,
+    spacingPx: defaultSpacing
+  };
+  // ...
+  const showDots = !!anim.active;
+  const spacingPx = anim.spacingPx || defaultSpacing;
+  const nDots = Math.max(1, Math.floor(L / Math.max(1e-6, spacingPx)));
+
   const isHoriz = Math.abs(dx) >= Math.abs(dy);
   const labelOffset = (e.type === PALETTE.BATTERY || e.type === PALETTE.CAPACITOR) ? LABEL_OFF + 6 * SCALE : LABEL_OFF;
-  // Label position
   const labelX = isHoriz ? mx : mx + (labelOffset * Math.sign(px || 1));
   const labelY = isHoriz ? my - labelOffset : my;
   const labelAnchor = isHoriz ? 'middle' : (px >= 0 ? 'start' : 'end');
-  
-  // Polarity position (opposite side of label)
+
   const polarityX = isHoriz ? mx : mx - (LABEL_OFF * Math.sign(px || 1));
   const polarityY = isHoriz ? my + LABEL_OFF : my;
   const polarityAnchor = isHoriz ? 'middle' : (px >= 0 ? 'end' : 'start');
 
   const symbolLength = getSymbolLength(e.type);
   const hasSymbol = symbolLength > 0;
-  const leadLength = (L - symbolLength) / 2;
+  const leadLength = (L - symbolLength) / 2;  
 
   return (
     <g>
-      {/* Visual Body */}
+      {/* Leads / body */}
       {hasSymbol && leadLength > 5 * SCALE ? (
         <>
           <line x1={x1} y1={y1} x2={x1 + leadLength * ux} y2={y1 + leadLength * uy} stroke={bodyStroke} strokeWidth={3*SCALE} strokeLinecap="round" pointerEvents="none" />
@@ -878,16 +858,16 @@ function ElementSVG({ e, nodes, solution, t, dragInfo, animSpeed, maxCurrent, on
       ) : (
         <line x1={x1} y1={y1} x2={x2} y2={y2} stroke={bodyStroke} strokeWidth={e.type===PALETTE.WIRE ? 3*SCALE : 4*SCALE} strokeLinecap="round" pointerEvents="none" />
       )}
-      
+
       {/* Symbol */}
       {hasSymbol && leadLength > 5 * SCALE && (
-          <>
-            {e.type===PALETTE.RESISTOR  && (<ResSymbol mx={mx} my={my} ux={ux} uy={uy} px={px} py={py} />)}
-            {e.type===PALETTE.CAPACITOR && (<CapSymbol mx={mx} my={my} ux={ux} uy={uy} px={px} py={py} />)}
-            {e.type===PALETTE.INDUCTOR  && (<InductorSymbol mx={mx} my={my} ux={ux} uy={uy} px={px} py={py} />)}
-            {e.type===PALETTE.BATTERY   && (<BatSymbol mx={mx} my={my} ux={ux} uy={uy} px={px} py={py} />)}
-            {e.type===PALETTE.SWITCH    && (<SwSymbol mx={mx} my={my} ux={ux} uy={uy} px={px} py={py} closed={!!e.params.closed} />)}
-          </>
+        <>
+          {e.type===PALETTE.RESISTOR  && (<ResSymbol mx={mx} my={my} ux={ux} uy={uy} px={px} py={py} />)}
+          {e.type===PALETTE.CAPACITOR && (<CapSymbol mx={mx} my={my} ux={ux} uy={uy} px={px} py={py} />)}
+          {e.type===PALETTE.INDUCTOR  && (<InductorSymbol mx={mx} my={my} ux={ux} uy={uy} px={px} py={py} />)}
+          {e.type===PALETTE.BATTERY   && (<BatSymbol mx={mx} my={my} ux={ux} uy={uy} px={px} py={py} />)}
+          {e.type===PALETTE.SWITCH    && (<SwSymbol mx={mx} my={my} ux={ux} uy={uy} px={px} py={py} closed={!!e.params.closed} />)}
+        </>
       )}
 
       {/* Polarity Indicators */}
@@ -919,30 +899,52 @@ function ElementSVG({ e, nodes, solution, t, dragInfo, animSpeed, maxCurrent, on
       })()}
 
       {/* Label */}
-      <text x={labelX} y={labelY} fontSize={12*SCALE} textAnchor={labelAnchor} fill={THEME.text}>{labelFor(e)}</text>
-      
-      <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="transparent" strokeWidth={CAPTURE_W} pointerEvents="stroke" style={{ cursor:'grab' }}
-            onPointerDown={(ev)=>onElementDown(e.id, ev)} />
-            
-      <circle cx={x1} cy={y1} r={END_R} fill={THEME.glow} fillOpacity={0.12} stroke={THEME.glow} strokeWidth={3} filter="url(#glow)" style={{ cursor:'crosshair' }} onPointerDown={(ev)=>onEndDown(e.id,'n1',ev)} />
-      <circle cx={x2} cy={y2} r={END_R} fill={THEME.glow} fillOpacity={0.12} stroke={THEME.glow} strokeWidth={3} filter="url(#glow)" style={{ cursor:'crosshair' }} onPointerDown={(ev)=>onEndDown(e.id,'n2',ev)} />
+        <text x={labelX} y={labelY} fontSize={12*SCALE} textAnchor={labelAnchor} fill={THEME.text}>{labelFor(e)}</text>
 
-      {dragInfo?.type==='end' && dragInfo.snapTargetId && (dragInfo.nodeId === a.id || dragInfo.nodeId === b.id) && (()=>{
-         const otherNodeId = dragInfo.nodeId === a.id ? b.id : a.id;
-         const targetNode = nodes.find(n=>n.id===dragInfo.snapTargetId);
-         if (targetNode && targetNode.id !== otherNodeId) {
-             return <circle cx={targetNode.x} cy={targetNode.y} r={END_R*1.3} fill="none" stroke={THEME.snap} strokeWidth={4} filter="url(#glow)" />;
-         }
-         return null;
-      })()}
+        {/* Hit areas */}
+        <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="transparent" strokeWidth={CAPTURE_W} pointerEvents="stroke" style={{ cursor:'grab' }}
+              onPointerDown={(ev)=>onElementDown(e.id, ev)} />
+        <circle cx={x1} cy={y1} r={END_R} fill={THEME.glow} fillOpacity={0.12} stroke={THEME.glow} strokeWidth={3} filter="url(#glow)" style={{ cursor:'crosshair' }} onPointerDown={(ev)=>onEndDown(e.id,'n1',ev)} />
+        <circle cx={x2} cy={y2} r={END_R} fill={THEME.glow} fillOpacity={0.12} stroke={THEME.glow} strokeWidth={3} filter="url(#glow)" style={{ cursor:'crosshair' }} onPointerDown={(ev)=>onEndDown(e.id,'n2',ev)} />
 
-      {showDots && Array.from({length:nDots}).map((_,i)=>{
-        const animationSign = e.type === PALETTE.BATTERY ? -Math.sign(I) : Math.sign(I);
-        const phase = (t * speed * animationSign + i/nDots * L);
-        const s = (((phase % L) + L) % L) / L; // Use proper modulo for negative numbers
-        const cx=x1+dx*s, cy=y1+dy*s;
-        return <circle key={i} cx={cx} cy={cy} r={2.5*SCALE} fill={THEME.current} />;
+        {/* Dots — NEW phasePx/spacingPx renderer (direction always correct) */}
+        {showDots && Array.from({ length: nDots }).map((_, i) => {
+          const sPx = (anim.phasePx + i * spacingPx) % L;
+          const s = sPx / L;
+          const cx = x1 + dx * s, cy = y1 + dy * s;
+          return <circle key={i} cx={cx} cy={cy} r={2.5 * SCALE} fill={THEME.current} />;
       })}
+
+      {/* Debug overlay */}
+      {showDebug && (
+        <g>
+          {(() => {
+            const v1 = solution.nodeV.get(e.n1) ?? 0;
+            const v2 = solution.nodeV.get(e.n2) ?? 0;
+            const dv = v1 - v2;
+            const Idisp = e.anim?.I_disp ?? (solution.elemI?.get(e.id) ?? 0);
+            const dirVal = e.anim?.dir ?? (Math.sign(Idisp) || 1);
+            const dirArrow = dirVal > 0 ? "→" : "←";
+            const fmt = (x) => {
+              const a = Math.abs(x);
+              if (a >= 1) return x.toFixed(2) + " A";
+              if (a >= 1e-3) return (x*1e3).toFixed(2) + " mA";
+              if (a >= 1e-6) return (x*1e6).toFixed(2) + " µA";
+              if (a >= 1e-9) return (x*1e9).toFixed(2) + " nA";
+              return x.toExponential(2) + " A";
+            };
+            const label = `${fmt(Idisp)} ${dirArrow}  (ΔV=${dv.toFixed(3)} V)`;
+            const off = 16 * SCALE;
+            return (
+              <text x={mx + off * px} y={my + off * py} fill={THEME.text}
+                    fontSize={10*SCALE} textAnchor="middle" opacity="0.85" pointerEvents="none">
+                {label}
+              </text>
+            );
+          })()}
+        </g>
+      )}
+
     </g>
   );
 }
@@ -1006,7 +1008,6 @@ const ParamInput = React.memo(function ParamInput({ label, unit, value, paramKey
         ref={inputRef}
         type="text"
         className="element-inspector-input"
-        style={{ background: THEME.canvas, borderColor: THEME.border, color: THEME.text }}
         value={localValue}
         onChange={handleChange}
         onBlur={handleBlur}
@@ -1020,7 +1021,7 @@ const ElementInspector = React.memo(function ElementInspector({ element, onChang
   if (!element) return null;
 
   return (
-    <div className="element-inspector" style={{ borderColor: THEME.border }}>
+    <div className="element-inspector">
       <div className="element-inspector-title">{element.type.charAt(0).toUpperCase() + element.type.slice(1)}</div>
       {element.type === PALETTE.RESISTOR && <ParamInput label="R" unit="Ω" value={element.params.R} paramKey="R" onChange={onChange} />}
       {element.type === PALETTE.BATTERY && <ParamInput label="V" unit="V" value={element.params.V} paramKey="V" onChange={onChange} />}
@@ -1032,7 +1033,7 @@ const ElementInspector = React.memo(function ElementInspector({ element, onChang
         </label>
       )}
       <div className="element-inspector-actions">
-        <button className="element-inspector-delete-button" style={{ background: THEME.button, color: THEME.buttonText }} onClick={onDelete}>Delete</button>
+        <button className="element-inspector-delete-button" onClick={onDelete}>Delete</button>
       </div>
     </div>
   );
@@ -1040,7 +1041,7 @@ const ElementInspector = React.memo(function ElementInspector({ element, onChang
 
 function ScopePlot({ data, element, isLocked, onLockToggle, scopeMode, onScopeModeChange }) {
   const width = 400, height = 150;
-  if (!element) return <div style={{width, height, borderColor: THEME.border, color: THEME.textMuted}} className="scope-plot-no-element">Select an element to scope its value.</div>;
+  if (!element) return <div className="scope-plot-no-element">Select an element to scope its value.</div>;
 
   const values = data.map(d => d.value);
   const min = Math.min(0, ...values);
@@ -1059,8 +1060,8 @@ function ScopePlot({ data, element, isLocked, onLockToggle, scopeMode, onScopeMo
   const lastVal = data.length > 0 ? data[data.length-1].value : 0;
 
   return (
-      <div className="scope-plot-container" style={{borderColor: THEME.border}}>
-        <button onClick={onLockToggle} className="scope-plot-lock-button" style={{background: isLocked ? THEME.select : THEME.button, color: THEME.buttonText}}>
+      <div className="scope-plot-container">
+        <button onClick={onLockToggle} className={`scope-plot-lock-button ${isLocked ? 'locked' : ''}`}>
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
               {isLocked ? 
                 <path d="M8 1a2 2 0 0 1 2 2v4H6V3a2 2 0 0 1 2-2zm3 6V3a3 3 0 0 0-6 0v4a2 2 0 0 0-2 2v5a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2z"/> :
@@ -1069,19 +1070,31 @@ function ScopePlot({ data, element, isLocked, onLockToggle, scopeMode, onScopeMo
             </svg>
         </button>
         {canToggleMode && <button onClick={onScopeModeChange} className="scope-plot-mode-button">{scopeMode === 'voltage' ? 'Show Current' : 'Show Voltage'}</button>}
-        <div className="scope-plot-header">
+        <div className="scope-plot-header" style={{ marginBottom: 8 }}>
+        
             <span>Scope: {element.type} {type}</span>
-            <span style={{color:THEME.scopePlot}}>{lastVal.toPrecision(3)} {unit}</span>
+            <span className="scope-plot-value">{lastVal.toPrecision(3)} {unit}</span>
         </div>
         <svg width={width} height={height}>
             {/* Grid lines */}
-            <line x1={0} y1={height/2} x2={width} y2={height/2} stroke={THEME.scopeGrid} strokeWidth={1} />
-            <line x1={0} y1={0} x2={width} y2={0} stroke={THEME.scopeGrid} strokeWidth={1} />
-            <line x1={0} y1={height} x2={width} y2={height} stroke={THEME.scopeGrid} strokeWidth={1} />
-            <text x={5} y={12} fill={THEME.textMuted} fontSize="10">{max.toPrecision(2)}</text>
-            <text x={5} y={height-4} fill={THEME.textMuted} fontSize="10">{min.toPrecision(2)}</text>
+            <line x1={0} y1={height/2} x2={width} y2={height/2} className="scope-grid" />
+            <line x1={0} y1={0} x2={width} y2={0} className="scope-grid" />
+            <line x1={0} y1={height} x2={width} y2={height} className="scope-grid" />
+            <text x={5} y={12} className="scope-text">{max.toPrecision(2)}</text>
+            <text x={5} y={height-4} className="scope-text">{min.toPrecision(2)}</text>
             
-            {data.length > 1 && <polyline points={points} fill="none" stroke={THEME.scopePlot} strokeWidth={2} />}
+            {data.length > 1 && (
+  <polyline
+    points={points}
+    className="scope-plot"
+    fill="none"
+    stroke={THEME.current}        // or a hard-coded color like "#1f6feb"
+    strokeWidth={2.5}
+    strokeLinejoin="round"
+    strokeLinecap="round"
+  />
+)}
+
         </svg>
       </div>
   );
