@@ -18,6 +18,7 @@ import PolarKinematics from "./pages/PolarKinematics";
 import Vectors from "./pages/Vectors";
 import Forces from "./pages/Forces";
 import CubePuzzle3x3 from './components/math/CubePuzzle3x3';  
+import Kepler from './pages/Kepler';
 
 import './styles/main.css';
 
@@ -69,7 +70,7 @@ export default function App() {
                 <Route path="/double-pendulum" element={<DoublePendulum />} />
                 <Route path="/spring-mass" element={<SpringMass />} />
                 <Route path="/ideal-gas" element={<IdealGas />} />
-				<Route path="/oscillations" element={<Oscillations />} />
+				        <Route path="/oscillations" element={<Oscillations />} />
                 <Route path="/electric-field" element={<ElectricField/>} />
                 <Route path="/electric-potential" element={<ElectricPotential/>} />
                 <Route path="/electric-current" element={<ElectricCurrent />} />
@@ -83,6 +84,7 @@ export default function App() {
                 <Route path="/forces" element={<Forces />} />
                 <Route path="/vectors" element={<Vectors />} />
                 <Route path="/cube" element={<CubePuzzle3x3 />} />
+                <Route path="/kepler" element={<Kepler />} />
             </Routes>
         </div>
     );
