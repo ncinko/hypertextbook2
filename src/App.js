@@ -58,6 +58,7 @@ export default function App() {
         <span className="nav-item">Advanced ▾</span>
         <div className="dropdown-content">
           <Link to="/chaos">Chaos</Link>
+          <Link to="/kepler">Kepler</Link>
         </div>
       </div>
 

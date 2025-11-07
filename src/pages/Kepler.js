@@ -43,68 +43,99 @@ export default function KeplerLaws() {
 
           <h2>Simulation</h2>
           <p>
-            Toggle overlays to connect geometry with dynamics. The “second focus” is computed from the osculating elements via the eccentricity vector.
-            Equal-time wedges demonstrate Kepler’s second law. Vectors show instantaneous velocity and the central inverse-square force.
+            Use the checkboxes to toggle the display of orbit features. The readout shows the current orbit's eccentricity <MathJax inline>{"\\(e\\)"}</MathJax>,
+            semi-major axis <MathJax inline>{"\\(a\\)"}</MathJax>, and period <MathJax inline>{"\\(T\\)"}</MathJax> (if bound).
           </p>
+          <Kepler />
 
-          <Kepler
-            showFoci={showFoci}
-            setShowFoci={setShowFoci}
-            showAreas={showAreas}
-            setShowAreas={setShowAreas}   />
+          <HiddenExposition title={<span className="force-black">Why equal areas in equal times?</span>}>
+            <p>
+              The torque from a central force is zero, so angular momentum <MathJax inline>{"\\(\\vec{L}\\)"}</MathJax> is conserved.
+              
+              The planet sweeps out wedges of area
+              <MathJax inline>{" \\(\\Delta A = \\tfrac12 r^2 \\Delta\\theta\\)"}</MathJax> in time <MathJax inline>{" \\(\\Delta t\\)"}</MathJax>.
+              Thus the areal velocity is
+              <MathJax inline>{" \\(\\dot A = \\dfrac{\\Delta A}{\\Delta t} = \\dfrac{r^2 \\Delta\\theta}{2 \\Delta t}\\)"}</MathJax>, which can be rewritten using
+              <MathJax inline>{" \\(L = m r^2 \\dot\\theta\\, \\)"}</MathJax> as
+              <MathJax inline>{" \\(\\dot A = \\dfrac{L}{2m} \\)"}</MathJax>.
+            </p>
+          </HiddenExposition>
           <TwoBody/>
 
-          <p style={{ marginTop: "0.5rem" }}>
-            <em>Live readout:</em>{" "}
-            e ≈ {readout.e?.toFixed?.(3) ?? "—"} &nbsp; | &nbsp;
-            a ≈ {Number.isFinite(readout.a) ? readout.a.toFixed(1) : "—"} &nbsp; | &nbsp;
-            T ≈ {readout.T ? readout.T.toFixed(2) : "—"}
-          </p>
+          <HiddenExposition 
+  title={<span className="force-black">Why is the center of mass a common focus?</span> }
+>
 
-          <HiddenExposition title="Where does the second focus come from?">
-            <p>
-              The eccentricity vector is
-              <MathJax inline>{"\\(\\; \\vec e = \\frac{\\vec v\\times\\vec h}{\\mu} - \\hat r \\;\\)"}</MathJax>,
-              with <MathJax inline>{"\\(\\vec h = \\vec r \\times \\vec v\\)"}</MathJax> and <MathJax inline>{"\\(\\mu=GM_\\odot\\)"}</MathJax>.
-              Its magnitude is <MathJax inline>{"\\(e=|\\vec e|\\)"}</MathJax>. From the specific energy
-              <MathJax inline>{"\\(\\epsilon=\\tfrac12 v^2-\\mu/r\\)"}</MathJax>, we obtain
-              <MathJax inline>{"\\(a=-\\mu/(2\\epsilon)\\)"}</MathJax>. For an ellipse, the other focus lies a distance
-              <MathJax inline>{"\\(2ae\\)"}</MathJax> along <MathJax inline>{"\\(\\hat e=\\vec e/\\!e\\)"}</MathJax>.
-            </p>
-          </HiddenExposition>
+  <p style={{ marginTop: 0 }}>
+    Begin with Newton’s law of gravitation for two bodies of masses 
+    <MathJax inline>{" \\(m_1\\)"} </MathJax> and 
+    <MathJax inline>{" \\(m_2\\)"} </MathJax> separated by 
+    <MathJax inline>{" \\(\\vec{\\mathbf r} = \\vec{\\mathbf r}_2 - \\vec{\\mathbf r}_1\\)"} </MathJax>:
+  </p>
 
-          <HiddenExposition title="Why equal areas in equal times?">
-            <p>
-              The areal velocity is constant because the torque from a central force is zero, so angular momentum is conserved:
-              <MathJax inline>{"\\(\\dot A = \\tfrac12 r^2\\dot\\theta = h/2\\)"}</MathJax>. The wedges in the simulation represent equal
-              <MathJax inline>{"\\(\\Delta t\\)"}</MathJax> intervals; hence their areas match.
-            </p>
-          </HiddenExposition>
+  <div style={{ textAlign: "center", margin: "6px 0" }}>
+    <MathJax>{"\\(\\vec{\\mathbf F}_{12} = -G\\,\\dfrac{m_1 m_2}{r^2}\\,\\hat{\\mathbf r}\\)"}</MathJax>
+  </div>
+
+  <p>
+    Each body accelerates toward the other, but the forces are equal and opposite.  
+    Writing Newton’s second law for each body and then subtracting gives an equation for the 
+    <em> relative</em> motion:
+  </p>
+
+  <div style={{ textAlign: "center", margin: "6px 0" }}>
+    <MathJax>{"\\(\\mu\\,\\ddot{\\vec{\\mathbf r}} = -G\\,\\dfrac{m_1 m_2}{r^2}\\,\\hat{\\mathbf r}\\)"}</MathJax>
+  </div>
+
+  <p>
+    Here <MathJax inline>{" \\(\\mu = \\dfrac{m_1 m_2}{m_1 + m_2}\\)"}</MathJax> is the <strong>reduced mass</strong>.  
+    This equation has exactly the same form as the equation for a single particle of mass 
+    <MathJax inline>{"  \\( \\mu\\)"} </MathJax> moving in a 
+    <MathJax inline>{"  \\( -G(m_1+m_2)/r\\)"} </MathJax> potential centered at the origin.
+  </p>
+
+  <p>
+    Choosing the origin at the <strong>center of mass</strong> ,
+    <div style={{ textAlign: "center", margin: "6px 0" }}>
+    <MathJax >{"\\(\\vec{\\mathbf R}_{CM} = \\dfrac{m_1 \\vec{\\mathbf r}_1 + m_2 \\vec{\\mathbf r}_2}{m_1 + m_2} = 0 \\)"}</MathJax>
+    </div>
+    ensures that the total momentum is zero, so the barycenter remains fixed.  
+    The resulting trajectory for the relative vector 
+    <MathJax inline>{" \\( \\vec r\\)"} </MathJax> is a conic section—an ellipse, parabola, or hyperbola—
+    with one focus at the origin.
+  </p>
+
+  <p>
+    Because each body’s position is just a scaled version of 
+    <MathJax inline>{" \\( \\vec r\\)"} </MathJax>  
+    <div style={{ textAlign: "center", margin: "6px 0" }}>
+    <MathJax>{"\\(\\vec r_1 = -\\dfrac{m_2}{m_1+m_2}\\vec r\\,,\\quad \\vec r_2 = \\dfrac{m_1}{m_1+m_2}\\vec r\\)"} </MathJax>
+    </div>
+    both ellipses share that same focus—the <strong>center of mass</strong>.
+  </p>
+</HiddenExposition>
+
+
+
+          
 
           <h2>Practice</h2>
           <div className="exposition-list">
             <HiddenQuestion title={<span>Show that the areal velocity is constant for any central force.</span>}>
               <MathJax>{`
-                For a central force, \\(\\vec F = f(r)\\,\\hat r\\), so \\(\\vec\\tau = \\vec r \\times \\vec F = 0\\).
-                Thus \\(\\vec h = \\vec r \\times \\vec v\\) is constant. The areal velocity is
-                \\(\\dot A = \\tfrac12 r^2\\dot\\theta = h/2\\), a constant.
+                For a central force, \\(\\vec F = f(r)\\,\\hat r\\), so the torque on the planet is \\(\\vec\\tau = \\vec r \\times \\vec F = 0\\).
+                Since torque is related to angular momentum through \\(\\vec{\\tau} = d\\vec{L}/dt\\), angular momentum is conserved: \\(\\vec{L} = \\text{constant}\\).  Areal velocity,
+                the area swept out per unit time, is given by \\(\\dot A = \\vec{r} \\times \\vec{v}/2 = \\vec{L}/(2m)\\), which is also constant.
               `}</MathJax>
             </HiddenQuestion>
 
-            <HiddenQuestion title={<span>Use the simulation to measure \\(T\\) and estimate \\(a\\). Verify \\(T^2/a^3\\) is approximately constant across two different ellipses.</span>}>
+            <HiddenQuestion title={<span>Use the simulation to measure T and estimate a. Verify T^2/a^3 is approximately constant across two different ellipses.</span>}>
               <MathJax>{`
                 For each ellipse: record \\(a\\) from the live readout and wait for one periapsis-to-periapsis period \\(T\\).
                 Compute \\(T^2/a^3\\). Repeat for another ellipse (different \\(a\\)). The values should agree within numerical error.
               `}</MathJax>
             </HiddenQuestion>
 
-            <HiddenQuestion title={<span>Derive the vis-viva equation and compare with the simulation speed at periapsis and apoapsis.</span>}>
-              <MathJax>{`
-                From \\(\\epsilon=\\tfrac12 v^2-\\mu/r=-\\mu/(2a)\\) we get the vis-viva equation
-                \\(\\displaystyle v^2 = \\mu\\Big(\\frac{2}{r}-\\frac{1}{a}\\Big).\\)
-                In an ellipse, \\(r_p=a(1-e)\\) and \\(r_a=a(1+e)\\); plug into the vis-viva relation and compare to the velocity vector length.
-              `}</MathJax>
-            </HiddenQuestion>
           </div>
         </div>
       </MathJaxContext>

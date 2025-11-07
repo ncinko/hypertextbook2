@@ -1,0 +1,193 @@
+
+/* simulations.css — lightweight Tailwind replacement for Kepler.jsx and TwoBody.jsx
+   Goals:
+   - Toolbar (left) + canvas (right). Canvas >= ~2/3 width, full-height.
+   - Nice defaults for buttons, fonts, headings, sliders, checkboxes.
+   - Only implements the utility classes actually used by these two files.
+   - No Tailwind dependency.
+*/
+
+/* ---------- CSS Variables (palette & metrics) ---------- */
+:root{
+  --gray-900:#111827; --gray-800:#1f2937; --gray-700:#374151; --gray-600:#4b5563;
+  --gray-500:#6b7280; --gray-400:#9ca3af; --gray-300:#d1d5db; --gray-200:#e5e7eb;
+  --blue-600:#2563eb; --blue-700:#1d4ed8;
+  --green-600:#16a34a; --green-700:#15803d;
+  --red-600:#dc2626; --red-700:#b91c1c;
+  --yellow-600:#ca8a04; --yellow-700:#a16207;
+  --sky-300:#7dd3fc; --yellow-300:#fde68a;
+
+  --shadow-2xl: 0 25px 50px -12px rgba(0,0,0,.25);
+  --radius-lg: .75rem;
+  --radius-md: .5rem;
+  --transition: 160ms ease;
+}
+
+/* ---------- Global defaults ---------- */
+html, body, #root { height:100%; }
+body { margin:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Inter, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji","Segoe UI Emoji", "Segoe UI Symbol"; }
+* { box-sizing: border-box; }
+
+/* ---------- Layout helpers used by both components ---------- */
+.h-screen{ height:100vh; }
+.flex{ display:flex; }
+.flex-col{ flex-direction:column; }
+.flex-row{ flex-direction:row; }
+.flex-grow{ flex:1 1 auto; }
+.flex-shrink-0{ flex-shrink:0; }
+.relative{ position:relative; }
+.absolute{ position:absolute; }
+.block{ display:block; }
+.overflow-hidden{ overflow:hidden; }
+.overflow-y-auto{ overflow-y:auto; }
+
+/* Responsive (matches md: and lg: used in JSX) */
+@media (min-width:768px){ .md\:flex-row{ flex-direction:row; } .md\:w-80{ width:20rem; } }
+@media (min-width:1024px){ .lg\:w-96{ width:24rem; } }
+
+/* Ensure the left toolbar never exceeds ~1/3 screen, keeping canvas >= 2/3 */
+.controls-panel{ width:clamp(260px, 30vw, 420px); }
+
+/* ---------- Spacing utilities actually referenced ---------- */
+.p-2{ padding:.5rem; } .p-3{ padding:.75rem; } .p-4{ padding:1rem; }
+.py-2{ padding-top:.5rem; padding-bottom:.5rem; }
+.px-4{ padding-left:1rem; padding-right:1rem; }
+.mb-2{ margin-bottom:.5rem; } .mb-4{ margin-bottom:1rem; } .mt-2{ margin-top:.5rem; }
+.gap-2{ gap:.5rem; }
+.space-x-2{ display:flex; gap:.5rem; align-items:center; }
+.space-x-3{ display:flex; gap:.75rem; align-items:center; }
+/* vertical spacing stacks */
+.space-y-1 > * + *{ margin-top:.25rem; }
+.space-y-2 > * + *{ margin-top:.5rem; }
+.space-y-4 > * + *{ margin-top:1rem; }
+
+/* ---------- Width/height ---------- */
+.w-full{ width:100%; }
+.h-full{ height:100%; }
+
+/* ---------- Position nudges ---------- */
+.top-2{ top:.5rem; }
+.left-2{ left:.5rem; }
+
+/* ---------- Typography ---------- */
+.text-white{ color:#fff; }
+.text-gray-200{ color:var(--gray-200); }
+.text-gray-300{ color:var(--gray-300); }
+.text-gray-400{ color:var(--gray-400); }
+.text-sm{ font-size:.875rem; line-height:1.25rem; }
+.text-lg{ font-size:1.1rem; line-height:1.3rem; }
+.text-2xl{ font-size:1.5rem; line-height:2rem; }
+.font-bold{ font-weight:700; }
+.font-semibold{ font-weight:600; }
+.font-medium{ font-weight:500; }
+.font-mono{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; }
+
+/* ---------- Colors / backgrounds ---------- */
+.bg-black{ background:#000; }
+.bg-gray-900{ background:var(--gray-900); }
+.bg-gray-800{ background:var(--gray-800); }
+.bg-gray-700{ background:var(--gray-700); }
+.bg-opacity-75{ background-color: rgba(17,24,39,.75); } /* used over gray-900 card */
+
+.text-sky-300{ color:var(--sky-300); }
+.text-yellow-300{ color:var(--yellow-300); }
+
+/* Buttons set their own bg via utility classes below */
+.bg-blue-600{ background:var(--blue-600); }
+.bg-green-600{ background:var(--green-600); }
+.bg-red-600{ background:var(--red-600); }
+.bg-yellow-600{ background:var(--yellow-600); }
+
+/* Hover color helpers */
+.hover\:bg-blue-700:hover{ background:var(--blue-700); }
+.hover\:bg-green-700:hover{ background:var(--green-700); }
+.hover\:bg-red-700:hover{ background:var(--red-700); }
+.hover\:bg-yellow-700:hover{ background:var(--yellow-700); }
+
+/* ---------- Radius / shadows / transitions ---------- */
+.rounded-lg{ border-radius:var(--radius-lg); }
+.shadow{ box-shadow:0 4px 14px rgba(0,0,0,.25); }
+.shadow-2xl{ box-shadow:var(--shadow-2xl); }
+.transition{ transition:all var(--transition); }
+
+/* ---------- Flex alignment (used in labels) ---------- */
+.items-center{ align-items:center; }
+.justify-between{ justify-content:space-between; }
+.cursor-pointer{ cursor:pointer; }
+.pointer-events-none{ pointer-events:none; }
+
+/* ---------- Grid helpers used ---------- */
+.grid{ display:grid; }
+.grid-cols-2{ grid-template-columns:repeat(2, minmax(0,1fr)); }
+.grid-cols-3{ grid-template-columns:repeat(3, minmax(0,1fr)); }
+
+/* ---------- Cards / panels ---------- */
+.panel-card{
+  background:var(--gray-700);
+  border-radius:var(--radius-lg);
+  padding: .75rem;
+  box-shadow:0 6px 18px rgba(0,0,0,.25);
+}
+
+/* ---------- Buttons ---------- */
+button, .btn{
+  appearance:none; border:0; color:#fff; padding:.5rem 1rem;
+  border-radius:var(--radius-lg); cursor:pointer; transition:transform var(--transition), background var(--transition), box-shadow var(--transition);
+  background:var(--blue-600);
+  box-shadow:0 6px 12px rgba(0,0,0,.25);
+}
+button:hover, .btn:hover{ transform:translateY(-1px); }
+.btn-neutral{ background:var(--gray-600); }
+
+/* Allow full-width buttons when .w-full is present */
+button.w-full, .btn.w-full{ width:100%; display:inline-flex; align-items:center; justify-content:center; }
+
+/* The components also apply specific background color classes; covered above */
+
+/* ---------- Inputs: range sliders ---------- */
+input[type=range]{
+  -webkit-appearance:none; appearance:none;
+  width:100%; height:6px; border-radius:999px;
+  background:var(--gray-700); outline:none;
+}
+input[type=range]::-webkit-slider-thumb{
+  -webkit-appearance:none;
+  width:16px; height:16px; border-radius:50%;
+  background:var(--blue-600);
+  border:2px solid #fff;
+  cursor:pointer; margin-top:-5px;
+}
+input[type=range]::-moz-range-thumb{
+  width:16px; height:16px; border-radius:50%;
+  background:var(--blue-600); border:2px solid #fff; cursor:pointer;
+}
+
+/* ---------- Inputs: checkbox ---------- */
+.checkbox, input[type=checkbox]{
+  width:18px; height:18px; border-radius:4px; appearance:none; border:2px solid var(--gray-500);
+  background: #0b0f1a; display:inline-block; position:relative; cursor:pointer;
+}
+.checkbox:checked, input[type=checkbox]:checked{
+  background: var(--blue-600); border-color: var(--blue-600);
+}
+.checkbox:checked::after, input[type=checkbox]:checked::after{
+  content:""; position:absolute; left:5px; top:1px; width:4px; height:9px; border:solid #fff; border-width:0 2px 2px 0; transform:rotate(45deg);
+}
+
+/* ---------- Canvas & HUD ---------- */
+canvas{ width:100%; height:100%; display:block }
+.hud, .pointer-events-none{ pointer-events:none; }
+.absolute.hud{ background: rgba(17,24,39,.75); color:#fff; border-radius:var(--radius-lg); padding:.75rem; }
+
+/* ---------- Scrollbars (nice in controls panel) ---------- */
+.controls-panel::-webkit-scrollbar{ width:8px; }
+.controls-panel::-webkit-scrollbar-track{ background:var(--gray-800); }
+.controls-panel::-webkit-scrollbar-thumb{ background:var(--gray-500); border-radius:6px; }
+.controls-panel::-webkit-scrollbar-thumb:hover{ background:var(--gray-400); }
+
+/* ---------- Misc text blocks ---------- */
+label.block span{ display:block; margin:.25rem 0; color:var(--gray-300); }
+.bg-gray-900 .text-white{ color:#fff; }
+
+/* ---------- Utility: rounded focus ring on focus-visible (keyboard) ---------- */
+button:focus-visible, input:focus-visible{ outline:3px solid rgba(37,99,235,.6); outline-offset:2px; border-radius:10px; }

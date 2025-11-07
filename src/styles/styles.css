@@ -1,0 +1,239 @@
+body {
+  background-color: #f8f9fa;
+  margin: 0;
+  padding: 0;
+  min-height: 97vh;
+  font-family: 'Roboto', sans-serif;
+}
+
+.mathjax-list {
+  list-style-type: disc;
+  padding-left: 25px; /* Adjust indentation */
+  line-height: 1.9; /* Adjust line height */
+  text-align: left; /* Ensures left alignment */
+}
+
+.mathjax-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px; /* Adjust spacing between bullet and text */
+  text-align: left;
+}
+
+.mathjax-align-left {
+  text-align: left !important; /* Ensures left alignment */
+  display: block !important; /* Forces block display */
+}
+
+.left-aligned-container {
+  text-align: left; /* Ensures text and MathJax content are left-aligned */
+}
+
+.left-aligned-container h2 {
+  text-align: left !important;
+}
+
+.left-aligned-container p {
+  text-align: left !important;
+}
+
+
+/* Landing Page Styles */
+.landing-container {
+  min-height: 86vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background-color: #f8f9fa;
+  padding: 2rem;
+}
+
+.binary-star-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background-color: #f8f9fa;
+  padding: 1rem;
+}
+
+.hero-section {
+  text-align: center;
+  margin-bottom: 2rem;
+}
+
+.hero-title {
+  font-size: 2.5rem;
+  font-weight: bold;
+  color: #333;
+  margin-bottom: 0.5rem;
+}
+
+.hero-description {
+  font-size: 1.2rem;
+  color: #666;
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.simulation-grid {
+  display: grid;
+  gap: 1.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  width: 100%;
+  max-width: 800px;
+}
+
+.simulation-card {
+  display: block;
+  background: white;
+  padding: 1.5rem;
+  border-radius: 8px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  text-decoration: none;
+  color: #333;
+  transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+}
+
+.simulation-card:hover {
+  transform: scale(1.05);
+  box-shadow: 0 6px 10px rgba(0, 0, 0, 0.15);
+}
+
+.simulation-title {
+  font-size: 1.5rem;
+  font-weight: bold;
+}
+
+.simulation-text {
+  margin-top: 0.5rem;
+  font-size: 1rem;
+  color: #555;
+}
+
+/* src/styles.css */
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  text-align: center;
+  padding: 1.5rem;
+}
+
+.control-panel {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 1rem;
+}
+
+.slider-group {
+  display: flex;
+  flex-wrap: nowrap; /* default: keep sliders in one line */
+  justify-content: center;
+  gap: 1rem;
+  max-width: 400px;
+  width: 90%;
+}
+
+
+.slider-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.slider-item label {
+  margin-bottom: 0.5rem;
+}
+
+.slider-item input[type="range"] {
+  width: 100%;
+}
+
+.slider-item span {
+  margin-top: 0.5rem;
+}
+.slider-group label {
+  display: row;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+}
+
+.slider-group input[type="range"] {
+  flex: 1;
+  margin-left: 1rem;
+}
+
+.canvases {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+}
+
+/* Constrain each canvas container to 45% of the parent width */
+.canvas {
+  flex: 1 1 45%;
+  max-width: 45%;
+  box-sizing: border-box;
+  padding: 10px;
+  margin-bottom: 20px;
+}
+
+
+/* Navbar */
+.navbar {
+    background: #1a1a2e;
+    padding: 1rem;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.nav-container {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 80%;
+    max-width: 1200px;
+}
+
+.nav-logo {
+    font-size: 1.5rem;
+    font-weight: bold;
+    color: #ffd700;
+    text-decoration: none;
+}
+
+.nav-links {
+    display: flex;
+    gap: 1rem;
+}
+
+.nav-item {
+    color: white;
+    text-decoration: none;
+    font-size: 1.2rem;
+    transition: color 0.3s ease;
+}
+
+.nav-item:hover {
+    color: #ffd700;
+}
+
+/* On smaller screens, stack the canvases vertically */
+@media (max-width: 768px) {
+  .canvases {
+    flex-direction: column;
+    align-items: center;
+  }
+  
+  .canvas {
+    width: 100%;
+	max-width: 100%;
+    flex: none;
+  }
+  .slider-group {
+    flex-wrap: wrap; /* allow wrapping when screen is too narrow */
+  }
+}

@@ -1,0 +1,10 @@
+/* main.css - Import all stylesheets */
+@import url('styles/global.css');
+@import url('styles/navbar.css');
+@import url('styles/landing.css');
+@import url('styles/simulations.css');
+@import url('styles/styles.css');
+@import url('styles/canvas.css');
+@import url('styles/responsive.css');
+@import url('styles/app.css');
+@import url('styles/ui-controls.css');

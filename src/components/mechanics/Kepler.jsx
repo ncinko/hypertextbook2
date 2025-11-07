@@ -1,12 +1,14 @@
 import React, { useEffect, useRef, useState } from "react";
+import "./simulations.css";
 
 /**
- * Kepler's Laws Simulation (standalone JSX)
- * - Velocity Verlet integrator (stable)
- * - Overlays: path, foci (Sun + osculating second focus), velocity & force vectors
- * - Kepler's 2nd law: equal-Δt auto wedges + manual sweep tool
- * - HUD: r, v, e, a, vis-viva, period (if bound)
- * - Tailwind UI; assumes Tailwind is available in the app
+ * Kepler's Laws Simulation
+ * - Velocity-Verlet integration
+ * - Stable orbital elements (eccentricity vector fixed; vis-viva presets)
+ * - Overlays: path, foci (Sun + f2 for bound ellipses), velocity & force vectors
+ * - Kepler's 2nd law helpers (manual & auto Δt wedges)
+ * - Canvas pan with LEFT-CLICK drag
+ * - Layout uses simulations.css (no Tailwind required)
  */
 export default function Kepler() {
   // ---------- UI state ----------
@@ -26,7 +28,7 @@ export default function Kepler() {
   const rafRef = useRef(null);
   const resizeObsRef = useRef(null);
 
-  // mirror UI state into refs so RAF sees the latest values (no stale closures)
+  // live refs for RAF (avoid stale closures)
   const isRunningRef = useRef(isRunning);
   const zoomRef = useRef(zoom);
   const simSpeedRef = useRef(simSpeed);
@@ -45,44 +47,35 @@ export default function Kepler() {
   useEffect(() => { showForceRef.current = showForce; }, [showForce]);
   useEffect(() => { autoAreasRef.current = autoAreas; }, [autoAreas]);
 
-  // Simulation constants
-  const MU = 40000;           // gravitational parameter
-  const TIME_STEP = 0.01;     // fixed dt for physics loop (s)
+  // ---------- Sim constants ----------
+  const MU = 40000;           // μ = GM (sim units)
+  const TIME_STEP = 0.01;     // physics step (s)
   const MAX_PATH_LENGTH = 2000;
 
-  // Simulation state (mutable ref object; not React state to keep RAF fast)
+  // ---------- Sim state ----------
   const simRef = useRef({
     lastFrameTime: 0,
     accumulator: 0,
     simTime: 0,
-    body: {
-      pos: { x: 150, y: 0 },
-      vel: { x: 0, y: 12 },
-      path: []
-    },
-    foci: {
-      f1: { x: 0, y: 0 },
-      f2: null,
-      eccentricity: 0,
-      semiMajorAxis: Infinity
-    },
-    sweeps: {
-      isSweeping: false,
-      currentSweep: null,          // { path:[{x,y},...], time:number }
-      completedSweeps: []          // array of sweeps
-    },
-    autoAreas: {
-      window: 0.6,                 // Δt window
-      bucket: [],                  // recent points with dt
-      wedges: []                   // array of paths [{x,y},...]
-    }
+    body: { pos: { x: 150, y: 0 }, vel: { x: 0, y: 12 }, path: [] },
+    foci: { f1: { x: 0, y: 0 }, f2: null, eccentricity: 0, semiMajorAxis: Infinity },
+    sweeps: { isSweeping: false, currentSweep: null, completedSweeps: [] },
+    autoAreas: { window: 1.5, bucket: [], wedges: [] },
   });
 
-  // ---------- Helpers ----------
-  const visVivaSpeed = (r, a) => (Number.isFinite(a) && a !== 0) ? Math.sqrt(MU * (2 / r - 1 / a)) : null;
-  const keplerPeriod  = (a) => (a > 0 && Number.isFinite(a)) ? 2 * Math.PI * Math.sqrt((a ** 3) / MU) : null;
+  // ---------- View (pan) ----------
+  // World-space translation applied after scale (before drawing). Units are "simulation units".
+  const viewRef = useRef({ x: 0, y: 0 });
+  const isPanningRef = useRef(false);
+  const lastMouseRef = useRef({ x: 0, y: 0 });
 
-  // ---------- Presets ----------
+  // ---------- Helpers ----------
+  const visVivaSpeed = (r, a) =>
+    (Number.isFinite(a) && a !== 0) ? Math.sqrt(MU * (2 / r - 1 / a)) : null;
+  const keplerPeriod = (a) =>
+    (a > 0 && Number.isFinite(a)) ? 2 * Math.PI * Math.sqrt((a ** 3) / MU) : null;
+
+  // ---------- Presets (consistent via vis-viva) ----------
   const setOrbit = (which) => {
     const s = simRef.current;
     s.simTime = 0;
@@ -94,32 +87,36 @@ export default function Kepler() {
     s.autoAreas.bucket = [];
     s.autoAreas.wedges = [];
 
+    const placeAtApoapsis = (r_ap, e) => {
+      const a = r_ap / (1 + e);
+      const v_ap = Math.sqrt(MU * (1 - e) / (a * (1 + e))); // vis-viva at apoapsis
+      s.body.pos = { x: r_ap, y: 0 };
+      s.body.vel = { x: 0, y: v_ap };
+    };
+
     switch (which) {
       case "circular": {
-        s.body.pos = { x: 150, y: 0 };
-        s.body.vel = { x: 0, y: Math.sqrt(MU / 150) };
+        const r = 150;
+        s.body.pos = { x: r, y: 0 };
+        s.body.vel = { x: 0, y: Math.sqrt(MU / r) };
         break;
       }
       case "elliptical": {
-        // e = 0.5 at apoapsis
-        s.body.pos = { x: 200, y: 0 };
-        s.body.vel = { x: 0, y: 10 };
+        placeAtApoapsis(200, 0.5);
         break;
       }
       case "highlyElliptical": {
-        // e = 0.8 at apoapsis
-        s.body.pos = { x: 300, y: 0 };
-        s.body.vel = { x: 0, y: 5.16 };
+        placeAtApoapsis(300, 0.8);
         break;
       }
       case "hyperbolic": {
-        s.body.pos = { x: 100, y: 0 };
-        s.body.vel = { x: 0, y: 30 }; // > escape
+        s.body.pos = { x: -100, y: -50 };
+        s.body.vel = { x: 30, y: 0 }; // > escape
         break;
       }
-      default:
-        break;
+      default: break;
     }
+
     s.body.path.push({ ...s.body.pos });
     calculateOrbitalElements();
   };
@@ -163,7 +160,7 @@ export default function Kepler() {
     path.push({ x: nx, y: ny });
     if (path.length > MAX_PATH_LENGTH) path.shift();
 
-    // manual sweep (if running)
+    // manual sweep
     if (s.sweeps.isSweeping && s.sweeps.currentSweep) {
       s.sweeps.currentSweep.path.push({ x: nx, y: ny });
       s.sweeps.currentSweep.time += dt;
@@ -183,7 +180,7 @@ export default function Kepler() {
     const W = s.autoAreas.window;
     bucket.push({ x, y, dt });
 
-    // accumulate from the end until reaching W, then drop a wedge
+    // accumulate from end until reaching window W, then drop a wedge
     let sum = 0;
     for (let i = bucket.length - 1; i >= 0; i--) {
       sum += bucket[i].dt;
@@ -191,14 +188,14 @@ export default function Kepler() {
         const startIndex = Math.max(0, i);
         const path = [bucket[startIndex], ...bucket.slice(startIndex + 1)].map(p => ({ x: p.x, y: p.y }));
         s.autoAreas.wedges.push(path);
-        if (s.autoAreas.wedges.length > 24) s.autoAreas.wedges.shift();
+        if (s.autoAreas.wedges.length > 30) s.autoAreas.wedges.shift();
         s.autoAreas.bucket = [];
         return;
       }
     }
   }
 
-  // ---------- Orbital elements (osculating) ----------
+  // ---------- Orbital elements (fixed e-vector) ----------
   function calculateOrbitalElements() {
     const s = simRef.current;
     const { x: rx, y: ry } = s.body.pos;
@@ -209,43 +206,42 @@ export default function Kepler() {
 
     const hz = rx * vy - ry * vx; // specific angular momentum (z)
 
-    // e⃗ = (v×h)/μ − r̂  ; in 2D, (v×h)/μ = (h/μ)*(-vy, vx)
-    const ex = (hz / MU) * (-vy) - rx / r;
-    const ey = (hz / MU) * ( vx) - ry / r;
+    // e⃗ = (v × h)/μ − r̂
+    // 2D: v×h = h * (vy, -vx)
+    const ex = (hz / MU) * (vy)  - rx / r;
+    const ey = (hz / MU) * (-vx) - ry / r;
     const e = Math.hypot(ex, ey);
 
-    // specific energy ε = v^2/2 − μ/r ; a = −μ/(2ε)
+    // ε = v^2/2 − μ/r ; a = −μ/(2ε)
     const eps = 0.5 * v2 - MU / r;
     const a = -MU / (2 * eps);
 
     s.foci.eccentricity = e;
     s.foci.semiMajorAxis = Number.isFinite(a) ? a : Infinity;
 
-    if (Number.isFinite(a) && e > 1e-4) {
+    // Only draw f2 for bound ellipses (a > 0), skip near-circular
+    if (Number.isFinite(a) && a > 0 && e > 1e-5) {
       const inv = 1 / e;
-      const ehatx = ex * inv;
-      const ehaty = ey * inv;
+      const ehatx = ex * inv, ehaty = ey * inv;
       s.foci.f1 = { x: 0, y: 0 };
-      s.foci.f2 = { x: 2 * a * e * ehatx, y: 2 * a * e * ehaty }; // a<0 gives the hyperbolic focus on the opposite side
+      s.foci.f2 = { x: 2 * a * e * ehatx, y: 2 * a * e * ehaty };
     } else {
       s.foci.f1 = { x: 0, y: 0 };
-      s.foci.f2 = null; // near circular or undefined a
+      s.foci.f2 = null;
     }
   }
 
   // ---------- Drawing ----------
-  function pxStrokeWidth(min = 0.5) {
-    return Math.max(1 / zoomRef.current, min);
-  }
+  const pxStrokeWidth = (min = 0.5) => Math.max(1 / zoomRef.current, min);
 
   function drawSun(ctx) {
-    const r = 8 / zoomRef.current;
+    const r = 12 * Math.sqrt(zoomRef.current);
     ctx.beginPath();
     ctx.arc(0, 0, r, 0, 2 * Math.PI);
     ctx.fillStyle = "#FFD700";
     ctx.fill();
 
-    // soft corona
+    // corona
     const r2 = r * 1.5;
     const grad = ctx.createRadialGradient(0, 0, r, 0, 0, r2);
     grad.addColorStop(0, "rgba(255,215,0,0.5)");
@@ -257,7 +253,7 @@ export default function Kepler() {
   }
 
   function drawBody(ctx, s) {
-    const br = 5 / zoomRef.current;
+    const br = 7 * Math.sqrt(zoomRef.current);
     ctx.beginPath();
     ctx.arc(s.body.pos.x, s.body.pos.y, br, 0, 2 * Math.PI);
     ctx.fillStyle = "#00BFFF";
@@ -276,22 +272,6 @@ export default function Kepler() {
     ctx.stroke();
   }
 
-  function drawFoci(ctx, s) {
-    if (!showFociRef.current) return;
-    const { f1, f2 } = s.foci;
-    drawX(ctx, f1.x, f1.y, "#FFD700");
-    if (f2) drawX(ctx, f2.x, f2.y, "#AAAAAA");
-
-    if (f2) {
-      ctx.beginPath();
-      ctx.moveTo(f1.x, f1.y);
-      ctx.lineTo(f2.x, f2.y);
-      ctx.strokeStyle = "rgba(180,0,200,0.25)";
-      ctx.lineWidth = pxStrokeWidth(0.5);
-      ctx.stroke();
-    }
-  }
-
   function drawX(ctx, x, y, color) {
     const size = 5 / zoomRef.current;
     ctx.beginPath();
@@ -304,30 +284,45 @@ export default function Kepler() {
     ctx.stroke();
   }
 
+  function drawFoci(ctx, s) {
+    if (!showFociRef.current) return;
+    const { f1, f2 } = s.foci;
+    drawX(ctx, -f1.x, f1.y, "#FFD700");
+    if (f2) drawX(ctx, -f2.x, f2.y, "#AAAAAA");
+    if (f2) {
+      ctx.beginPath();
+      ctx.moveTo(-f1.x, f1.y);
+      ctx.lineTo(-f2.x, f2.y);
+      ctx.strokeStyle = "rgba(180,0,200,0.25)";
+      ctx.lineWidth = pxStrokeWidth(0.5);
+      ctx.stroke();
+    }
+  }
+
   function drawArrow(ctx, x1, y1, x2, y2, color) {
     ctx.beginPath();
     ctx.moveTo(x1, y1);
     ctx.lineTo(x2, y2);
     ctx.strokeStyle = color;
-    ctx.lineWidth = pxStrokeWidth(1);
+    ctx.lineWidth = pxStrokeWidth(1.2);
     ctx.stroke();
 
     const ang = Math.atan2(y2 - y1, x2 - x1);
-    const ah = 7 / zoomRef.current;
+    const ah = 8 / zoomRef.current;
     ctx.beginPath();
     ctx.moveTo(x2, y2);
     ctx.lineTo(x2 - ah * Math.cos(ang - Math.PI / 6), y2 - ah * Math.sin(ang - Math.PI / 6));
     ctx.moveTo(x2, y2);
     ctx.lineTo(x2 - ah * Math.cos(ang + Math.PI / 6), y2 - ah * Math.sin(ang + Math.PI / 6));
     ctx.strokeStyle = color;
-    ctx.lineWidth = pxStrokeWidth(1);
+    ctx.lineWidth = pxStrokeWidth(1.2);
     ctx.stroke();
   }
 
   function drawVelocityVector(ctx, s) {
     if (!showVelRef.current) return;
     const { pos, vel } = s.body;
-    const scale = 0.5;
+    const scale = 1;
     drawArrow(ctx, pos.x, pos.y, pos.x + vel.x * scale, pos.y + vel.y * scale, "#FF00FF");
   }
 
@@ -338,12 +333,11 @@ export default function Kepler() {
     const r = Math.sqrt(r2);
     const ax = -MU * pos.x / (r2 * r);
     const ay = -MU * pos.y / (r2 * r);
-    const scale = 8000; // tuned for visibility
+    const scale = 10; // tuned for visibility
     drawArrow(ctx, pos.x, pos.y, pos.x + ax * scale, pos.y + ay * scale, "#ff5959");
   }
 
   function drawSweeps(ctx, s) {
-    // manual completed sweeps
     const colors = [
       "rgba(0,191,255,0.30)",
       "rgba(50,205,50,0.30)",
@@ -354,12 +348,10 @@ export default function Kepler() {
       drawSweepPolygon(ctx, sw.path, colors[i % colors.length]);
     });
 
-    // manual in-progress sweep (white-ish)
     if (s.sweeps.isSweeping && s.sweeps.currentSweep) {
       drawSweepPolygon(ctx, s.sweeps.currentSweep.path, "rgba(255,255,255,0.2)");
     }
 
-    // auto equal-Δt wedges
     if (autoAreasRef.current) {
       for (const path of s.autoAreas.wedges) {
         drawSweepPolygon(ctx, path, "rgba(80,220,140,0.28)");
@@ -411,7 +403,6 @@ export default function Kepler() {
       </div>
     `;
 
-    // Update sweep info (areas & durations)
     const info = sweepInfoRef.current;
     if (info) {
       const list = s.sweeps.completedSweeps.map((sw, i) => {
@@ -445,14 +436,15 @@ export default function Kepler() {
     ctx.fillStyle = "#000010";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // center, zoom, flip y
+    // center, scale, then pan (world units)
     ctx.translate(canvas.width / 2, canvas.height / 2);
     ctx.scale(zoomRef.current, -zoomRef.current);
+    ctx.translate(viewRef.current.x, viewRef.current.y);
 
     // layers
     drawPath(ctx, s);
     drawSweeps(ctx, s);
-    calculateOrbitalElements(); // keep f2 up-to-date with current state
+    calculateOrbitalElements(); // keep foci up-to-date
     drawFoci(ctx, s);
     drawSun(ctx);
     drawBody(ctx, s);
@@ -470,7 +462,7 @@ export default function Kepler() {
     const s = simRef.current;
 
     if (!isRunningRef.current) {
-      s.lastFrameTime = nowMs; // avoid a large jump when resuming
+      s.lastFrameTime = nowMs;
       drawFrame();
       rafRef.current = requestAnimationFrame(tick);
       return;
@@ -490,13 +482,14 @@ export default function Kepler() {
     rafRef.current = requestAnimationFrame(tick);
   }
 
-  // ---------- Lifecycle ----------
+  // ---------- Canvas events: resize + pan ----------
   useEffect(() => {
-    // initial preset
     setOrbit("elliptical");
 
-    // setup canvas size via ResizeObserver (guard + rAF to avoid loop warning)
     const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    // ResizeObserver for crisp DPR rendering
     const ro = new ResizeObserver((entries) => {
       const entry = entries[0];
       if (!entry || !canvas) return;
@@ -505,166 +498,210 @@ export default function Kepler() {
       const hCss = entry.contentRect?.height ?? canvas.clientHeight;
       const nextW = Math.max(2, Math.floor(wCss * dpr));
       const nextH = Math.max(2, Math.floor(hCss * dpr));
-      if (canvas.width === nextW && canvas.height === nextH) return; // guard
+      if (canvas.width === nextW && canvas.height === nextH) return;
       requestAnimationFrame(() => {
         if (!canvas) return;
-        if (canvas.width !== nextW) canvas.width = nextW;
-        if (canvas.height !== nextH) canvas.height = nextH;
+        canvas.width = nextW;
+        canvas.height = nextH;
       });
     });
     ro.observe(canvas);
     resizeObsRef.current = ro;
 
-    // initial sizing
+    // initial size
     (() => {
-      if (!canvas) return;
       const dpr = window.devicePixelRatio || 1;
       const nextW = Math.max(2, Math.floor(canvas.clientWidth * dpr));
       const nextH = Math.max(2, Math.floor(canvas.clientHeight * dpr));
       canvas.width = nextW; canvas.height = nextH;
     })();
 
+    // --- PAN HANDLERS ---
+    const onMouseDown = (e) => {
+      if (e.button !== 0) return; // left-click only
+      isPanningRef.current = true;
+      lastMouseRef.current = { x: e.clientX, y: e.clientY };
+      canvas.style.cursor = "grabbing";
+      e.preventDefault();
+    };
+
+    const onMouseMove = (e) => {
+      if (!isPanningRef.current) return;
+      const { x: lx, y: ly } = lastMouseRef.current;
+      const dx = e.clientX - lx;
+      const dy = e.clientY - ly;
+      lastMouseRef.current = { x: e.clientX, y: e.clientY };
+
+      const z = Math.max(0.05, Number.isFinite(zoomRef.current) ? zoomRef.current : 1);
+      // Convert screen delta to world delta. Y is inverted due to scale(zoom,-zoom).
+      viewRef.current.x += dx / z;
+      viewRef.current.y -= dy / z;
+      e.preventDefault();
+    };
+
+    const endPan = () => {
+      isPanningRef.current = false;
+      canvas.style.cursor = "default";
+    };
+
+    canvas.addEventListener("mousedown", onMouseDown);
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", endPan);
+    canvas.addEventListener("mouseleave", endPan);
+
+    // start loop
     simRef.current.lastFrameTime = performance.now();
     rafRef.current = requestAnimationFrame(tick);
 
     return () => {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
       if (resizeObsRef.current) resizeObsRef.current.disconnect();
+      canvas.removeEventListener("mousedown", onMouseDown);
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", endPan);
+      canvas.removeEventListener("mouseleave", endPan);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // mount once
 
-  // ---------- Manual sweep handlers ----------
-  const toggleSweep = () => {
-    const s = simRef.current;
-    s.sweeps.isSweeping = !s.sweeps.isSweeping;
-    if (s.sweeps.isSweeping) {
-      s.sweeps.currentSweep = { path: [{ ...s.body.pos }], time: 0 };
-    } else if (s.sweeps.currentSweep) {
-      s.sweeps.completedSweeps.push(s.sweeps.currentSweep);
-      s.sweeps.currentSweep = null;
-    }
-  };
-
-  const clearSweeps = () => {
-    const s = simRef.current;
-    s.sweeps.completedSweeps = [];
-    if (s.sweeps.isSweeping) {
-      s.sweeps.currentSweep = { path: [{ ...s.body.pos }], time: 0 };
-    }
-    updateHUD();
-  };
-
-  // ---------- Render ----------
+  // ---------- Render (layout) ----------
   return (
-    <div className="bg-gray-900 text-gray-200 overflow-hidden h-screen flex flex-col md:flex-row">
-      {/* Control Panel */}
-      <div className="w-full md:w-80 lg:w-96 p-4 bg-gray-800 shadow-2xl overflow-y-auto flex-shrink-0 controls-panel">
-        <h1 className="text-2xl font-bold text-white mb-4">Orbital Simulation</h1>
+    <div className="h-screen flex md:flex-row overflow-hidden bg-gray-900">
+      {/* Control Panel (left) — width clamped by .controls-panel so canvas ≥ ~2/3 */}
+      <aside className="controls-panel p-4 bg-gray-800 shadow-2xl overflow-y-auto flex-shrink-0 text-gray-200">
+        <h1 className="text-2xl font-bold text-white mb-4">Kepler's Laws</h1>
 
         {/* Presets */}
-        <div className="space-y-2 mb-4">
-          <h2 className="text-lg font-semibold text-gray-300 mb-2">Preset Orbits</h2>
-          <button onClick={() => setOrbit("circular")} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg shadow transition">
-            Circular
-          </button>
-          <button onClick={() => setOrbit("elliptical")} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg shadow transition">
-            Elliptical (e=0.5)
-          </button>
-          <button onClick={() => setOrbit("highlyElliptical")} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg shadow transition">
-            Highly Elliptical (e=0.8)
-          </button>
-          <button onClick={() => setOrbit("hyperbolic")} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg shadow transition">
-            Hyperbolic (Escape)
-          </button>
-        </div>
+
+<div className="grid grid-cols-2 gap-2">
+  
+              <button onClick={() => setOrbit("circular")} className="btn w-full">Circular</button>
+          <button onClick={() => setOrbit("elliptical")} className="btn w-full">Elliptical</button>
+          <button onClick={() => setOrbit("highlyElliptical")} className="btn w-full">High-e</button>
+          <button onClick={() => setOrbit("hyperbolic")} className="btn w-full bg-yellow-600 hover:bg-yellow-700">Hyperbolic</button>
+            </div>
+
+          
 
         {/* Overlays */}
-        <div className="space-y-2 mb-4">
-          <h2 className="text-lg font-semibold text-gray-300 mb-2">Overlays</h2>
+        <div className="space-y-2 mb-4 panel-card">
+          <h2 className="text-lg font-semibold text-gray-100 mb-2">Overlays</h2>
 
-          <label className="flex items-center space-x-2 bg-gray-700 p-2 rounded-lg cursor-pointer">
-            <input type="checkbox" className="h-5 w-5 text-blue-500 rounded bg-gray-900 border-gray-600"
+          <label className="flex items-center gap-3 bg-gray-700 p-2 rounded-lg cursor-pointer">
+            <input type="checkbox" className="checkbox"
               checked={showPath} onChange={(e) => setShowPath(e.target.checked)} />
-            <span className="text-gray-200">Show Orbit Path</span>
+            <span className="text-gray-200">Orbit Path</span>
           </label>
 
-          <label className="flex items-center space-x-2 bg-gray-700 p-2 rounded-lg cursor-pointer">
-            <input type="checkbox" className="h-5 w-5 text-blue-500 rounded bg-gray-900 border-gray-600"
+          <label className="flex items-center gap-3 bg-gray-700 p-2 rounded-lg cursor-pointer">
+            <input type="checkbox" className="checkbox"
               checked={showFoci} onChange={(e) => setShowFoci(e.target.checked)} />
-            <span className="text-gray-200">Show Foci (F1, F2)</span>
+            <span className="text-gray-200">Foci</span>
           </label>
 
-          <label className="flex items-center space-x-2 bg-gray-700 p-2 rounded-lg cursor-pointer">
-            <input type="checkbox" className="h-5 w-5 text-blue-500 rounded bg-gray-900 border-gray-600"
+          <label className="flex items-center gap-3 bg-gray-700 p-2 rounded-lg cursor-pointer">
+            <input type="checkbox" className="checkbox"
               checked={showVel} onChange={(e) => setShowVel(e.target.checked)} />
-            <span className="text-gray-200">Show Velocity Vector</span>
+            <span className="text-gray-200">Velocity Vector</span>
           </label>
 
-          <label className="flex items-center space-x-2 bg-gray-700 p-2 rounded-lg cursor-pointer">
-            <input type="checkbox" className="h-5 w-5 text-blue-500 rounded bg-gray-900 border-gray-600"
+          <label className="flex items-center gap-3 bg-gray-700 p-2 rounded-lg cursor-pointer">
+            <input type="checkbox" className="checkbox"
               checked={showForce} onChange={(e) => setShowForce(e.target.checked)} />
-            <span className="text-gray-200">Show Force (accel) Vector</span>
+            <span className="text-gray-200">Force Vector</span>
           </label>
 
-          <label className="flex items-center space-x-2 bg-gray-700 p-2 rounded-lg cursor-pointer">
-            <input type="checkbox" className="h-5 w-5 text-blue-500 rounded bg-gray-900 border-gray-600"
+          <label className="flex items-center gap-3 bg-gray-700 p-2 rounded-lg cursor-pointer">
+            <input type="checkbox" className="checkbox"
               checked={autoAreas} onChange={(e) => setAutoAreas(e.target.checked)} />
-            <span className="text-gray-200">Equal-Δt area wedges</span>
+            <span className="text-gray-200">Equal-Δt Areas</span>
           </label>
         </div>
 
         {/* Kepler's 2nd Law (manual tool) */}
-        <div className="space-y-2 mb-4">
-          <h2 className="text-lg font-semibold text-gray-300 mb-2">Kepler&apos;s 2nd Law</h2>
-          <p className="text-sm text-gray-400 mb-2">
-            &ldquo;A line joining a planet and the Sun sweeps out equal areas during equal intervals of time.&rdquo;
+        <div className="space-y-2 mb-4 panel-card">
+          <h2 className="text-lg font-semibold text-gray-100 mb-2">Kepler&apos;s 2nd Law</h2>
+          <p className="text-sm text-gray-300 mb-2">
+            “A line joining a planet and the Sun sweeps out equal areas during equal intervals of time.”
           </p>
-          <div className="flex flex-col gap-2">
-            <button onClick={toggleSweep}
-              className={`w-full ${simRef.current.sweeps.isSweeping ? "bg-yellow-600 hover:bg-yellow-700 text-gray-900" : "bg-green-600 hover:bg-green-700 text-white"} font-medium py-2 px-4 rounded-lg shadow transition`}>
+          <div className="space-y-2">
+            <button
+              onClick={() => {
+                const s = simRef.current;
+                s.sweeps.isSweeping = !s.sweeps.isSweeping;
+                if (s.sweeps.isSweeping) {
+                  s.sweeps.currentSweep = { path: [{ ...s.body.pos }], time: 0 };
+                } else if (s.sweeps.currentSweep) {
+                  s.sweeps.completedSweeps.push(s.sweeps.currentSweep);
+                  s.sweeps.currentSweep = null;
+                }
+              }}
+              className={`btn w-full ${simRef.current.sweeps.isSweeping ? "bg-yellow-600 hover:bg-yellow-700 text-gray-900" : ""}`}
+            >
               {simRef.current.sweeps.isSweeping ? "End Sweep" : "Start Sweep"}
             </button>
-            <button onClick={clearSweeps}
-              className="w-full bg-red-600 hover:bg-red-700 text-white font-medium py-2 px-4 rounded-lg shadow transition">
+            <button
+              onClick={() => {
+                const s = simRef.current;
+                s.sweeps.completedSweeps = [];
+                if (s.sweeps.isSweeping) {
+                  s.sweeps.currentSweep = { path: [{ ...s.body.pos }], time: 0 };
+                }
+                updateHUD();
+              }}
+              className="btn w-full bg-red-600 hover:bg-red-700"
+            >
               Clear Sweeps
             </button>
           </div>
-          <div ref={sweepInfoRef} className="mt-2 p-3 bg-gray-900 rounded-lg text-sm space-y-1">
-            <p className="text-gray-400">Create sweeps to compare areas.</p>
+          <div ref={sweepInfoRef} className="mt-2 p-3 bg-gray-900 rounded-lg text-sm">
+            <p className="text-gray-300">Create sweeps to compare areas.</p>
           </div>
         </div>
 
-        {/* Controls */}
-        <div className="space-y-2 mb-4">
-          <h2 className="text-lg font-semibold text-gray-300 mb-2">Controls</h2>
+        {/* Controls — stacked */}
+        <div className="space-y-3 mb-4 panel-card">
+          <h2 className="text-lg font-semibold text-gray-100 mb-2">Controls</h2>
           <button
             onClick={() => setIsRunning((r) => !r)}
-            className={`w-full ${isRunning ? "bg-yellow-600 hover:bg-yellow-700 text-gray-900" : "bg-green-600 hover:bg-green-700 text-white"} font-medium py-2 px-4 rounded-lg shadow transition`}
+            className={`btn w-full ${isRunning ? "bg-yellow-600 hover:bg-yellow-700 text-gray-900" : ""}`}
           >
             {isRunning ? "Pause" : "Resume"}
           </button>
 
           <label className="block">
-            <span className="text-gray-400">Zoom</span>
-            <input type="range" min="0.1" max="5" step="0.1" value={zoom}
+            <span className="text-gray-200">Zoom</span>
+            <input
+              type="range"
+              min="0.1"
+              max="5"
+              step="0.1"
+              value={zoom}
               onChange={(e) => setZoom(parseFloat(e.target.value))}
-              className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer" />
+            />
           </label>
 
           <label className="block">
-            <span className="text-gray-400">Simulation Speed</span>
-            <input type="range" min="0.1" max="5" step="0.1" value={simSpeed}
+            <span className="text-gray-200">Simulation Speed</span>
+            <input
+              type="range"
+              min="0.1"
+              max="5"
+              step="0.1"
+              value={simSpeed}
               onChange={(e) => setSimSpeed(parseFloat(e.target.value))}
-              className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer" />
+            />
           </label>
         </div>
-      </div>
+      </aside>
 
-      {/* Canvas + HUD */}
-      <div className="flex-grow relative">
+      {/* Canvas + HUD (right) */}
+      <div className="flex-grow relative h-full">
         <canvas ref={canvasRef} className="w-full h-full block bg-black" />
-        <div ref={statsRef} className="absolute top-2 left-2 p-3 bg-gray-900 bg-opacity-75 rounded-lg text-sm text-white pointer-events-none" />
+        <div
+          ref={statsRef}
+          className="absolute top-2 left-2 p-3 bg-gray-900 bg-opacity-75 rounded-lg text-sm text-white pointer-events-none"
+        />
       </div>
     </div>
   );

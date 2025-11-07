@@ -45,8 +45,13 @@ export default function HiddenExposition({ title = "Read more", children }) {
 
   const titleStyle = {
     fontWeight: 650,
-    fontSize: 15,
+    fontSize: 20,
     letterSpacing: 0.2,
+    color: '#222',             // stronger than #333
+    mixBlendMode: 'normal',    // prevents blending effects
+    filter: 'none',            // ensures no tinting or lightening
+    opacity: 1,                // forces full opacity
+    transition: 'color 150ms ease',
   };
 
   const body = {
