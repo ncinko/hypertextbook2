@@ -220,7 +220,7 @@ export default function TwoBody() {
     const c2 = e * a2;
 
     // The "other" focus for each ellipse lies +2c along the major axis from the shared focus
-    const f2_body1 = { x: cm.x + 2 * c1 * ex, y: cm.y - 2 * c1 * ey };
+    const f2_body1 = { x: cm.x + 2 * c1 * ex, y: cm.y + 2 * c1 * ey };
     const f2_body2 = { x: cm.x - 2 * c2 * ex, y: cm.y - 2 * c2 * ey };
 
     drawX(f2_body1.x, f2_body1.y, '#FFD700', ctx, currentZoom); // yellow other focus
