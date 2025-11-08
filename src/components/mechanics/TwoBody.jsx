@@ -2,7 +2,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import './simulations.css';
 
-// --- Constants ---
 const G = 40; // Gravitational constant
 const TIME_STEP = 0.01; // Fixed time step for physics update (s)
 const MAX_PATH_LENGTH = 2000; // Max points in orbital path
@@ -29,7 +28,7 @@ const Styles = () => (
 );
 
 // --- Stats Overlay Component ---
-const StatsOverlay = ({ stats }) => (
+const StatsOverlay = React.memo(({ stats }) => (
   <div className="absolute top-2 left-2 p-3 bg-gray-900 bg-opacity-75 rounded-lg text-sm text-white pointer-events-none">
     <div className="font-mono">
       <div>Rel. Dist: {stats.r_rel.toFixed(1)}</div>
@@ -38,7 +37,7 @@ const StatsOverlay = ({ stats }) => (
       <div>a:          {(stats.a === Infinity ? '∞' : stats.a.toFixed(1))}</div>
     </div>
   </div>
-);
+));
 
 // --- Main Application Component ---
 export default function TwoBody() {
@@ -76,6 +75,13 @@ export default function TwoBody() {
     showVector: false,
     showForceVector: false,
   });
+
+  const zoomRef = useRef(zoom);
+  zoomRef.current = zoom;
+  const overlaysRef = useRef(overlays);
+  overlaysRef.current = overlays;
+  const vectorScaleRef = useRef(vectorScale);
+  vectorScaleRef.current = vectorScale;
 
   const showVectorSlider = overlays.showVector || overlays.showForceVector;
 
@@ -244,11 +250,23 @@ export default function TwoBody() {
     simStateRef.current.relativeOrbit.evec = e_vec;
     simStateRef.current.relativeOrbit.semiMajorAxis = (e < 1) ? (h*h / MU) * (1 / (1 - e*e)) : Infinity;
 
-    setStats({
+    const newStats = {
       r_rel: r,
       v_rel: Math.hypot(v_vec.x, v_vec.y),
       e: simStateRef.current.relativeOrbit.eccentricity,
       a: simStateRef.current.relativeOrbit.semiMajorAxis
+    };
+
+    setStats(prevStats => {
+      if (
+        Math.abs(prevStats.r_rel - newStats.r_rel) < 0.1 &&
+        Math.abs(prevStats.v_rel - newStats.v_rel) < 0.1 &&
+        Math.abs(prevStats.e - newStats.e) < 0.001 &&
+        Math.abs(prevStats.a - newStats.a) < 0.1
+      ) {
+        return prevStats;
+      }
+      return newStats;
     });
   }, []);
 
@@ -257,32 +275,36 @@ export default function TwoBody() {
     const canvas = canvasRef.current;
     if (!ctx || !canvas) return;
 
+    const currentZoom = zoomRef.current;
+    const currentOverlays = overlaysRef.current;
+    const currentVectorScale = vectorScaleRef.current;
+
     const { body1, body2 } = simStateRef.current;
     ctx.save();
     ctx.fillStyle = '#000010';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.translate(canvas.width / 2, canvas.height / 2);
-    ctx.scale(zoom, -zoom);
+    ctx.scale(currentZoom, -currentZoom);
 
     // Apply world-space panning after scale
     ctx.translate(panRef.current.x, panRef.current.y);
 
-    if (overlays.showPath) {
-      drawOnePath(body1.path, 'rgba(255, 215, 0, 0.25)', ctx, zoom);
-      drawOnePath(body2.path, 'rgba(0, 191, 255, 0.25)', ctx, zoom);
+    if (currentOverlays.showPath) {
+      drawOnePath(body1.path, 'rgba(255, 215, 0, 0.25)', ctx, currentZoom);
+      drawOnePath(body2.path, 'rgba(0, 191, 255, 0.25)', ctx, currentZoom);
     }
-    if (overlays.showFoci) drawFoci(ctx, zoom);
+    if (currentOverlays.showFoci) drawFoci(ctx, currentZoom);
 
-    drawBody(body1, '#FFD700', ctx, zoom);
-    drawBody(body2, '#00BFFF', ctx, zoom);
+    drawBody(body1, '#FFD700', ctx, currentZoom);
+    drawBody(body2, '#00BFFF', ctx, currentZoom);
 
-    if (overlays.showVector) {
-      drawOneVector(body1, ctx, zoom, vectorScale);
-      drawOneVector(body2, ctx, zoom, vectorScale);
+    if (currentOverlays.showVector) {
+      drawOneVector(body1, ctx, currentZoom, currentVectorScale);
+      drawOneVector(body2, ctx, currentZoom, currentVectorScale);
     }
-    if (overlays.showForceVector) drawForceVectors(ctx, zoom, vectorScale);
+    if (currentOverlays.showForceVector) drawForceVectors(ctx, currentZoom, currentVectorScale);
     ctx.restore();
-  }, [zoom, overlays, vectorScale, drawBody, drawOnePath, drawFoci, drawOneVector, drawForceVectors]);
+  }, [drawBody, drawOnePath, drawFoci, drawOneVector, drawForceVectors]);
 
   const updatePhysics = useCallback((dt) => {
     const { body1, body2 } = simStateRef.current;
@@ -365,19 +387,22 @@ export default function TwoBody() {
 
   const gameLoop = useCallback((currentTime) => {
     animationFrameIdRef.current = requestAnimationFrame(gameLoop);
-    if (!isRunning) { lastFrameTimeRef.current = currentTime; return; }
 
     const delta = (currentTime - lastFrameTimeRef.current) / 1000;
     lastFrameTimeRef.current = currentTime;
-    const dt = Math.min(delta, 0.1) * simSpeed;
-    simStateRef.current.accumulator += dt;
 
-    while (simStateRef.current.accumulator >= TIME_STEP) {
-      updatePhysics(TIME_STEP);
-      simStateRef.current.accumulator -= TIME_STEP;
-      simStateRef.current.simTime += TIME_STEP;
+    if (isRunning) {
+      const dt = Math.min(delta, 0.1) * simSpeed;
+      simStateRef.current.accumulator += dt;
+
+      while (simStateRef.current.accumulator >= TIME_STEP) {
+        updatePhysics(TIME_STEP);
+        simStateRef.current.accumulator -= TIME_STEP;
+        simStateRef.current.simTime += TIME_STEP;
+      }
+      calculateOrbitalElements();
     }
-    calculateOrbitalElements();
+    
     draw();
   }, [isRunning, simSpeed, updatePhysics, calculateOrbitalElements, draw]);
 
@@ -390,7 +415,7 @@ export default function TwoBody() {
     const handleResize = () => {
       canvas.width = canvas.clientWidth * window.devicePixelRatio;
       canvas.height = canvas.clientHeight * window.devicePixelRatio;
-      if (!isRunning) draw();
+      draw();
     };
 
     const ro = new ResizeObserver(handleResize);
@@ -404,6 +429,7 @@ export default function TwoBody() {
 
     lastFrameTimeRef.current = performance.now();
     animationFrameIdRef.current = requestAnimationFrame(gameLoop);
+
 
     // --- Pointer (Left-click) Pan bindings ---
     const dpr = window.devicePixelRatio || 1;
@@ -444,7 +470,7 @@ export default function TwoBody() {
       window.removeEventListener('pointerup', endDrag);
       canvas.removeEventListener('pointerleave', endDrag);
     };
-  }, [setScenario, gameLoop, isRunning, draw, zoom]);
+  }, [setScenario, gameLoop, draw, zoom]);
 
   // --- Handlers ---
   const handleMass1Change = (e) => {

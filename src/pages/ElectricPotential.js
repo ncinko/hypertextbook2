@@ -6,7 +6,7 @@ import PotentialFieldSimulation from "../components/electricity/PotentialFieldSi
 import PotentialEnergyLandscape from "../components/electricity/PotentialEnergyLandscape";
 import ScalarPotential2D from "../components/electricity/ScalarPotential2D";
 import ElectricPotentialSimulation from "../components/electricity/ElectricPotentialSimulation";
-import HiddenExposition from "../components/HiddenExposition"; 
+import HiddenExposition from "../components/shared/HiddenExposition"; 
 
 const ElectricPotential = () => {
   const [showAnswer1, setShowAnswer1] = useState(false);

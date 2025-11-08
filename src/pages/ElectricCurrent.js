@@ -4,7 +4,7 @@ import { MathJax, MathJaxContext } from "better-react-mathjax";
 import HiddenQuestion from "../components/shared/HiddenQuestion";
 import ElectronGas from "../components/electricity/ElectronGas";
 import SeriesParallelPlayground from "../components/electricity/SeriesParallelPlayground";
-import HiddenExposition from "../components/HiddenExposition";
+import HiddenExposition from "../components/shared/HiddenExposition";
 import CircuitKit from "../components/electricity/CircuitKit";
 
 export default function ElectricCurrent() {

@@ -4,7 +4,7 @@ import ElectricFieldSimulation from "../components/electricity/ElectricFieldSimu
 import EquipotentialSimulation from "../components/electricity/EquipotentialSimulation"; // Adjust path if needed
 import PointChargeUnitVectorDemo from "../components/electricity/PointChargeField";
 import TwoPointChargeSuperposition from "../components/electricity/TwoPointChargeSimulation";
-import HiddenExposition from "../components/HiddenExposition";
+import HiddenExposition from "../components/shared/HiddenExposition";
 
 const chipStyle = {
   display: "inline-block",

@@ -2,6 +2,7 @@
 import React from "react";
 import { MathJax, MathJaxContext } from "better-react-mathjax";
 import HiddenQuestion from "../components/shared/HiddenQuestion";
+import HiddenExposition from "../components/shared/HiddenExposition";   
 
 import Platformer from "../components/mechanics/Platformer";
 import Platformer2 from "../components/mechanics/Platformer2";

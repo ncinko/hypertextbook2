@@ -3,7 +3,7 @@ import { MathJax, MathJaxContext } from "better-react-mathjax";
 // Simulation lives in a separate component file, e.g. src/components/KinematicsSim.jsx
 import KinematicsSim from "../components/KinematicsSim";
 import VelocityExplorer from "../components/VelocityExplorer";  
-import HiddenExposition from "../components/HiddenExposition";
+import HiddenExposition from "../components/shared/HiddenExposition";
 
 /**
  * Kinematics.js

@@ -45,7 +45,7 @@ export default function HiddenExposition({ title = "Read more", children }) {
 
   const titleStyle = {
     fontWeight: 650,
-    fontSize: 20,
+    fontSize: 15,
     letterSpacing: 0.2,
     color: '#222',             // stronger than #333
     mixBlendMode: 'normal',    // prevents blending effects
