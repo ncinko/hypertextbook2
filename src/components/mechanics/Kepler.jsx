@@ -10,9 +10,8 @@ import "./simulations.css";
  * - Canvas pan with LEFT-CLICK drag
  * - Layout uses simulations.css (no Tailwind required)
  */
-export default function Kepler() {
+export default function Kepler({ isRunning, onPlay }) {
   // ---------- UI state ----------
-  const [isRunning, setIsRunning] = useState(true);
   const [zoom, setZoom] = useState(1.5);
   const [simSpeed, setSimSpeed] = useState(1.0);
   const [showPath, setShowPath] = useState(true);
@@ -663,7 +662,7 @@ export default function Kepler() {
         <div className="space-y-3 mb-4 panel-card">
           <h2 className="text-lg font-semibold text-gray-100 mb-2">Controls</h2>
           <button
-            onClick={() => setIsRunning((r) => !r)}
+            onClick={onPlay}
             className={`btn w-full ${isRunning ? "bg-yellow-600 hover:bg-yellow-700 text-gray-900" : ""}`}
           >
             {isRunning ? "Pause" : "Resume"}

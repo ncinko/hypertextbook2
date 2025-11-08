@@ -40,7 +40,7 @@ const StatsOverlay = React.memo(({ stats }) => (
 ));
 
 // --- Main Application Component ---
-export default function TwoBody() {
+export default function TwoBody({ isRunning, onPlay }) {
   // --- Refs for non-render-triggering state ---
   const canvasRef = useRef(null);
   const ctxRef = useRef(null);
@@ -60,7 +60,6 @@ export default function TwoBody() {
   const draggingRef = useRef({ active: false, x: 0, y: 0 });
 
   // --- React State for UI (triggers re-renders) ---
-  const [isRunning, setIsRunning] = useState(true);
   const [stats, setStats] = useState({ r_rel: 0, v_rel: 0, e: 0, a: Infinity });
 
   // Control Panel State
@@ -560,7 +559,7 @@ export default function TwoBody() {
             <h2 className="text-lg font-semibold text-gray-100 mb-2">Controls</h2>
 
             <button
-              onClick={() => setIsRunning(!isRunning)}
+              onClick={onPlay}
               className={`btn w-full ${isRunning ? '' : 'btn-neutral'}`}
             >
               {isRunning ? 'Pause' : 'Resume'}

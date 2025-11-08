@@ -9,6 +9,7 @@ export default function KeplerLaws() {
   const [showFoci, setShowFoci] = useState(true);
   const [showAreas, setShowAreas] = useState(true);
   const [showVectors, setShowVectors] = useState(true);
+  const [activeSimulation, setActiveSimulation] = useState('kepler');
 
   const [readout, setReadout] = useState({ e: null, a: null, T: null });
 
@@ -46,7 +47,7 @@ export default function KeplerLaws() {
             Use the checkboxes to toggle the display of orbit features. The readout shows the current orbit's eccentricity <MathJax inline>{"\\(e\\)"}</MathJax>,
             semi-major axis <MathJax inline>{"\\(a\\)"}</MathJax>, and period <MathJax inline>{"\\(T\\)"}</MathJax> (if bound).
           </p>
-          <Kepler />
+          <Kepler isRunning={activeSimulation === 'kepler'} onPlay={() => setActiveSimulation(activeSimulation === 'kepler' ? null : 'kepler')} />
 
           <HiddenExposition title={<span className="force-black">Why equal areas in equal times?</span>}>
             <p>
@@ -60,7 +61,7 @@ export default function KeplerLaws() {
               <MathJax inline>{" \\(\\dot A = \\dfrac{L}{2m} \\)"}</MathJax>.
             </p>
           </HiddenExposition>
-          <TwoBody/>
+          <TwoBody isRunning={activeSimulation === 'twobody'} onPlay={() => setActiveSimulation(activeSimulation === 'twobody' ? null : 'twobody')} />
 
           <HiddenExposition 
   title={<span className="force-black">Why is the center of mass a common focus?</span> }
