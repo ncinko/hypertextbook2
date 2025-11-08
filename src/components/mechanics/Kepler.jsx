@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import "./simulations.css";
 
 /**
@@ -10,6 +10,19 @@ import "./simulations.css";
  * - Canvas pan with LEFT-CLICK drag
  * - Layout uses simulations.css (no Tailwind required)
  */
+
+const polygonArea = (path) => {
+  if (!path || path.length < 2) return 0;
+  let area = 0;
+  // Sum of signed areas of triangles (origin, path[i], path[i+1])
+  for (let i = 0; i < path.length - 1; i++) {
+    const p1 = path[i];
+    const p2 = path[i + 1];
+    area += p1.x * p2.y - p1.y * p2.x;
+  }
+  return Math.abs(area / 2);
+};
+
 export default function Kepler({ isRunning, onPlay }) {
   // ---------- UI state ----------
   const [zoom, setZoom] = useState(1.5);
@@ -19,6 +32,8 @@ export default function Kepler({ isRunning, onPlay }) {
   const [showVel, setShowVel] = useState(false);
   const [showForce, setShowForce] = useState(false);
   const [autoAreas, setAutoAreas] = useState(false);
+  const [isGameMode, setIsGameMode] = useState(false);
+  const [isGameActive, setIsGameActive] = useState(false);
 
   // ---------- Refs ----------
   const canvasRef = useRef(null);
@@ -36,7 +51,11 @@ export default function Kepler({ isRunning, onPlay }) {
   const showVelRef = useRef(showVel);
   const showForceRef = useRef(showForce);
   const autoAreasRef = useRef(autoAreas);
+  const isGameModeRef = useRef(isGameMode);
+  const isGameActiveRef = useRef(isGameActive);
+  const startNextRoundRef = useRef();
 
+  useEffect(() => { isGameActiveRef.current = isGameActive; }, [isGameActive]);
   useEffect(() => { isRunningRef.current = isRunning; }, [isRunning]);
   useEffect(() => { zoomRef.current = zoom; }, [zoom]);
   useEffect(() => { simSpeedRef.current = simSpeed; }, [simSpeed]);
@@ -45,6 +64,263 @@ export default function Kepler({ isRunning, onPlay }) {
   useEffect(() => { showVelRef.current = showVel; }, [showVel]);
   useEffect(() => { showForceRef.current = showForce; }, [showForce]);
   useEffect(() => { autoAreasRef.current = autoAreas; }, [autoAreas]);
+
+  // ---------- Game Logic ----------
+  function generateGameWedges() {
+    const s = simRef.current;
+    const a = s.foci.semiMajorAxis;
+    if (!Number.isFinite(a) || a <= 0) return [];
+
+    const numWedges = 4 + Math.floor(Math.random() * 3); // 4, 5, or 6
+    const wedges = [];
+
+    // Generate random wedge sizes
+    const wedgeAngles = [];
+    let totalWedgeAngle = 0;
+    for (let i = 0; i < numWedges; i++) {
+      // Random size between ~15 and ~37 degrees
+      const angle = (Math.PI / 12) + Math.random() * (Math.PI / 8);
+      wedgeAngles.push(angle);
+      totalWedgeAngle += angle;
+    }
+
+    // Prevent wedges from taking up more than ~75% of the orbit
+    const maxTotalWedgeAngle = 1.4 * Math.PI;
+    if (totalWedgeAngle > maxTotalWedgeAngle) {
+      const scale = maxTotalWedgeAngle / totalWedgeAngle;
+      for (let i = 0; i < numWedges; i++) {
+        wedgeAngles[i] *= scale;
+      }
+      totalWedgeAngle *= scale;
+    }
+
+    // Generate random gap sizes and scale them to fill the remaining space
+    const gapAngles = [];
+    let totalRawGap = 0;
+    for (let i = 0; i < numWedges; i++) {
+      const gap = Math.max(0.15, Math.random());
+      gapAngles.push(gap);
+      totalRawGap += gap;
+    }
+
+    const totalGapAngle = 2 * Math.PI - totalWedgeAngle;
+    for (let i = 0; i < numWedges; i++) {
+      gapAngles[i] = (gapAngles[i] / totalRawGap) * totalGapAngle;
+    }
+
+    // Helper to generate the path for a wedge
+    const generatePath = (start, end) => {
+      const path = [];
+      const steps = 20;
+      for (let j = 0; j <= steps; j++) {
+        const angle = start + (j / steps) * (end - start);
+        const r = a * (1 - s.foci.eccentricity ** 2) / (1 + s.foci.eccentricity * Math.cos(angle));
+        if (Number.isFinite(r)) {
+          path.push({ x: -r * Math.cos(angle), y: r * Math.sin(angle) });
+        }
+      }
+      return path;
+    };
+
+    // Place wedges, ensuring one is centered at apoapsis (PI)
+    const apoapsisWedgeIndex = Math.floor(Math.random() * numWedges);
+    const apoapsisWedgeAngle = wedgeAngles[apoapsisWedgeIndex];
+    let currentAngle = Math.PI - apoapsisWedgeAngle / 2;
+
+    // Adjust starting angle to account for gaps before the apoapsis wedge
+    for (let i = 0; i < apoapsisWedgeIndex; i++) {
+      currentAngle -= (wedgeAngles[i] + gapAngles[i]);
+    }
+
+    // Create all wedges
+    for (let i = 0; i < numWedges; i++) {
+      const startAngle = currentAngle;
+      const endAngle = startAngle + wedgeAngles[i];
+      const path = generatePath(startAngle, endAngle);
+      wedges.push({ path, id: `game-wedge-${i}` });
+      currentAngle += wedgeAngles[i] + gapAngles[i];
+    }
+
+    return wedges;
+  }
+
+  function isPointInPolygon(point, polygon) {
+    if (!polygon || polygon.length < 2) return false;
+    // This is for a polygon fanning from the origin
+    const poly = [{ x: 0, y: 0 }, ...polygon];
+    let isInside = false;
+    for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+      const xi = poly[i].x, yi = poly[i].y;
+      const xj = poly[j].x, yj = poly[j].y;
+      const intersect = ((yi > point.y) !== (yj > point.y))
+        && (point.x < (xj - xi) * (point.y - yi) / (yj - yi) + xi);
+      if (intersect) isInside = !isInside;
+    }
+    return isInside;
+  }
+
+  const calculateScore = useCallback(() => {
+    const s = simRef.current;
+    const a = s.foci.semiMajorAxis;
+    const e = s.foci.eccentricity;
+    if (!Number.isFinite(a) || a <= 0) {
+      const roundIndex = s.game.currentRound - 1;
+      if (roundIndex >= 0) {
+        const score = 0;
+        if (s.game.roundScores.length > roundIndex) {
+          s.game.roundScores[roundIndex] = score;
+        } else {
+          s.game.roundScores.push(score);
+        }
+        s.game.score = s.game.roundScores.reduce((sum, rScore) => sum + rScore, 0);
+      }
+      return;
+    }
+    const b = a * Math.sqrt(1 - e * e);
+    const totalEllipseArea = Math.PI * a * b;
+
+    const userArea = s.game.userWedges.reduce((sum, sw) => sum + polygonArea(sw.path), 0);
+    const gameWedgeArea = s.game.wedges.reduce((sum, sw) => sum + polygonArea(sw.path), 0);
+    const fillableArea = totalEllipseArea - gameWedgeArea;
+
+    let overlapArea = 0;
+    const samples = 2000;
+    const userPolys = s.game.userWedges.map(sw => sw.path);
+    const gamePolys = s.game.wedges.map(sw => sw.path);
+
+    for (let i = 0; i < samples; i++) {
+      const angle = Math.random() * 2 * Math.PI;
+      const dist = Math.random() * a;
+      const pt = { x: dist * Math.cos(angle), y: dist * Math.sin(angle) };
+      const inUser = userPolys.some(poly => isPointInPolygon(pt, poly));
+      const inGame = gamePolys.some(poly => isPointInPolygon(pt, poly));
+      if (inUser && inGame) {
+        overlapArea += totalEllipseArea / samples;
+      }
+    }
+    
+    let selfOverlapArea = 0;
+    if (userPolys.length > 1) {
+      for (let i = 0; i < samples; i++) {
+        const angle = Math.random() * 2 * Math.PI;
+        const dist = Math.random() * a;
+        const pt = { x: dist * Math.cos(angle), y: dist * Math.sin(angle) };
+        const timesIn = userPolys.reduce((count, poly) => count + (isPointInPolygon(pt, poly) ? 1 : 0), 0);
+        if (timesIn > 1) {
+          selfOverlapArea += (totalEllipseArea / samples) * (timesIn - 1);
+        }
+      }
+    }
+    
+    const totalOverlap = overlapArea + selfOverlapArea;
+    const effectiveUserArea = userArea - totalOverlap;
+
+    const coverage = (effectiveUserArea / fillableArea) * 100;
+    const overlapPenalty = (totalOverlap / userArea) * 100;
+
+    s.game.coverage = isNaN(coverage) ? 0 : coverage;
+    s.game.overlap = isNaN(overlapPenalty) ? 0 : overlapPenalty;
+    
+    const roundScore = s.game.coverage - s.game.overlap;
+    const roundIndex = s.game.currentRound - 1;
+    if (s.game.roundScores.length > roundIndex && roundIndex >= 0) {
+      s.game.roundScores[roundIndex] = roundScore;
+    } else {
+      s.game.roundScores.push(roundScore);
+    }
+    s.game.score = s.game.roundScores.reduce((sum, rScore) => sum + rScore, 0);
+  }, []);
+
+  const startNextRound = useCallback(() => {
+    const s = simRef.current;
+
+    if (s.game.currentRound > 0) {
+      calculateScore();
+    }
+
+    if (s.game.currentRound >= 3) {
+      setIsGameActive(false);
+      return;
+    }
+
+    s.game.currentRound += 1;
+    s.game.userWedges = [];
+    s.sweeps.completedSweeps = [];
+
+    setOrbit("randomElliptical");
+    setTimeout(() => {
+      s.game.wedges = generateGameWedges();
+      const T = keplerPeriod(s.foci.semiMajorAxis);
+      s.game.period = T;
+      s.simTime = 0;
+    }, 100);
+  }, [calculateScore]);
+
+  useEffect(() => {
+    startNextRoundRef.current = startNextRound;
+  }, [startNextRound]);
+
+  const startGame = () => {
+    const s = simRef.current;
+    setIsGameActive(true);
+    s.game.score = 0;
+    s.game.coverage = 0;
+    s.game.overlap = 0;
+    s.game.roundScores = [];
+    s.game.currentRound = 0;
+    startNextRound();
+  };
+
+  const stopGame = useCallback(() => {
+    if (!isGameActiveRef.current) return;
+    calculateScore();
+    setIsGameActive(false);
+  }, [calculateScore]);
+
+  useEffect(() => {
+    isGameModeRef.current = isGameMode;
+    if (isGameMode) {
+      setZoom(2.5);
+      setSimSpeed(5.0);
+    }
+    if (!isGameMode && isGameActive) {
+      stopGame();
+    }
+  }, [isGameMode, isGameActive, stopGame]);
+
+  // S-key sweep control
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key !== 's' || e.repeat) return;
+      e.preventDefault();
+      const s = simRef.current;
+      if (s.sweeps.isSweeping) return;
+      s.sweeps.isSweeping = true;
+      s.sweeps.currentSweep = { path: [{ ...s.body.pos }], time: 0 };
+    };
+
+    const handleKeyUp = (e) => {
+      if (e.key !== 's') return;
+      const s = simRef.current;
+      if (!s.sweeps.isSweeping) return;
+      s.sweeps.isSweeping = false;
+      if (s.sweeps.currentSweep) {
+        const collection = isGameModeRef.current ? s.game.userWedges : s.sweeps.completedSweeps;
+        collection.push(s.sweeps.currentSweep);
+        s.sweeps.currentSweep = null;
+        if (isGameModeRef.current) {
+          calculateScore();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, [calculateScore]);
 
   // ---------- Sim constants ----------
   const MU = 40000;           // μ = GM (sim units)
@@ -60,6 +336,16 @@ export default function Kepler({ isRunning, onPlay }) {
     foci: { f1: { x: 0, y: 0 }, f2: null, eccentricity: 0, semiMajorAxis: Infinity },
     sweeps: { isSweeping: false, currentSweep: null, completedSweeps: [] },
     autoAreas: { window: 1.5, bucket: [], wedges: [] },
+    game: {
+      score: 0,
+      wedges: [],
+      userWedges: [],
+      overlap: 0,
+      coverage: 0,
+      period: null,
+      currentRound: 0,
+      roundScores: [],
+    },
   });
 
   // ---------- View (pan) ----------
@@ -85,6 +371,8 @@ export default function Kepler({ isRunning, onPlay }) {
     s.sweeps.completedSweeps = [];
     s.autoAreas.bucket = [];
     s.autoAreas.wedges = [];
+    s.game.wedges = [];
+    s.game.userWedges = [];
 
     const placeAtApoapsis = (r_ap, e) => {
       const a = r_ap / (1 + e);
@@ -111,6 +399,15 @@ export default function Kepler({ isRunning, onPlay }) {
       case "hyperbolic": {
         s.body.pos = { x: -100, y: -50 };
         s.body.vel = { x: 30, y: 0 }; // > escape
+        break;
+      }
+      case "randomElliptical": {
+        const round = s.game.currentRound; // Will be 1, 2, 3
+        // round 1: e ~ 0.3-0.4, round 2: e ~ 0.5-0.6, round 3: e ~ 0.7-0.8
+        const baseEccentricity = 0.0 + (round * 0.15);
+        const randomEccentricity = baseEccentricity + Math.random() * 0.1;
+        const randomApoapsis = 200 + Math.random() * 50; // Range [150, 300]
+        placeAtApoapsis(randomApoapsis, randomEccentricity);
         break;
       }
       default: break;
@@ -343,15 +640,25 @@ export default function Kepler({ isRunning, onPlay }) {
       "rgba(255,105,180,0.30)",
       "rgba(255,165,0,0.30)",
     ];
-    s.sweeps.completedSweeps.forEach((sw, i) => {
-      drawSweepPolygon(ctx, sw.path, colors[i % colors.length]);
-    });
+
+    if (isGameModeRef.current) {
+      s.game.wedges.forEach(sw => {
+        drawSweepPolygon(ctx, sw.path, "rgba(255, 80, 80, 0.4)");
+      });
+      s.game.userWedges.forEach((sw, i) => {
+        drawSweepPolygon(ctx, sw.path, colors[i % colors.length]);
+      });
+    } else {
+      s.sweeps.completedSweeps.forEach((sw, i) => {
+        drawSweepPolygon(ctx, sw.path, colors[i % colors.length]);
+      });
+    }
 
     if (s.sweeps.isSweeping && s.sweeps.currentSweep) {
       drawSweepPolygon(ctx, s.sweeps.currentSweep.path, "rgba(255,255,255,0.2)");
     }
 
-    if (autoAreasRef.current) {
+    if (autoAreasRef.current && !isGameModeRef.current) {
       for (const path of s.autoAreas.wedges) {
         drawSweepPolygon(ctx, path, "rgba(80,220,140,0.28)");
       }
@@ -370,16 +677,6 @@ export default function Kepler({ isRunning, onPlay }) {
   }
 
   // ---------- HUD ----------
-  function polygonArea(path) {
-    let area = 0;
-    if (!path || path.length < 2) return 0;
-    for (let i = 0; i < path.length - 1; i++) {
-      const p1 = path[i], p2 = path[i + 1];
-      area += 0.5 * (p1.x * p2.y - p2.x * p1.y);
-    }
-    return Math.abs(area);
-  }
-
   function updateHUD() {
     const div = statsRef.current;
     if (!div) return;
@@ -475,6 +772,10 @@ export default function Kepler({ isRunning, onPlay }) {
       updatePhysics(TIME_STEP);
       s.simTime += TIME_STEP;
       s.accumulator -= TIME_STEP;
+    }
+
+    if (isGameActiveRef.current && s.game.period && s.simTime >= s.game.period) {
+      startNextRoundRef.current();
     }
 
     drawFrame();
@@ -588,12 +889,6 @@ export default function Kepler({ isRunning, onPlay }) {
 
           <label className="flex items-center gap-3 bg-gray-700 p-2 rounded-lg cursor-pointer">
             <input type="checkbox" className="checkbox"
-              checked={showPath} onChange={(e) => setShowPath(e.target.checked)} />
-            <span className="text-gray-200">Orbit Path</span>
-          </label>
-
-          <label className="flex items-center gap-3 bg-gray-700 p-2 rounded-lg cursor-pointer">
-            <input type="checkbox" className="checkbox"
               checked={showFoci} onChange={(e) => setShowFoci(e.target.checked)} />
             <span className="text-gray-200">Foci</span>
           </label>
@@ -625,24 +920,41 @@ export default function Kepler({ isRunning, onPlay }) {
           </p>
           <div className="space-y-2">
             <button
-              onClick={() => {
+              onMouseDown={() => {
                 const s = simRef.current;
-                s.sweeps.isSweeping = !s.sweeps.isSweeping;
-                if (s.sweeps.isSweeping) {
-                  s.sweeps.currentSweep = { path: [{ ...s.body.pos }], time: 0 };
-                } else if (s.sweeps.currentSweep) {
-                  s.sweeps.completedSweeps.push(s.sweeps.currentSweep);
+                if (s.sweeps.isSweeping) return;
+                s.sweeps.isSweeping = true;
+                s.sweeps.currentSweep = { path: [{ ...s.body.pos }], time: 0 };
+              }}
+              onMouseUp={() => {
+                const s = simRef.current;
+                if (!s.sweeps.isSweeping) return;
+                s.sweeps.isSweeping = false;
+                if (s.sweeps.currentSweep) {
+                  const collection = isGameModeRef.current ? s.game.userWedges : s.sweeps.completedSweeps;
+                  collection.push(s.sweeps.currentSweep);
                   s.sweeps.currentSweep = null;
                 }
               }}
-              className={`btn w-full ${simRef.current.sweeps.isSweeping ? "bg-yellow-600 hover:bg-yellow-700 text-gray-900" : ""}`}
+              onMouseLeave={() => {
+                const s = simRef.current;
+                if (!s.sweeps.isSweeping) return;
+                s.sweeps.isSweeping = false;
+                if (s.sweeps.currentSweep) {
+                  const collection = isGameModeRef.current ? s.game.userWedges : s.sweeps.completedSweeps;
+                  collection.push(s.sweeps.currentSweep);
+                  s.sweeps.currentSweep = null;
+                }
+              }}
+              className={`btn w-full ${simRef.current.sweeps.isSweeping ? "bg-yellow-600 hover:bg-yellow-700 text-gray-900" : "bg-blue-600 hover:bg-blue-700"}`}
             >
-              {simRef.current.sweeps.isSweeping ? "End Sweep" : "Start Sweep"}
+              {simRef.current.sweeps.isSweeping ? "Sweeping..." : "Click and Hold to (S)weep"}
             </button>
             <button
               onClick={() => {
                 const s = simRef.current;
                 s.sweeps.completedSweeps = [];
+                s.game.userWedges = [];
                 if (s.sweeps.isSweeping) {
                   s.sweeps.currentSweep = { path: [{ ...s.body.pos }], time: 0 };
                 }
@@ -650,8 +962,38 @@ export default function Kepler({ isRunning, onPlay }) {
               }}
               className="btn w-full bg-red-600 hover:bg-red-700"
             >
-              Clear Sweeps
+              Clear
             </button>
+            <div className="mt-4">
+              <button
+                onClick={() => setIsGameMode(!isGameMode)}
+                className={`btn w-full ${isGameMode ? "bg-green-600 hover:bg-green-700" : "bg-gray-600 hover:bg-gray-700"}`}
+              >
+                {isGameMode ? "Exit Game" : "Play Game"}
+              </button>
+              {isGameMode && (
+                <div className="mt-2 p-3 bg-gray-900 rounded-lg text-sm">
+                  {!isGameActive && simRef.current.game.roundScores.length === 0 && (
+                    <button onClick={startGame} className="btn w-full bg-blue-600 hover:bg-blue-700">
+                      Start Game
+                    </button>
+                  )}
+                  {!isGameActive && simRef.current.game.roundScores.length > 0 && (
+                    <div className="text-center">
+                      <div className="text-white my-2">Final Score: <span className="font-mono text-xl text-green-400">{simRef.current.game.score.toFixed(1)}</span></div>
+                      {simRef.current.game.roundScores.map((score, i) => (
+                        <div className="text-gray-400 text-xs" key={i}>
+                          Round {i + 1} Score: {score.toFixed(1)}
+                        </div>
+                      ))}
+                      <button onClick={startGame} className="btn w-full bg-blue-600 hover:bg-blue-700 mt-3">
+                        Play Again
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
           <div ref={sweepInfoRef} className="mt-2 p-3 bg-gray-900 rounded-lg text-sm">
             <p className="text-gray-300">Create sweeps to compare areas.</p>
@@ -689,6 +1031,7 @@ export default function Kepler({ isRunning, onPlay }) {
               step="0.1"
               value={simSpeed}
               onChange={(e) => setSimSpeed(parseFloat(e.target.value))}
+              disabled={isGameMode}
             />
           </label>
         </div>
