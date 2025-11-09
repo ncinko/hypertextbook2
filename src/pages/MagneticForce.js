@@ -70,24 +70,33 @@ export default function MagneticForce() {
           <div style={{ textAlign: "center", marginTop: 12 }}>
             <div style={{ marginBottom: 6, fontStyle: "italic" }}>Try it:</div>
             <span style={chipStyle}>Swap the field direction to reverse curvature</span>
-            <span style={chipStyle}>Lighten the field to watch radius expand</span>
+            <span style={chipStyle}>Decrease the field to watch radius expand</span>
             <span style={chipStyle}>Tap the canvas to inject new particles</span>
           </div>
 
           <HiddenExposition title="Why does the speed stay constant?">
             <p>
               The magnetic force is always perpendicular to the particle's velocity. Work requires a component of force parallel to displacement, but
-              <MathJax inline>{" \\(\\vec{\\mathbf F} \\cdot \\vec{\\mathbf v} = 0 \\) "}</MathJax>. Energy therefore remains constant and the path is uniform circular motion with
-              period <MathJax inline>{"\\( T = \\frac{2\\pi m}{|q|B} \\)"}</MathJax>.
-            </p>
-            <p>
-              Increasing the field makes the centripetal acceleration larger, shrinking the radius and time needed
-              to sweep out a full circle. Conversely, heavier particles or faster beams resist bending, tracing wide arcs
-              that particle physicists use to measure momentum.
+              <MathJax inline>{" \\(\\vec{\\mathbf F} \\cdot \\vec{\\mathbf v} = 0 \\) "}</MathJax>. Energy therefore remains constant and the particle'save speed does not change.
             </p>
           </HiddenExposition>
 
-          <h2>Questions to Ponder</h2>
+          <HiddenExposition title="Why is the trajectory a circle?">
+            <p>
+              When the velocity is perpendicular to a uniform magnetic field, the force has constant magnitude <MathJax inline>{"\\(F = |q|vB\\sin(90^\\circ)\\)"}</MathJax> and
+              is orthogonal to the velocity. This is exactly the condition for uniform circular motion.
+            </p>
+            <p>The radius can be found by equating the magnetic force to the net force under centripetal acceleration:</p>
+            <MathJax>
+              {`\\( |q|vB = \\frac{mv^2}{r} \\implies r = \\frac{mv}{|q|B} \\)`}
+            </MathJax>
+            <p>
+              If the velocity has a component parallel to the field, that part of the motion remains unaffected by the magnetic force.
+              The resulting trajectory is a helix, spiraling around the field lines while advancing along them.
+            </p>
+          </HiddenExposition>
+
+          <h2>Practice</h2>
           <div className="exposition-list">
             <HiddenQuestion
               title={
