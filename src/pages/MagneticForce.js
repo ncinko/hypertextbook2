@@ -77,7 +77,7 @@ export default function MagneticForce() {
           <HiddenExposition title="Why does the speed stay constant?">
             <p>
               The magnetic force is always perpendicular to the particle's velocity. Work requires a component of force parallel to displacement, but
-              <MathJax inline>{" \\(\\vec{\\mathbf F} \\cdot \\vec{\\mathbf v} = 0 \\) "}</MathJax>. Energy therefore remains constant and the particle'save speed does not change.
+              <MathJax inline>{" \\(\\vec{\\mathbf F} \\cdot \\vec{\\mathbf v} = 0 \\) "}</MathJax>. Energy therefore remains constant and the particle's speed does not change.
             </p>
           </HiddenExposition>
 
