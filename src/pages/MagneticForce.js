@@ -25,7 +25,7 @@ export default function MagneticForce() {
           <p>
             When charged particles move through a magnetic field they experience the Lorentz force,
             <MathJax inline>{" \\(\\vec{\\mathbf F} = q(\\vec{\\mathbf v} \\times \\vec{\\mathbf B})\\)"}</MathJax>.
-            The resulting motion is always perpendicular to the velocity, bending beams of electrons
+            The resulting force is always perpendicular to the velocity, bending beams of electrons
             in cathode-ray tubes, steering ions inside cyclotrons, and painting glowing arcs across the sky.
           </p>
 
@@ -71,7 +71,7 @@ export default function MagneticForce() {
             <div style={{ marginBottom: 6, fontStyle: "italic" }}>Try it:</div>
             <span style={chipStyle}>Swap the field direction to reverse curvature</span>
             <span style={chipStyle}>Lighten the field to watch radius expand</span>
-            <span style={chipStyle}>Tap the canvas to seed particles anywhere</span>
+            <span style={chipStyle}>Tap the canvas to inject new particles</span>
           </div>
 
           <HiddenExposition title="Why does the speed stay constant?">
@@ -123,8 +123,9 @@ export default function MagneticForce() {
               }
             >
               <MathJax>
-                {`Using the right-hand rule, the magnetic field must be pointing into the page
-                (or screen) for negative charges to curve clockwise.`}
+                {`As seen from above the page (or screen), the magnetic field must be pointing into the page.  To confirm this, place your pointer finger
+                along the velocity (let's say to the right), your middle finger into the page, and your thumb will point up.
+                Since electrons are negative, the force is downward, causing clockwise curvature.`}
               </MathJax>
             </HiddenQuestion>
           </div>
