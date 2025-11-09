@@ -24,43 +24,45 @@ export default function MagneticForce() {
           <h2>Introduction</h2>
           <p>
             When charged particles move through a magnetic field they experience the Lorentz force,
-            <MathJax inline>{"\\(\\vec{\\mathbf F} = q(\\vec{\\mathbf v} \\times \\vec{\\mathbf B})\\)"}</MathJax>.
+            <MathJax inline>{" \\(\\vec{\\mathbf F} = q(\\vec{\\mathbf v} \\times \\vec{\\mathbf B})\\)"}</MathJax>.
             The resulting motion is always perpendicular to the velocity, bending beams of electrons
-            in cathode-ray tubes, steering ions inside cyclotrons, and painting glowing arcs across the
-            aurora-filled sky.
+            in cathode-ray tubes, steering ions inside cyclotrons, and painting glowing arcs across the sky.
           </p>
 
           <h2>Key Ideas</h2>
           <ul className="card-list">
             <li>
-              <strong>Force is perpendicular to motion</strong>
+              <strong>Magnitude</strong>
               <span>
-                Magnetic forces change a particle&apos;s direction but not its speed. The acceleration obeys
-                <MathJax inline>{"\\(\\frac{d\\vec{\\mathbf v}}{dt} = \\frac{q}{m} (\\vec{\\mathbf v} \\times \\vec{\\mathbf B})\\)"}</MathJax>
-                , leading to circular or helical paths.
+                The magnitude of the force is given by
+                <MathJax inline>{" \\( F = |q|vB\\sin(\\theta) \\)"}</MathJax>, where
+                <MathJax inline>{" \\(\\theta\\)"}</MathJax> is the angle between velocity and field.
+                The force is largest when the motion is perpendicular to the field and zero when moving
+                parallel or antiparallel.
+              </span>
+            </li>
+            
+            <li>
+              <strong>Direction</strong>
+              <span>
+                Placing your (right hand) pointer finger along <MathJax inline>{"\\(\\vec{\\mathbf v}\\)"}</MathJax> and your middle finger along
+                <MathJax inline>{" \\(\\vec{\\mathbf B}\\)"}</MathJax>, your thumb points in the direction of the force for a positive charge.
+                Negative charges experience the opposite force.
               </span>
             </li>
             <li>
               <strong>Radius encodes momentum</strong>
               <span>
                 For a uniform field and speed <MathJax inline>{"\\(v\\)"}</MathJax>, the trajectory radius is
-                <MathJax inline>{"\\( r = \\frac{mv}{|q|B} \\)"}</MathJax>. Bigger momentum or smaller field spreads the arc.
-              </span>
-            </li>
-            <li>
-              <strong>Handedness tracks charge sign</strong>
-              <span>
-                Right-hand rules still apply: point your thumb along velocity and curl toward the field.
-                Positively charged particles deflect in that sense, while negative charges follow the opposite spiral.
+                <MathJax inline>{" \\( r = \\frac{mv}{|q|B} \\)"}</MathJax>.  Lower momentum or stronger field tightens the curvature.
               </span>
             </li>
           </ul>
 
           <h2>Charged particle playground</h2>
           <p>
-            Explore how particle mass, charge, launch speed, and field direction sculpt the trajectories.
-            The simulation below injects both positive and negative charges into a uniform field.
-            Trails fade over time to highlight curvature and the difference in handedness for opposite charges.
+            Explore how mass, charge, speed, and field shape the trajectories of particles.
+            The simulation below only includes magnetostatic forces with the external field.  Particle-particle interactions are ignored.
           </p>
 
           <MagneticForceSimulation />
@@ -74,16 +76,14 @@ export default function MagneticForce() {
 
           <HiddenExposition title="Why does the speed stay constant?">
             <p>
-              The magnetic force is always perpendicular to velocity because the cross product removes
-              the parallel component. Work requires a component of force along displacement, but
-              <MathJax inline>{"\\(\\vec{\\mathbf F} \\cdot \\vec{\\mathbf v} = 0\\)"}</MathJax>
-              for magnetic forces. Energy therefore remains constant and the path is uniform circular motion with
+              The magnetic force is always perpendicular to the particle's velocity. Work requires a component of force parallel to displacement, but
+              <MathJax inline>{" \\(\\vec{\\mathbf F} \\cdot \\vec{\\mathbf v} = 0 \\) "}</MathJax>. Energy therefore remains constant and the path is uniform circular motion with
               period <MathJax inline>{"\\( T = \\frac{2\\pi m}{|q|B} \\)"}</MathJax>.
             </p>
             <p>
-              Increasing the field makes the perpendicular acceleration larger, shrinking the radius and time needed
+              Increasing the field makes the centripetal acceleration larger, shrinking the radius and time needed
               to sweep out a full circle. Conversely, heavier particles or faster beams resist bending, tracing wide arcs
-              that particle physicists use to measure momenta inside bubble chambers.
+              that particle physicists use to measure momentum.
             </p>
           </HiddenExposition>
 
@@ -93,46 +93,39 @@ export default function MagneticForce() {
               title={
                 <span>
                   A proton enters a <MathJax inline>{"\\(0.80\\,\\text{T}\\)"}</MathJax> field at
-                  <MathJax inline>{"\\(3.0\\times10^5\\,\\text{m/s}\\)"}</MathJax>. What radius of curvature do you expect?
+                  <MathJax inline>{" \\(3.0\\times10^5\\,\\text{m/s}\\)"}</MathJax>. What radius of curvature do you expect?
                 </span>
               }
             >
               <MathJax>
                 {`Use \\( r = \\frac{mv}{|q|B} \\). With \\( m_p = 1.67\\times10^{-27}\\,\\text{kg} \\),
-                \\( q = 1.60\\times10^{-19}\\,\\text{C} \\), and the stated values, \\n                r = \\frac{(1.67\\times10^{-27})(3.0\\times10^5)}{(1.60\\times10^{-19})(0.80)} \\approx 3.9\\,\\text{cm}. \\)`}
+                \\( q = 1.60\\times10^{-19}\\,\\text{C} \\), and the stated values, \\(r = \\frac{(1.67\\times10^{-27})(3.0\\times10^5)}{(1.60\\times10^{-19})(0.80)} \\approx 3.9\\,\\text{cm}. \\)`}
               </MathJax>
             </HiddenQuestion>
 
             <HiddenQuestion
               title={
                 <span>
-                  Why do electrons spiral inward when the launch point starts off-center in the simulation, even though the force
-                  does no work?
+                  If the magnetic field is doubled, how does that affect the radius and period of the motion?
                 </span>
               }
             >
-              <p>
-                Off-center launches give the particle a velocity component toward or away from the canvas center. The magnetic
-                force continuously bends that velocity, so the particle executes uniform circular motion about its instantaneous
-                center. Because the simulation removes particles after they leave the viewing window, you see only a portion of
-                the circle—looking like an inward spiral even though the speed stays constant.
-              </p>
+              <MathJax>
+                {`Doubling \\(B\\) halves the radius since \\( r \\propto \\frac{1}{B} \\).
+                The period is also halved because \\( T \\propto \\frac{1}{B} \\).`}
+              </MathJax>
             </HiddenQuestion>
-
             <HiddenQuestion
               title={
                 <span>
-                  Cyclotrons rely on alternating electric fields and a steady magnetic field. How does the radius formula guide
-                  when to ramp the frequency of the accelerating voltage?
+                  If you see electrons curving clockwise, which direction is the magnetic field pointing?
                 </span>
               }
             >
-              <p>
-                As particles gain speed their radius grows proportionally to <MathJax inline>{"\\(v\\)"}</MathJax>, so the time
-                to complete a semicircle increases. Engineers adjust the oscillating electric field to stay in phase with the
-                arrival of the particles at the accelerating gap, matching <MathJax inline>{"\\( T = 2\\pi m/(|q|B) \\)"}</MathJax>
-                as momentum climbs.
-              </p>
+              <MathJax>
+                {`Using the right-hand rule, the magnetic field must be pointing into the page
+                (or screen) for negative charges to curve clockwise.`}
+              </MathJax>
             </HiddenQuestion>
           </div>
         </div>

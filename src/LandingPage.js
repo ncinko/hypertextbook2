@@ -329,7 +329,7 @@ function drawHawks(ctx) {
         <p style={{ fontSize: 18, opacity: 0.9, marginTop: 8 }}>Explore interactive simulations for a variety of topics.</p>
         <div style={{ marginTop: 16, display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
           <Link to="/vectors" style={{ padding: "10px 14px", borderRadius: 12, background: "#1f2937", color: "white", textDecoration: "none" }}>Vectors</Link>
-          <Link to="/magnetic-field" style={{ padding: "10px 14px", borderRadius: 12, background: "#1f2937", color: "white", textDecoration: "none" }}>Magnetism</Link>
+          <Link to="/magnetic-force" style={{ padding: "10px 14px", borderRadius: 12, background: "#1f2937", color: "white", textDecoration: "none" }}>Magnetism</Link>
           <Link to="/kepler" style={{ padding: "10px 14px", borderRadius: 12, background: "#1f2937", color: "white", textDecoration: "none" }}>Orbits</Link>
         </div>
       </div>

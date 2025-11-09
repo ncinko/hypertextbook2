@@ -32,12 +32,12 @@ function ControlSlider({ label, value, min, max, step, onChange, unit }) {
 
 function DirectionToggle({ direction, onToggle }) {
   return (
-    <div style={{ marginBottom: 12 }}>
+    <div>
       <div style={{ fontSize: 13, color: "#1f2b6c", marginBottom: 6 }}>Field Direction</div>
       <div style={{ display: "flex", gap: 8 }}>
         {[
-          { key: "out", label: "Out of page", symbol: "\u2299" },
-          { key: "in", label: "Into page", symbol: "\u2297" },
+          { key: "out", label: "Out of page", symbol: "⊙" },
+          { key: "in", label: "Into page", symbol: "⊗" },
         ].map((option) => (
           <button
             key={option.key}
@@ -70,7 +70,7 @@ export default function MagneticForceSimulation() {
   const settingsRef = useRef(defaultSettings);
 
   const [settings, setSettings] = useState(defaultSettings);
-  const [size, setSize] = useState({ width: 640, height: 420 });
+  const [size, setSize] = useState({ width: 640, height: 480 });
 
   useEffect(() => {
     settingsRef.current = settings;
@@ -82,8 +82,12 @@ export default function MagneticForceSimulation() {
 
     const computeSize = () => {
       const parent = canvas.parentElement;
-      const width = parent ? clamp(parent.getBoundingClientRect().width, 320, 760) : 640;
-      return { width: Math.round(width), height: Math.round(width * 0.65) };
+      // Take up more of the available width
+      const parentWidth = parent ? parent.getBoundingClientRect().width : 760;
+      const width = Math.round(parentWidth);
+      // Adjust aspect ratio for a wider feel
+      const height = Math.round(width * 0.6);
+      return { width, height };
     };
 
     const updateSize = () => setSize(computeSize());
@@ -110,24 +114,23 @@ export default function MagneticForceSimulation() {
     const ctx = canvas.getContext("2d");
 
     const dpr = window.devicePixelRatio || 1;
+    // Ensure backing store and CSS pixels match 1:1 mapping for pointer coords
     canvas.width = Math.round(size.width * dpr);
     canvas.height = Math.round(size.height * dpr);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
+    // Clear
     ctx.fillStyle = "#040712";
     ctx.fillRect(0, 0, size.width, size.height);
 
+    // Start with a few particles
     particlesRef.current = [];
-    for (let i = 0; i < 18; i++) {
-      spawnParticle();
-    }
+    for (let i = 0; i < 5; i++) launchRandomParticle();
     lastTimeRef.current = null;
 
     cancelAnimationFrame(animationRef.current);
     const loop = (timestamp) => {
-      if (!lastTimeRef.current) {
-        lastTimeRef.current = timestamp;
-      }
+      if (!lastTimeRef.current) lastTimeRef.current = timestamp;
       const dt = Math.min((timestamp - lastTimeRef.current) / 1000, 0.032);
       lastTimeRef.current = timestamp;
 
@@ -143,64 +146,98 @@ export default function MagneticForceSimulation() {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    const handlePointer = (clientX, clientY) => {
+    // Exact CSS-pixel mapping
+    const toCanvasXY = (clientX, clientY) => {
       const rect = canvas.getBoundingClientRect();
-      const x = clientX - rect.left;
-      const y = clientY - rect.top;
-      spawnParticle({ x, y });
+      return { x: clientX - rect.left, y: clientY - rect.top };
     };
 
-    const handleClick = (event) => {
-      handlePointer(event.clientX, event.clientY);
+    const handlePointerDown = (event) => {
+      const { x, y } = toCanvasXY(event.clientX, event.clientY);
+      spawnParticle({ x, y });
+      event.preventDefault();
     };
 
     const handleTouch = (event) => {
       for (const touch of event.changedTouches) {
-        handlePointer(touch.clientX, touch.clientY);
+        const { x, y } = toCanvasXY(touch.clientX, touch.clientY);
+        spawnParticle({ x, y });
       }
       event.preventDefault();
     };
 
-    canvas.addEventListener("click", handleClick);
+    // IMPORTANT: only pointer/touch — no "click" (which also fires after pointerup)
+    canvas.addEventListener("pointerdown", handlePointerDown);
     canvas.addEventListener("touchstart", handleTouch, { passive: false });
 
     return () => {
-      canvas.removeEventListener("click", handleClick);
+      canvas.removeEventListener("pointerdown", handlePointerDown);
       canvas.removeEventListener("touchstart", handleTouch);
     };
   }, [size]);
 
   const spawnParticle = (override = {}) => {
-    const { launchSpeed, charge, mass } = settingsRef.current;
+    const currentSettings = settingsRef.current;
+    const launchSpeed = override.launchSpeed ?? currentSettings.launchSpeed;
+    const charge = override.charge ?? currentSettings.charge;
+    const mass = override.mass ?? currentSettings.mass;
+
     const width = size.width;
     const height = size.height;
 
-    const angle = (Math.random() * Math.PI) / 6 - Math.PI / 12;
-    const speed = launchSpeed * (0.8 + Math.random() * 0.4);
-    const vx = speed * Math.cos(angle);
-    const vy = speed * Math.sin(angle);
+    const angle = 0;
+    const speed = launchSpeed;
+    const vx0 = speed * Math.cos(angle);
+    const vy0 = speed * Math.sin(angle);
 
-    const x = override.x ?? (Math.random() < 0.5 ? width * 0.18 : width * 0.82);
+    // Exact user click if provided
+    const x = override.x ?? Math.random() * width * 0.8 + width * 0.1;
     const y = override.y ?? Math.random() * height * 0.8 + height * 0.1;
-    const chargeSign = override.charge ?? (Math.random() > 0.5 ? 1 : -1) * Math.sign(charge || 1);
-    const hue = chargeSign > 0 ? 200 : 12;
+
+    // Color mapping: RED for positive, BLUE for negative
+    const chargeSign = Math.sign(charge);
+
+    const hue = chargeSign > 0 ? 12 : 210; // red vs blue
 
     particlesRef.current.push({
       x,
       y,
-      vx: chargeSign > 0 ? vx : -vx,
-      vy,
+      vx: chargeSign > 0 ? vx0 : -vx0,
+      vy: vy0,
       charge: chargeSign * Math.max(Math.abs(charge), 0.05),
       mass: Math.max(0.2, mass),
       hue,
     });
   };
 
+  const launchRandomParticle = () => {
+    const randomCharge = (Math.random() * 6) - 3; // from -3 to 3
+    const randomMass = Math.random() * 2.8 + 0.2; // from 0.2 to 3
+    const randomSpeed = Math.random() * 180 + 40; // from 40 to 220
+
+    spawnParticle({
+        charge: randomCharge,
+        mass: randomMass,
+        launchSpeed: randomSpeed,
+    });
+  };
+
+  // Energy-conserving velocity update in a uniform B-field (B along z): exact rotation by angle omega*dt
+  const rotateVelocityInBz = (vx, vy, omega_dt) => {
+    // rotation matrix [[cos, sin], [-sin, cos]]
+    const c = Math.cos(-omega_dt);
+    const s = Math.sin(-omega_dt);
+    const vxNew = vx * c + vy * s;
+    const vyNew = -vx * s + vy * c;
+    return [vxNew, vyNew];
+  };
+
   const evolveParticles = (dt, ctx, dims) => {
     const { fieldStrength, direction } = settingsRef.current;
     const Bz = fieldStrength * (direction === "out" ? 1 : -1);
 
-    ctx.fillStyle = "rgba(4, 7, 18, 0.2)";
+    // Longer trails (slow fade)
+    ctx.fillStyle = "rgba(4, 7, 18, 0.10)";
     ctx.fillRect(0, 0, dims.width, dims.height);
 
     ctx.save();
@@ -211,21 +248,26 @@ export default function MagneticForceSimulation() {
       const p = particles[i];
       const chargeToMass = p.charge / p.mass;
 
-      const ax = chargeToMass * p.vy * Bz;
-      const ay = -chargeToMass * p.vx * Bz;
+      // Exact velocity rotation under uniform B (no energy change)
+      const omega = chargeToMass * Bz;
+      if (Math.abs(omega) > 0) {
+        [p.vx, p.vy] = rotateVelocityInBz(p.vx, p.vy, omega * dt);
+      }
 
-      p.vx += ax * dt;
-      p.vy += ay * dt;
+      const prevX = p.x;
+      const prevY = p.y;
       p.x += p.vx * dt;
       p.y += p.vy * dt;
 
+      // Draw motion streak
       ctx.beginPath();
-      ctx.strokeStyle = `hsla(${p.hue}, 100%, 70%, 0.4)`;
+      ctx.strokeStyle = `hsla(${p.hue}, 100%, 70%, 0.45)`;
       ctx.lineWidth = 1.6;
       ctx.moveTo(p.x, p.y);
-      ctx.lineTo(p.x - p.vx * 0.08, p.y - p.vy * 0.08);
+      ctx.lineTo(prevX, prevY);
       ctx.stroke();
 
+      // Particle "glow"
       ctx.beginPath();
       ctx.fillStyle = `hsla(${p.hue}, 95%, 65%, 0.9)`;
       ctx.shadowColor = `hsla(${p.hue}, 100%, 75%, 0.9)`;
@@ -233,57 +275,17 @@ export default function MagneticForceSimulation() {
       ctx.arc(p.x, p.y, 4.5, 0, Math.PI * 2);
       ctx.fill();
 
+      // Cull when offscreen
       if (p.x < -50 || p.x > dims.width + 50 || p.y < -50 || p.y > dims.height + 50) {
         particles.splice(i, 1);
-        spawnParticle();
       }
     }
 
-    ctx.restore();
-
-    drawFieldOverlay(ctx, dims, Bz);
-  };
-
-  const drawFieldOverlay = (ctx, dims, Bz) => {
-    ctx.save();
-    ctx.globalCompositeOperation = "source-over";
-    ctx.lineWidth = 1;
-    ctx.strokeStyle = "rgba(160, 178, 255, 0.35)";
-    const spacing = 64;
-
-    for (let x = spacing / 2; x < dims.width; x += spacing) {
-      for (let y = spacing / 2; y < dims.height; y += spacing) {
-        ctx.beginPath();
-        if (Math.abs(Bz) < 0.02) {
-          ctx.fillStyle = "rgba(200, 205, 230, 0.3)";
-          ctx.arc(x, y, 6, 0, Math.PI * 2);
-          ctx.fill();
-        } else if (Bz > 0) {
-          ctx.strokeStyle = "rgba(240, 170, 255, 0.45)";
-          ctx.arc(x, y, 7, 0, Math.PI * 2);
-          ctx.stroke();
-          ctx.beginPath();
-          ctx.arc(x, y, 2.5, 0, Math.PI * 2);
-          ctx.fillStyle = "rgba(240, 170, 255, 0.45)";
-          ctx.fill();
-        } else {
-          ctx.strokeStyle = "rgba(120, 200, 255, 0.45)";
-          ctx.moveTo(x - 6, y - 6);
-          ctx.lineTo(x + 6, y + 6);
-          ctx.moveTo(x - 6, y + 6);
-          ctx.lineTo(x + 6, y - 6);
-          ctx.stroke();
-        }
-      }
-    }
     ctx.restore();
   };
 
   const resetSimulation = () => {
     particlesRef.current = [];
-    for (let i = 0; i < 18; i++) {
-      spawnParticle();
-    }
   };
 
   return (
@@ -301,24 +303,32 @@ export default function MagneticForceSimulation() {
           display: "flex",
           flexDirection: "column",
           gap: 16,
+          alignItems: "center",
         }}
       >
         <canvas
           ref={canvasRef}
+          width={size.width}
+          height={size.height}
           style={{
-            width: "100%",
+            // IMPORTANT: give explicit CSS size to match our computed size (avoid stretch / aspect skew)
+            width: `${size.width}px`,
             height: `${size.height}px`,
             borderRadius: 12,
             background: "#040712",
             touchAction: "none",
             cursor: "crosshair",
+            display: "block",
           }}
         />
         <div
           style={{
+            width: "100%",
+            maxWidth: `${size.width}px`,
             display: "grid",
             gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
-            gap: 12,
+            gap: "16px",
+            alignItems: "flex-start",
           }}
         >
           <ControlSlider
@@ -336,7 +346,7 @@ export default function MagneticForceSimulation() {
             min={40}
             max={220}
             step={5}
-            unit="px/s"
+            unit=""
             onChange={(value) => setSettings((prev) => ({ ...prev, launchSpeed: value }))}
           />
           <ControlSlider
@@ -345,7 +355,7 @@ export default function MagneticForceSimulation() {
             min={-3}
             max={3}
             step={0.1}
-            unit="q"
+            unit=""
             onChange={(value) => setSettings((prev) => ({ ...prev, charge: value }))}
           />
           <ControlSlider
@@ -354,46 +364,58 @@ export default function MagneticForceSimulation() {
             min={0.2}
             max={3}
             step={0.1}
-            unit="m"
+            unit=""
             onChange={(value) => setSettings((prev) => ({ ...prev, mass: value }))}
           />
-        </div>
-        <DirectionToggle
-          direction={settings.direction}
-          onToggle={(direction) => setSettings((prev) => ({ ...prev, direction }))}
-        />
-        <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-          <button
-            onClick={resetSimulation}
-            style={{
-              padding: "8px 14px",
-              borderRadius: 8,
-              border: "1px solid #4c6ef5",
-              background: "#4c6ef5",
-              color: "white",
-              fontSize: 13,
-              cursor: "pointer",
-            }}
-          >
-            Reset particles
-          </button>
-          <button
-            onClick={() => spawnParticle()}
-            style={{
-              padding: "8px 14px",
-              borderRadius: 8,
-              border: "1px solid #1f3b7b",
-              background: "#f4f6ff",
-              color: "#1f2b6c",
-              fontSize: 13,
-              cursor: "pointer",
-            }}
-          >
-            Launch one more
-          </button>
-          <div style={{ fontSize: 12, color: "#5f6f9e", alignSelf: "center" }}>
-            Tip: tap or click anywhere on the canvas to inject a particle from that spot.
+
+          <div style={{ gridColumn: "1" }}>
+            <DirectionToggle
+              direction={settings.direction}
+              onToggle={(direction) => setSettings((prev) => ({ ...prev, direction }))}
+            />
           </div>
+
+          <div
+            style={{
+              gridColumn: "2 / -1",
+              display: "flex",
+              justifyContent: "center",
+              gap: 12,
+              width: "100%",
+            }}
+          >
+            <button
+              onClick={resetSimulation}
+              style={{
+                padding: "8px 14px",
+                borderRadius: 8,
+                border: "1px solid #4c6ef5",
+                background: "#4c6ef5",
+                color: "white",
+                fontSize: 13,
+                cursor: "pointer",
+              }}
+            >
+              Reset
+            </button>
+            <button
+              onClick={launchRandomParticle}
+              style={{
+                padding: "8px 14px",
+                borderRadius: 8,
+                border: "1px solid #1f3b7b",
+                background: "#f4f6ff",
+                color: "#1f2b6c",
+                fontSize: 13,
+                cursor: "pointer",
+              }}
+            >
+              Launch Random
+            </button>
+          </div>
+        </div>
+        <div style={{ width: "100%", maxWidth: `${size.width}px`, fontSize: 12, color: "#5f6f9e", textAlign: "center", marginTop: 8 }}>
+          Tip: click/tap on the canvas to inject a particle exactly at the cursor location. Red = q &gt; 0, Blue = q &lt; 0.
         </div>
       </div>
     </div>
