@@ -88,7 +88,7 @@ export default function MagneticForce() {
             </p>
             <p>The radius can be found by equating the magnetic force to the net force under centripetal acceleration:</p>
             <MathJax>
-              {`\\( |q|vB = \\frac{mv^2}{r} \\implies r = \\frac{mv}{|q|B} \\)`}
+              {`\\[ |q|vB = \\frac{mv^2}{r} \\implies r = \\frac{mv}{|q|B} \\]`}
             </MathJax>
             <p>
               If the velocity has a component parallel to the field, that part of the motion remains unaffected by the magnetic force.
