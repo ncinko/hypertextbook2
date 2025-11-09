@@ -9,6 +9,7 @@ import ElectricField from "./pages/ElectricField";
 import ElectricPotential from "./pages/ElectricPotential"
 import ElectricCurrent from "./pages/ElectricCurrent";
 import MagneticField from "./pages/MagneticField";
+import MagneticForce from "./pages/MagneticForce";
 import RotationalDynamics from "./pages/RotationalDynamics"
 import Chaos from "./pages/Chaos"
 import Momentum from "./pages/Momentum"
@@ -52,6 +53,7 @@ export default function App() {
           <Link to="/electric-potential">Electric Potential</Link>
           <Link to="/electric-current">Electric Current</Link>
           <Link to="/magnetic-field">Magnetic Field</Link>
+          <Link to="/magnetic-force">Magnetic Force</Link>
         </div>
       </div>
 
@@ -78,6 +80,7 @@ export default function App() {
                 <Route path="/electric-potential" element={<ElectricPotential/>} />
                 <Route path="/electric-current" element={<ElectricCurrent />} />
                 <Route path="/magnetic-field" element={<MagneticField />} />
+                <Route path="/magnetic-force" element={<MagneticForce />} />
                 <Route path="/rotational-dynamics" element={<RotationalDynamics/>} />
                 <Route path="/chaos" element={<Chaos/>} />
                 <Route path="/momentum" element={<Momentum/>} />

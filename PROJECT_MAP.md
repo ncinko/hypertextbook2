@@ -35,7 +35,7 @@ Physics Nook is a Create React App project that delivers interactive physics sim
 - **LandingPage** – animates a starfield and sprite-based hawks on a `<canvas>`; links to featured simulations.【F:src/LandingPage.js†L1-L120】
 - **DoublePendulum**, **SpringMass**, **IdealGas** – legacy standalone simulations in the project root, each using hooks and, in some cases, `react-p5` for rendering.【F:src/DoublePendulum.js†L1-L82】
 - **Mechanics Pages** (`Kinematics`, `Kinematics2`, `Vectors`, `Momentum`, `Oscillations`) – blend MathJax exposition with components like `KinematicsSim`, `VelocityExplorer`, and question prompts.【F:src/pages/Kinematics.js†L1-L170】
-- **Electricity Pages** (`ElectricField`, `ElectricPotential`) – import simulations from `src/components/electricity` to visualize fields and equipotentials.
+- **Electricity Pages** (`ElectricField`, `ElectricPotential`, `MagneticField`, `MagneticForce`) – import simulations from `src/components/electricity` to visualize fields, potentials, and charged-particle dynamics.
 - **Advanced Pages** (`Chaos`, `Sound`, `PolarKinematics`, etc.) – combine charts, canvas animations, and audio via domain components.
 
 ## Styling

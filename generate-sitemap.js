@@ -11,6 +11,7 @@ const routes = [
   '/forces',
   '/vectors',
   '/electric-circuits',
+  '/magnetic-force',
 ];
 
 (async function generate() {
