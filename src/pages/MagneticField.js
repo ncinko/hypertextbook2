@@ -24,10 +24,10 @@ export default function MagneticField() {
 
           <h2>Introduction</h2>
           <p>
-            Magnetic fields form whenever electric charges move. They create forces on other moving charges, steer compass
-            needles, and thread through transformers and motors. Unlike electric fields, which point outward from positive
-            charges, magnetic fields curl around current. That curling structure links magnetism to geometry and motion: a
-            magnetic field always wraps around the direction of the current that created it.
+            Magnetic fields arise from the motion of electric charge. They create forces on other moving charges, redirect compass needles, and
+            underly the operation of electric motors and generators.  Unlike electric fields, the fields and resulting magnetic forces always
+            act perpendicular to the velocity of the moving charge. This often leads to a swirling or "curling" pattern in both the field and trajectories of particles.              
+            
           </p>
 
           <h2>Key Ideas</h2>
@@ -36,7 +36,7 @@ export default function MagneticField() {
               <strong>Biot–Savart law</strong>
               <span>
                 The magnetic field from a small current element is
-                <MathJax inline>{" \\( d\vec{\\mathbf B} = \\frac{\\mu_0}{4\\pi} \\frac{I \, d\\vec{\\mathbf \ell} \\times \\hat{\\mathbf r}}{r^2} \\)"}</MathJax>
+                <MathJax inline>{" \\( d\\vec{\\mathbf B} = \\frac{\\mu_0}{4\\pi} \\frac{I  \\vec{\\mathbf d \\mathbf l} \\times \\hat{\\mathbf r}}{r^2} \\)"}</MathJax>
                 . Adding (integrating) all the pieces gives the total field.
               </span>
             </li>
@@ -45,20 +45,20 @@ export default function MagneticField() {
               <span>
                 Point your thumb along the current direction. Your curled fingers show the sense of
                 <MathJax inline>{" \\( \\vec{\\mathbf B} \\)"}</MathJax> around the wire, matching
-                <MathJax inline>{" \\( d\\vec{\\mathbf \ell} \\times \\hat{\\mathbf r} \\)"}</MathJax> in the Biot–Savart law.
+                <MathJax inline>{" \\( \\vec{\\mathbf d \\mathbf l} \\times \\hat{\\mathbf r} \\)"}</MathJax> in the Biot–Savart law.
               </span>
             </li>
             <li>
               <strong>Ampère’s law</strong>
               <span>
-                For highly symmetric situations, the line integral of the field relates to enclosed current:
-                <MathJax inline>{" \\( \\oint \\vec{\\mathbf B}\cdot d\\vec{\\mathbf s} = \\mu_0 I_{\\text{enc}} \\)"}</MathJax>
-                . It complements the Biot–Savart law when symmetry lets us evaluate the loop integral easily.
+                The line integral of the field relates to enclosed current:
+                <MathJax inline>{" \\( \\oint \\vec{\\mathbf B} \\cdot \\vec{\\mathbf d \\mathbf s} = \\mu_0 I_{\\text{enc}} \\)"}</MathJax>
+                .  It complements the Biot–Savart law when symmetry lets us evaluate the integral easily.
               </span>
             </li>
           </ul>
 
-          <h2>Long straight current</h2>
+          <h2>Current-carrying wire</h2>
           <p>
             A straight wire carrying current <MathJax inline>{"\\( I \\)"}</MathJax> produces circular magnetic field lines. At a
             distance <MathJax inline>{"\\( r \\)"}</MathJax> from the wire, the magnitude is
@@ -74,33 +74,30 @@ export default function MagneticField() {
           <div style={{ textAlign: "center", marginTop: 10 }}>
             <div style={{ marginBottom: 6, fontStyle: "italic" }}>Try it:</div>
             <span style={chipStyle}>Halve <MathJax inline>{"\\( r \\)"}</MathJax> → field doubles</span>
-            <span style={chipStyle}>Reverse the direction → orange arrow flips sense</span>
+            <span style={chipStyle}>Reverse current → field flips</span>
             <span style={chipStyle}>Slide the probe around a circle → magnitude stays constant</span>
           </div>
 
           <HiddenExposition title="Where does the “curl” come from?">
             <p>
               The Biot–Savart law says each current element contributes a vector proportional to
-              <MathJax inline>{" \\( d\\vec{\\mathbf \ell} \\times \\hat{\\mathbf r} \\)"}</MathJax>.
-              For a straight wire the current element points along the wire, while <MathJax inline>{"\\( \\hat{\\mathbf r} \\)"}</MathJax>
-              points from the wire to your location. Their cross product therefore lies perpendicular to both: tangent to a
-              circle centered on the wire. Integrating those identical tangent contributions yields perfectly circular field
-              lines.
+              <MathJax inline>{" \\( \\vec{\\mathbf d \\mathbf l} \\times \\hat{\\mathbf r} \\)"}</MathJax>.
+              For a straight wire the current element  <MathJax inline>{" \\( I \\vec{\\mathbf d \\mathbf l} \\) "}</MathJax> points along the wire, while <MathJax inline>{" \\( \\hat{\\mathbf r} \\) "}</MathJax>
+              points from the wire to the location of interest. Their cross product therefore lies perpendicular to both: tangent to a
+              circle centered on the wire.
             </p>
             <p>
               Ampère’s law encodes the same idea. A circular path of radius <MathJax inline>{"\\( r \\)"}</MathJax> centered on the
               wire has constant <MathJax inline>{"\\( B \\)"}</MathJax>, so
-              <MathJax inline>{" \\( \\oint \\vec{\\mathbf B}\cdot d\\vec{\\mathbf s} = B (2\\pi r) = \\mu_0 I \\)"}</MathJax>.
+              <MathJax inline>{" \\( \\oint \\vec{\\mathbf B} \\cdot \\vec{\\mathbf d \\mathbf s} = B (2\\pi r) = \\mu_0 I \\)"}</MathJax>.
               Solving for <MathJax inline>{"\\( B \\)"}</MathJax> reproduces the expression above.
             </p>
           </HiddenExposition>
 
-          <h2>Exploring 3D magnetic fields</h2>
+          <h2>3D Field Visualization</h2>
           <p>
-            Complex current arrangements require full vector superposition. The explorer below lets you compare a circular loop,
-            a bar magnet (modeled as a dipole), two magnets in different polar alignments, and a stack of loops resembling a
-            solenoid. Drag to orbit the grid of sample points and notice how field strength concentrates near the source while
-            the far field tends toward a dipole pattern.
+            Complex current arrangements require full vector superposition. The explorer below lets you compare the field near several different 
+            configurations of current. The vector field directions are shown on a finite grid of sample points.  You can rotate the view, adjust the sample density, and change parameters specific to each configuration.
           </p>
 
           <MagneticFieldExplorer />
@@ -108,27 +105,33 @@ export default function MagneticField() {
           <HiddenExposition title="Why do the loop and bar magnet look alike far away?">
             <p>
               Any localized current distribution has a magnetic dipole moment
-              <MathJax inline>{" \\( \\vec{\\boldsymbol m} = \\frac{1}{2} \\int \\vec{\\mathbf r} \\times (I d\\vec{\\mathbf \ell}) \\)"}</MathJax>
-              . Far from the source the details blur together and only that net dipole moment matters, giving the field
-              <MathJax inline>{" \\( \\vec{\\mathbf B}_{\\text{dip}} = \\frac{\\mu_0}{4\\pi r^3}[3(\\vec{\\boldsymbol m}\cdot \\hat{\\mathbf r}) \\hat{\\mathbf r} - \\vec{\\boldsymbol m}] \\)"}</MathJax>.
-              That is why the current loop, bar magnet, and even the solenoid (when viewed from outside) share similar far-field
-              patterns.
+              <MathJax inline>{" \\( \\vec{\\textbf m} = \\frac{1}{2} \\int \\vec{\\mathbf r} \\times (I \\vec{\\mathbf d \\mathbf l}) \\)"}</MathJax>. 
+              Far from the source, the details blur together and only the net dipole moment matters.  We are left with the field pattern of a magnetic dipole:
+            </p>
+            <MathJax>{"\\[ \\vec{\\mathbf B}_{\\text{dipole}} = \\frac{\\mu_0}{4\\pi r^3} \\left[ 3(\\vec{\\mathbf m} \\cdot \\hat{\\mathbf r}) \\hat{\\mathbf r} - \\vec{\\mathbf m} \\right] \\]"}</MathJax>
+            <p>   
+              
+              This may seem like a complex expression, but the important feature is that we expect the field strength to fall off as the cube of the distance from the source <MathJax inline>{"\\( (1/r^3) \\)"}</MathJax>.
+
+              </p>
+              <p>
+              In short, the current loop, bar magnet, and even the solenoid share a similar dipole field far away because they all have the same basic structure: circulating currents that produce a net magnetic moment.
             </p>
           </HiddenExposition>
 
-          <h2>Questions for practice</h2>
+          <h2>Practice</h2>
           <div className="exposition-list">
             <HiddenQuestion
               title={
                 <span>
                   You place a field probe <MathJax inline>{"\\( 4.0\\,\\text{cm} \\)"}</MathJax> from a long wire carrying
-                  <MathJax inline>{"\\( 5.0\\,\\text{A} \\)"}</MathJax>. What magnetic-field magnitude do you read?
+                  <MathJax inline>{" \\( 5.0\\,\\text{A} \\)"}</MathJax>. What magnetic-field magnitude do you read?
                 </span>
               }
             >
-              <MathJax>{`
-                Use \\( B = \frac{\mu_0 I}{2\pi r} \). With \\( r = 0.040\,\text{m} \) and \\( \mu_0 = 4\pi\times10^{-7}\,\text{T·m/A} \)
-                we get \\( B = \frac{(4\pi\times10^{-7})(5.0)}{2\pi(0.040)} \approx 2.5\times10^{-5}\,\text{T} \) (25 µT).
+              <MathJax>{`Using \\( B = \\frac{\\mu_0 I}{2\\pi r} \\) with
+                \\( I = 5.0\\,\\text{A} \\) and \\( r = 4.0\\,\\text{cm} = 0.040\\,\\text{m} \\) gives
+                \\( B = \\frac{(4\\pi\\times10^{-7})(5.0)}{2\\pi(0.040)} = 2.5\\times10^{-5}\\,\\text{T} \\) (25 µT).
               `}</MathJax>
             </HiddenQuestion>
 
@@ -136,14 +139,13 @@ export default function MagneticField() {
               title={
                 <span>
                   The explorer shows a nearly uniform interior field for the solenoid configuration. Using Ampère’s law, estimate
-                  <MathJax inline>{"\\( B \\)"}</MathJax> inside an ideal solenoid with <MathJax inline>{"\\( n = 900 \\)"}</MathJax>
+                  <MathJax inline>{" \\( B \\)"}</MathJax> inside an ideal solenoid with <MathJax inline>{"\\( n = 900 \\) "}</MathJax>
                   turns per meter carrying <MathJax inline>{"\\( 1.2\\,\\text{A} \\)"}</MathJax>.
                 </span>
               }
             >
-              <MathJax>{`
-                For an ideal solenoid \\( B = \mu_0 n I \). Plugging in the numbers gives
-                \\( B = (4\pi\times10^{-7})(900)(1.2) \approx 1.36\times10^{-3}\,\text{T} \) (1.36 mT).
+              <MathJax>{`For an ideal solenoid, \\( B = \\mu_0 n I \\). Plugging in the numbers gives
+                \\( B = (4\\pi\\times10^{-7})(900)(1.2) \\approx 1.36\\times10^{-3}\\,\\text{T} \\) (1.36 mT).
               `}</MathJax>
             </HiddenQuestion>
 
@@ -157,8 +159,7 @@ export default function MagneticField() {
             >
               <p>
                 With like poles facing, the fields oppose between the magnets, creating a neutral plane roughly midway between
-                them. The explorer’s “Two magnets → same polarity” option shows arrows shrinking and reversing direction near
-                that plane. Flipping one magnet (opposite polarity) makes the fields reinforce, producing a strong bridge of
+                them.  Flipping one magnet (opposite polarity) makes the fields reinforce, producing a strong bridge of
                 field lines that connect the north pole of one magnet to the south pole of the other.
               </p>
             </HiddenQuestion>

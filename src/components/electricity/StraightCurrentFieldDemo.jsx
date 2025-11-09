@@ -19,15 +19,16 @@ export default function StraightCurrentFieldDemo() {
   const computeSize = () => {
     const parent = canvasRef.current?.parentElement;
     const width = parent
-      ? clamp(parent.getBoundingClientRect().width, 280, 720)
-      : clamp(window.innerWidth - 48, 280, 720);
-    return { width: Math.round(width), height: Math.round(width * 0.6) };
+      ? clamp(parent.getBoundingClientRect().width, 320, 720)
+      : clamp(window.innerWidth - 48, 320, 720);
+    // More square aspect
+    return { width: Math.round(width), height: Math.round(width * 0.9) };
   };
 
-  const [size, setSize] = useState({ width: 480, height: 280 });
+  const [size, setSize] = useState({ width: 480, height: 430 });
   const [current, setCurrent] = useState(8);
   const [direction, setDirection] = useState("out");
-  const [probe, setProbe] = useState({ x: 340, y: 120 });
+  const [probe, setProbe] = useState({ x: 340, y: 220 });
 
   useEffect(() => {
     setSize(computeSize());
@@ -127,8 +128,12 @@ export default function StraightCurrentFieldDemo() {
   const dx = probe.x - origin.x;
   const dy = probe.y - origin.y;
   const r = Math.max(Math.hypot(dx, dy), 8);
-  const Bmag = (MU0 * current) / (2 * Math.PI * r * 1e-2); // scale px → meters (1 px ~ 1 cm)
-  const tangential = direction === "out" ? { x: -dy, y: dx } : { x: dy, y: -dx };
+  const Bmag = (MU0 * current) / (2 * Math.PI * r * 1e-2); // px→m (1 px ~ 1 cm)
+
+  // Flip the orientation per your note:
+  //  - "out": clockwise,  - "in": counterclockwise
+  const tangential =
+    direction === "out" ? { x: dy, y: -dx } : { x: -dy, y: dx };
   const tLen = Math.hypot(tangential.x, tangential.y) || 1;
   const hat = { x: tangential.x / tLen, y: tangential.y / tLen };
 
@@ -139,7 +144,7 @@ export default function StraightCurrentFieldDemo() {
     const dpr = window.devicePixelRatio || 1;
     canvas.width = Math.round(size.width * dpr);
     canvas.height = Math.round(size.height * dpr);
-    ctx.scale(dpr, dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
     ctx.clearRect(0, 0, size.width, size.height);
 
@@ -164,36 +169,29 @@ export default function StraightCurrentFieldDemo() {
       ctx.stroke();
     }
 
-    // concentric circles
-    ctx.strokeStyle = "#c3d1ff";
-    ctx.lineWidth = 1.2;
-    const maxRadius = Math.max(size.width, size.height) * 0.5;
-    for (let radius = 40; radius <= maxRadius; radius += 40) {
-      ctx.beginPath();
-      ctx.arc(origin.x, origin.y, radius, 0, Math.PI * 2);
-      ctx.stroke();
-    }
 
-    // wire symbol
+    // wire symbol (⨀ / ⨂)
     ctx.fillStyle = "#1f3b7b";
     ctx.beginPath();
     ctx.arc(origin.x, origin.y, 12, 0, Math.PI * 2);
     ctx.fill();
     ctx.strokeStyle = "#ffffff";
     ctx.lineWidth = 2;
-    ctx.beginPath();
     if (direction === "out") {
-      ctx.moveTo(origin.x - 6, origin.y);
-      ctx.lineTo(origin.x + 6, origin.y);
-      ctx.moveTo(origin.x, origin.y - 6);
-      ctx.lineTo(origin.x, origin.y + 6);
+      // dot
+      ctx.fillStyle = "#ffffff";
+      ctx.beginPath();
+      ctx.arc(origin.x, origin.y, 4.5, 0, Math.PI * 2);
+      ctx.fill();
     } else {
+      // cross
+      ctx.beginPath();
       ctx.moveTo(origin.x - 6, origin.y - 6);
       ctx.lineTo(origin.x + 6, origin.y + 6);
       ctx.moveTo(origin.x - 6, origin.y + 6);
       ctx.lineTo(origin.x + 6, origin.y - 6);
+      ctx.stroke();
     }
-    ctx.stroke();
 
     // probe point
     ctx.fillStyle = "#0b7285";
@@ -201,17 +199,19 @@ export default function StraightCurrentFieldDemo() {
     ctx.arc(probe.x, probe.y, 6, 0, Math.PI * 2);
     ctx.fill();
 
-    // field arrow
-    const arrowScale = clamp(Bmag * 600, 18, 120);
+    // field arrow (blue, scales with |B|)
+    const arrowScale = clamp(Bmag * 40000000, 10, 200);
     const arrowX = probe.x + hat.x * arrowScale;
     const arrowY = probe.y + hat.y * arrowScale;
+    const arrowX2 = arrowX -5*hat.x;
+    const arrowY2 = arrowY -5*hat.y;
 
-    ctx.strokeStyle = "#f08c00";
-    ctx.fillStyle = "#f08c00";
+    ctx.strokeStyle = "#1d4ed8"; // blue
+    ctx.fillStyle = "#1d4ed8";
     ctx.lineWidth = 3;
     ctx.beginPath();
     ctx.moveTo(probe.x, probe.y);
-    ctx.lineTo(arrowX, arrowY);
+    ctx.lineTo(arrowX2, arrowY2);
     ctx.stroke();
 
     const drawArrowhead = (x1, y1, x2, y2) => {
@@ -230,11 +230,10 @@ export default function StraightCurrentFieldDemo() {
       ctx.closePath();
       ctx.fill();
     };
-
     drawArrowhead(probe.x, probe.y, arrowX, arrowY);
 
-    // circular guideline through probe
-    ctx.strokeStyle = "rgba(240, 140, 0, 0.45)";
+    // circular guideline through probe (subtle blue)
+    ctx.strokeStyle = "rgba(29, 78, 216, 0.35)";
     ctx.setLineDash([6, 6]);
     ctx.beginPath();
     ctx.arc(origin.x, origin.y, Math.hypot(dx, dy), 0, Math.PI * 2);
@@ -251,12 +250,35 @@ export default function StraightCurrentFieldDemo() {
   }, [size, probe, direction, Bmag, hat.x, hat.y, dx, dy]);
 
   return (
-    <div className="canvas-card">
+    <div
+      className="canvas-card"
+      style={{
+        maxWidth: 760,
+        margin: "0 auto",
+        display: "grid",
+        justifyItems: "center",
+        gap: 12,
+      }}
+    >
       <canvas
         ref={canvasRef}
-        style={{ width: size.width, height: size.height, cursor: "grab", touchAction: "none" }}
+        style={{
+          width: size.width,
+          height: size.height,
+          cursor: "grab",
+          touchAction: "none",
+          borderRadius: 12,
+        }}
       />
-      <div className="current-field-panel">
+      <div
+        className="current-field-panel"
+        style={{
+          width: "min(720px, 95%)",
+          display: "grid",
+          gap: 10,
+          justifyItems: "stretch",
+        }}
+      >
         <div className="current-field-row">
           <label htmlFor="current-slider" style={{ fontWeight: 600 }}>
             Current magnitude
@@ -272,10 +294,12 @@ export default function StraightCurrentFieldDemo() {
               onChange={(event) => setCurrent(parseFloat(event.target.value))}
               style={{ flexGrow: 1 }}
             />
-            <span style={{ minWidth: 64, textAlign: "right" }}>{current.toFixed(1)} A</span>
+            <span style={{ minWidth: 64, textAlign: "right" }}>
+              {current.toFixed(1)} A
+            </span>
           </div>
         </div>
-        <div className="current-field-row" style={{ marginTop: 8 }}>
+        <div className="current-field-row" style={{ marginTop: 4 }}>
           <span style={{ fontWeight: 600 }}>Direction</span>
           <div style={{ display: "flex", gap: 8 }}>
             <button
@@ -284,6 +308,7 @@ export default function StraightCurrentFieldDemo() {
               className={
                 direction === "out" ? "current-field-chip active" : "current-field-chip"
               }
+              title="Out of screen (⨀)"
             >
               ⨀ out of screen
             </button>
@@ -293,6 +318,7 @@ export default function StraightCurrentFieldDemo() {
               className={
                 direction === "in" ? "current-field-chip active" : "current-field-chip"
               }
+              title="Into screen (⨂)"
             >
               ⨂ into screen
             </button>
@@ -300,12 +326,17 @@ export default function StraightCurrentFieldDemo() {
         </div>
         <div
           className="current-field-row"
-          style={{ marginTop: 8, fontSize: 14, color: "#495057" }}
+          style={{ marginTop: 4, fontSize: 14, color: "#495057" }}
         >
-          <div><strong>r</strong> = {(r * 1e-2).toFixed(3)} m (distance from wire)</div>
-          <div><strong>|B|</strong> = {formatTesla(Bmag)}</div>
           <div>
-            Right-hand rule: thumb along current, fingers curl with <strong>⇒</strong> the orange arrow.
+            <strong>r</strong> = {(r * 1e-2).toFixed(3)} m (distance from wire)
+          </div>
+          <div>
+            <strong>|B|</strong> = {formatTesla(Bmag)}
+          </div>
+          <div>
+            Right-hand rule: thumb along current, fingers curl with <strong>⇒</strong> the{" "}
+            <span style={{ color: "#1d4ed8", fontWeight: 600 }}>blue</span> arrow.
           </div>
         </div>
       </div>
