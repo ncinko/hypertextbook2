@@ -1,4 +1,5 @@
 import React from "react";
+import { Link } from "react-router-dom";
 import { MathJax, MathJaxContext } from "better-react-mathjax";
 import MagneticForceSimulation from "../components/electricity/MagneticForceSimulation";
 import HiddenExposition from "../components/shared/HiddenExposition";
@@ -23,7 +24,7 @@ export default function MagneticForce() {
 
           <h2>Introduction</h2>
           <p>
-            When charged particles move through a magnetic field they experience the Lorentz force,
+            When charged particles move through a <Link to="/magnetic-field">magnetic field</Link> they experience the Lorentz force,
             <MathJax inline>{" \\(\\vec{\\mathbf F} = q(\\vec{\\mathbf v} \\times \\vec{\\mathbf B})\\)"}</MathJax>.
             The resulting force is always perpendicular to the velocity, bending beams of electrons
             in cathode-ray tubes, steering ions inside cyclotrons, and painting glowing arcs across the sky.

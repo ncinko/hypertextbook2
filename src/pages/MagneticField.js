@@ -1,4 +1,5 @@
 import React from "react";
+import { Link } from "react-router-dom";
 import { MathJax, MathJaxContext } from "better-react-mathjax";
 import StraightCurrentFieldDemo from "../components/electricity/StraightCurrentFieldDemo";
 import MagneticFieldExplorer from "../components/electricity/MagneticFieldExplorer";
@@ -24,7 +25,7 @@ export default function MagneticField() {
 
           <h2>Introduction</h2>
           <p>
-            Magnetic fields arise from the motion of electric charge. They create forces on other moving charges, redirect compass needles, and
+            Magnetic fields arise from the motion of electric charge. They create <Link to="/magnetic-force">forces</Link> on other moving charges, redirect compass needles, and
             underly the operation of electric motors and generators.  Unlike electric fields, the fields and resulting magnetic forces always
             act perpendicular to the velocity of the moving charge. This often leads to a swirling or "curling" pattern in both the field and trajectories of particles.              
             
