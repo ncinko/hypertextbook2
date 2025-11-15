@@ -2,6 +2,7 @@ import React from "react";
 import { Link } from "react-router-dom";
 import { MathJax, MathJaxContext } from "better-react-mathjax";
 import StraightCurrentFieldDemo from "../components/electricity/StraightCurrentFieldDemo";
+import Ampere from "../components/electricity/Ampere";
 import MagneticFieldExplorer from "../components/electricity/MagneticFieldExplorer";
 import HiddenExposition from "../components/shared/HiddenExposition";
 import HiddenQuestion from "../components/shared/HiddenQuestion";
@@ -71,6 +72,8 @@ export default function MagneticField() {
           </p>
 
           <StraightCurrentFieldDemo />
+          
+
 
           <div style={{ textAlign: "center", marginTop: 10 }}>
             <div style={{ marginBottom: 6, fontStyle: "italic" }}>Try it:</div>
@@ -90,15 +93,39 @@ export default function MagneticField() {
             <p>
               Ampère’s law encodes the same idea. A circular path of radius <MathJax inline>{"\\( r \\)"}</MathJax> centered on the
               wire has constant <MathJax inline>{"\\( B \\)"}</MathJax>, so
-              <MathJax inline>{" \\( \\oint \\vec{\\mathbf B} \\cdot \\vec{\\mathbf d \\mathbf s} = B (2\\pi r) = \\mu_0 I \\)"}</MathJax>.
+              <MathJax inline>{" \\( \\oint \\vec{\\mathbf B} \\cdot \\vec{\\mathbf d \\mathbf l} = B (2\\pi r) = \\mu_0 I \\)"}</MathJax>.
               Solving for <MathJax inline>{"\\( B \\)"}</MathJax> reproduces the expression above.
             </p>
           </HiddenExposition>
 
+          <h2>Ampère’s law</h2>
+          <p>
+            Ampère’s law relates the magnetic field around a <b>closed</b> path to the net current flowing through the interior of the path.
+            Like Gauss's law, it is especially useful for finding fields in situations with high symmetry.
+          </p>
+          <p>Mathematically, it says:</p>
+          <MathJax>{"\\[ \\oint \\vec{\\mathbf B} \\cdot \\vec{\\mathbf d \\mathbf l} = \\mu_0 I_{\\text{enc}} \\]"}</MathJax>
+          <p>
+            The line integral on the left sums the component of the magnetic field <MathJax inline>{"\\( \\vec{\\mathbf B} \\)"}</MathJax> tangent to each segment of the path.
+            The right side counts the total current <MathJax inline>{"\\( I_{\\text{enc}} \\)"}</MathJax> passing through the area enclosed by the path, multiplied by the permeability of free space
+            <MathJax inline>{" \\( \\mu_0 = 4\\pi \\times 10^{-7} \\,\\text{T}\\cdot\\text{m/A} \\)"}</MathJax>.
+          </p>
+          <p>The simulation below allows you to create a current distribution and evaluate the line integral for a chosen path (it's up to you to make sure it's closed).</p>
+
+          <Ampere />
+
+          <div style={{ textAlign: "center", marginTop: 10 }}>
+            <div style={{ marginBottom: 6, fontStyle: "italic" }}>Try it:</div>
+            <span style={chipStyle}>Create a closed loop around a single wire → integral matches μ₀I</span>
+            <span style={chipStyle}>Add more current through the loop → integral increases</span>
+            <span style={chipStyle}>Make an open path → integral may not match μ₀I</span>
+          </div>
+
           <h2>3D Field Visualization</h2>
           <p>
             Complex current arrangements require full vector superposition. The explorer below lets you compare the field near several different 
-            configurations of current. The vector field directions are shown on a finite grid of sample points.  You can rotate the view, adjust the sample density, and change parameters specific to each configuration.
+            configurations of current. The vector field directions are shown on a finite grid of sample points.  You can rotate the view, adjust the sample density, and change parameters specific to each configuration.  
+            I prefer this <a href="https://www.falstad.com/vector3dm/" target="_blank" rel="noreferrer">field visualizer</a> by Falstad.
           </p>
 
           <MagneticFieldExplorer />
