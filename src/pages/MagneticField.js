@@ -92,7 +92,8 @@ export default function MagneticField() {
             </p>
             <p>
               Ampère’s law encodes the same idea. A circular path of radius <MathJax inline>{"\\( r \\)"}</MathJax> centered on the
-              wire has constant <MathJax inline>{"\\( B \\)"}</MathJax>, so
+              wire has constant <MathJax inline>{"\\( B \\)"}</MathJax>.  Furthermore, <MathJax inline>{" \\( \\vec{\\mathbf B} \\) "}</MathJax> is always tangent to the path 
+              (parallel to the path element <MathJax inline>{" \\( \\vec{\\mathbf d \\mathbf l} \\) "}</MathJax>).  Therefore
               <MathJax inline>{" \\( \\oint \\vec{\\mathbf B} \\cdot \\vec{\\mathbf d \\mathbf l} = B (2\\pi r) = \\mu_0 I \\)"}</MathJax>.
               Solving for <MathJax inline>{"\\( B \\)"}</MathJax> reproduces the expression above.
             </p>

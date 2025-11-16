@@ -16,23 +16,27 @@ function formatTesla(value) {
 export default function StraightCurrentFieldDemo() {
   const canvasRef = useRef(null);
 
+  // Layout to match Ampère card
   const computeSize = () => {
     const parent = canvasRef.current?.parentElement;
     const width = parent
       ? clamp(parent.getBoundingClientRect().width, 320, 720)
       : clamp(window.innerWidth - 48, 320, 720);
-    // More square aspect
     return { width: Math.round(width), height: Math.round(width * 0.9) };
   };
 
   const [size, setSize] = useState({ width: 480, height: 430 });
-  const [current, setCurrent] = useState(8);
-  const [direction, setDirection] = useState("out");
-  const [probe, setProbe] = useState({ x: 340, y: 220 });
+
+  // Single straight wire (infinite, along ẑ)
+  const [current, setCurrent] = useState(2.0); // amps, can be ±
+  const [probe, setProbe] = useState({ x: 360, y: 220 });
+
+  const draggingRef = useRef(false);
 
   useEffect(() => {
-    setSize(computeSize());
     const handleResize = () => setSize(computeSize());
+    handleResize();
+
     window.addEventListener("resize", handleResize);
     const parent = canvasRef.current?.parentElement;
     let observer;
@@ -40,6 +44,7 @@ export default function StraightCurrentFieldDemo() {
       observer = new ResizeObserver(handleResize);
       observer.observe(parent);
     }
+
     return () => {
       window.removeEventListener("resize", handleResize);
       if (observer) observer.disconnect();
@@ -47,207 +52,244 @@ export default function StraightCurrentFieldDemo() {
   }, []);
 
   useEffect(() => {
-    setProbe((prev) => ({
-      x: clamp(prev.x, 32, size.width - 32),
-      y: clamp(prev.y, 32, size.height - 32),
-    }));
-  }, [size]);
-
-  const dragRef = useRef(false);
-
-  useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    const getPoint = (event) => {
-      const rect = canvas.getBoundingClientRect();
-      return {
-        x: clamp(event.clientX - rect.left, 32, size.width - 32),
-        y: clamp(event.clientY - rect.top, 32, size.height - 32),
-      };
-    };
-
-    const getTouchPoint = (touch) => {
-      const rect = canvas.getBoundingClientRect();
-      return {
-        x: clamp(touch.clientX - rect.left, 32, size.width - 32),
-        y: clamp(touch.clientY - rect.top, 32, size.height - 32),
-      };
-    };
-
-    const handleMouseDown = (event) => {
-      dragRef.current = true;
-      setProbe(getPoint(event));
-    };
-
-    const handleMouseMove = (event) => {
-      if (!dragRef.current) return;
-      setProbe(getPoint(event));
-    };
-
-    const stopDrag = () => {
-      dragRef.current = false;
-    };
-
-    const handleTouchStart = (event) => {
-      dragRef.current = true;
-      setProbe(getTouchPoint(event.touches[0]));
-      event.preventDefault();
-    };
-
-    const handleTouchMove = (event) => {
-      if (!dragRef.current) return;
-      setProbe(getTouchPoint(event.touches[0]));
-      event.preventDefault();
-    };
-
-    canvas.addEventListener("mousedown", handleMouseDown);
-    canvas.addEventListener("mousemove", handleMouseMove);
-    canvas.addEventListener("mouseup", stopDrag);
-    canvas.addEventListener("mouseleave", stopDrag);
-
-    canvas.addEventListener("touchstart", handleTouchStart, { passive: false });
-    canvas.addEventListener("touchmove", handleTouchMove, { passive: false });
-    canvas.addEventListener("touchend", stopDrag);
-    canvas.addEventListener("touchcancel", stopDrag);
-
-    return () => {
-      canvas.removeEventListener("mousedown", handleMouseDown);
-      canvas.removeEventListener("mousemove", handleMouseMove);
-      canvas.removeEventListener("mouseup", stopDrag);
-      canvas.removeEventListener("mouseleave", stopDrag);
-
-      canvas.removeEventListener("touchstart", handleTouchStart);
-      canvas.removeEventListener("touchmove", handleTouchMove);
-      canvas.removeEventListener("touchend", stopDrag);
-      canvas.removeEventListener("touchcancel", stopDrag);
-    };
-  }, [size]);
-
-  const origin = { x: size.width / 2, y: size.height / 2 };
-  const dx = probe.x - origin.x;
-  const dy = probe.y - origin.y;
-  const r = Math.max(Math.hypot(dx, dy), 8);
-  const Bmag = (MU0 * current) / (2 * Math.PI * r * 1e-2); // px→m (1 px ~ 1 cm)
-
-  // Flip the orientation per your note:
-  //  - "out": clockwise,  - "in": counterclockwise
-  const tangential =
-    direction === "out" ? { x: dy, y: -dx } : { x: -dy, y: dx };
-  const tLen = Math.hypot(tangential.x, tangential.y) || 1;
-  const hat = { x: tangential.x / tLen, y: tangential.y / tLen };
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
+    const { width: cssWidth, height: cssHeight } = size;
     const dpr = window.devicePixelRatio || 1;
-    canvas.width = Math.round(size.width * dpr);
-    canvas.height = Math.round(size.height * dpr);
+    canvas.width = Math.round(cssWidth * dpr);
+    canvas.height = Math.round(cssHeight * dpr);
+
+    const ctx = canvas.getContext("2d");
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-    ctx.clearRect(0, 0, size.width, size.height);
+    // --- Coordinate system / scaling ---
+    // Physical domain: x,y ∈ [-0.5 m, +0.5 m]
+    const physicalHalfRange = 0.5; // meters
+    const minDim = Math.min(cssWidth, cssHeight);
 
-    // background
-    ctx.fillStyle = "#f9fbff";
-    ctx.fillRect(0, 0, size.width, size.height);
+    // Each grid spacing is 0.1 m, and there are 10 intervals → minDim / 10 px per spacing
+    const spacing = minDim / 10; // pixels per 0.1 m
+    const metersPerPixel = 0.1 / spacing; // 0.1 m per spacing
 
-    // grid lines
+    // Center of canvas = (0,0) in physical coordinates
+    const centerX = cssWidth * 0.5;
+    const centerY = cssHeight * 0.5;
+
+    // --- Background ---
+    ctx.clearRect(0, 0, cssWidth, cssHeight);
+    ctx.fillStyle = "#f9fbff"; // soft blue
+    ctx.fillRect(0, 0, cssWidth, cssHeight);
+
+    // --- Grid: lines every 0.1 m, from -0.5 m to +0.5 m ---
     ctx.strokeStyle = "#dde5ff";
     ctx.lineWidth = 1;
-    const spacing = 40;
-    for (let x = spacing / 2; x < size.width; x += spacing) {
+    ctx.setLineDash([4, 8]);
+
+    // k = -5...+5 → -0.5 m ... +0.5 m
+    for (let k = -5; k <= 5; k++) {
+      const x = centerX + k * spacing;
       ctx.beginPath();
       ctx.moveTo(x, 0);
-      ctx.lineTo(x, size.height);
+      ctx.lineTo(x, cssHeight);
       ctx.stroke();
     }
-    for (let y = spacing / 2; y < size.height; y += spacing) {
+
+    for (let k = -5; k <= 5; k++) {
+      const y = centerY + k * spacing;
       ctx.beginPath();
       ctx.moveTo(0, y);
-      ctx.lineTo(size.width, y);
+      ctx.lineTo(cssWidth, y);
       ctx.stroke();
     }
 
-
-    // wire symbol (⨀ / ⨂)
-    ctx.fillStyle = "#1f3b7b";
-    ctx.beginPath();
-    ctx.arc(origin.x, origin.y, 12, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = "#ffffff";
-    ctx.lineWidth = 2;
-    if (direction === "out") {
-      // dot
-      ctx.fillStyle = "#ffffff";
-      ctx.beginPath();
-      ctx.arc(origin.x, origin.y, 4.5, 0, Math.PI * 2);
-      ctx.fill();
-    } else {
-      // cross
-      ctx.beginPath();
-      ctx.moveTo(origin.x - 6, origin.y - 6);
-      ctx.lineTo(origin.x + 6, origin.y + 6);
-      ctx.moveTo(origin.x - 6, origin.y + 6);
-      ctx.lineTo(origin.x + 6, origin.y - 6);
-      ctx.stroke();
-    }
-
-    // probe point
-    ctx.fillStyle = "#0b7285";
-    ctx.beginPath();
-    ctx.arc(probe.x, probe.y, 6, 0, Math.PI * 2);
-    ctx.fill();
-
-    // field arrow (blue, scales with |B|)
-    const arrowScale = clamp(Bmag * 40000000, 10, 200);
-    const arrowX = probe.x + hat.x * arrowScale;
-    const arrowY = probe.y + hat.y * arrowScale;
-    const arrowX2 = arrowX -5*hat.x;
-    const arrowY2 = arrowY -5*hat.y;
-
-    ctx.strokeStyle = "#1d4ed8"; // blue
-    ctx.fillStyle = "#1d4ed8";
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.moveTo(probe.x, probe.y);
-    ctx.lineTo(arrowX2, arrowY2);
-    ctx.stroke();
-
-    const drawArrowhead = (x1, y1, x2, y2) => {
-      const angle = Math.atan2(y2 - y1, x2 - x1);
-      const headLength = 12;
-      ctx.beginPath();
-      ctx.moveTo(x2, y2);
-      ctx.lineTo(
-        x2 - headLength * Math.cos(angle - Math.PI / 8),
-        y2 - headLength * Math.sin(angle - Math.PI / 8)
-      );
-      ctx.lineTo(
-        x2 - headLength * Math.cos(angle + Math.PI / 8),
-        y2 - headLength * Math.sin(angle + Math.PI / 8)
-      );
-      ctx.closePath();
-      ctx.fill();
-    };
-    drawArrowhead(probe.x, probe.y, arrowX, arrowY);
-
-    // circular guideline through probe (subtle blue)
-    ctx.strokeStyle = "rgba(29, 78, 216, 0.35)";
-    ctx.setLineDash([6, 6]);
-    ctx.beginPath();
-    ctx.arc(origin.x, origin.y, Math.hypot(dx, dy), 0, Math.PI * 2);
-    ctx.stroke();
     ctx.setLineDash([]);
 
-    // radius line
-    ctx.strokeStyle = "#adb5bd";
-    ctx.lineWidth = 1.2;
+    // --- Wire at the origin (center of canvas) ---
+    const wireX = centerX;
+    const wireY = centerY;
+
+
+    // Wire symbol (dot or cross) at center depending on current direction
     ctx.beginPath();
-    ctx.moveTo(origin.x, origin.y);
-    ctx.lineTo(probe.x, probe.y);
+    ctx.fillStyle = "#ffffff";
+    ctx.arc(wireX, wireY, 14, 0, 2 * Math.PI);
+    ctx.fill();
+    ctx.strokeStyle = "#1f3b7b";
+    ctx.lineWidth = 2;
     ctx.stroke();
-  }, [size, probe, direction, Bmag, hat.x, hat.y, dx, dy]);
+
+    if (current >= 0) {
+      // dot: current out of page
+      ctx.beginPath();
+      ctx.fillStyle = "#1f3b7b";
+      ctx.arc(wireX, wireY, 4, 0, 2 * Math.PI);
+      ctx.fill();
+    } else {
+      // cross: current into page
+      ctx.beginPath();
+      ctx.moveTo(wireX - 5, wireY - 5);
+      ctx.lineTo(wireX + 5, wireY + 5);
+      ctx.moveTo(wireX - 5, wireY + 5);
+      ctx.lineTo(wireX + 5, wireY - 5);
+      ctx.stroke();
+    }
+
+    // --- Compute B at the probe location ---
+    const dx = probe.x - wireX;
+    const dy = probe.y - wireY;
+    let rPix = Math.hypot(dx, dy);
+    const minPix = 3; // avoid singularity right on the wire
+    if (rPix < minPix) rPix = minPix;
+
+    const rMeters = rPix * metersPerPixel;
+    const magnitude = (MU0 * Math.abs(current)) / (2 * Math.PI * rMeters);
+
+    // Tangential direction (screen coords y down); +I => CCW
+    const tx = dy / rPix;
+    const ty = -dx / rPix;
+    const sign = current >= 0 ? 1 : -1;
+    const Bx = sign * magnitude * tx;
+    const By = sign * magnitude * ty;
+    const Bmag = Math.hypot(Bx, By);
+
+    // --- Draw field arrow at probe ---
+    function drawArrow(baseX, baseY, vx, vy, strength) {
+      if (!isFinite(vx) || !isFinite(vy)) return;
+      const len = Math.hypot(vx, vy);
+      if (len === 0) return;
+
+      // Larger arrows overall
+      const minLen = 20;
+      const maxLen = 100;
+      const L = minLen + (maxLen - minLen) * strength;
+
+      const headSize = 12;
+
+      const ux = vx / len;
+      const uy = vy / len;
+
+      // Arrow tip (apex of the triangle)
+      const arrowTipX = baseX + ux * L;
+      const arrowTipY = baseY + uy * L;
+
+      // Shaft ends exactly where head begins (no body through the head)
+      const shaftEndX = arrowTipX - ux * headSize;
+      const shaftEndY = arrowTipY - uy * headSize;
+
+      // Shaft
+      ctx.strokeStyle = "#1d4ed8";
+      ctx.lineWidth = 2;
+      ctx.lineCap = "round";
+
+      ctx.beginPath();
+      ctx.moveTo(baseX, baseY);
+      ctx.lineTo(shaftEndX, shaftEndY);
+      ctx.stroke();
+
+      // Head (triangle)
+      const angle = Math.atan2(uy, ux);
+      const a1 = angle + Math.PI * 0.87;
+      const a2 = angle - Math.PI * 0.87;
+
+      ctx.beginPath();
+      ctx.moveTo(arrowTipX, arrowTipY);
+      ctx.lineTo(
+        arrowTipX + headSize * Math.cos(a1),
+        arrowTipY + headSize * Math.sin(a1)
+      );
+      ctx.lineTo(
+        arrowTipX + headSize * Math.cos(a2),
+        arrowTipY + headSize * Math.sin(a2)
+      );
+      ctx.closePath();
+      ctx.fillStyle = "#1d4ed8";
+      ctx.fill();
+    }
+
+    // scale arrow based on |B| (just relative visual scaling)
+    const referenceB = 1e-5; // ~20 µT reference
+    const strength = clamp(Bmag / referenceB, 0, 1);
+
+    // probe circle
+    ctx.beginPath();
+    ctx.fillStyle = "#ffffff";
+    ctx.strokeStyle = "#1d4ed8";
+    ctx.lineWidth = 2;
+    ctx.arc(probe.x, probe.y, 7, 0, 2 * Math.PI);
+    ctx.fill();
+    ctx.stroke();
+
+    drawArrow(probe.x, probe.y, Bx, By, strength);
+
+    // Save values onto the canvas so we can read them outside
+    canvas._Bmag = Bmag;
+    canvas._rPix = Math.hypot(dx, dy); // original distance in pixels
+    canvas._metersPerPixel = metersPerPixel;
+  }, [size, current, probe]);
+
+  function getCanvasCoords(event) {
+    const canvas = canvasRef.current;
+    if (!canvas) return { x: 0, y: 0 };
+    const rect = canvas.getBoundingClientRect();
+    const clientX = event.clientX ?? (event.touches && event.touches[0]?.clientX);
+    const clientY = event.clientY ?? (event.touches && event.touches[0]?.clientY);
+    const x = clientX - rect.left;
+    const y = clientY - rect.top;
+    return { x, y };
+  }
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const handlePointerDown = (e) => {
+      e.preventDefault();
+      const { x, y } = getCanvasCoords(e);
+      draggingRef.current = true;
+      setProbe({ x, y });
+    };
+
+    const handlePointerMove = (e) => {
+      if (!draggingRef.current) return;
+      e.preventDefault();
+      const { x, y } = getCanvasCoords(e);
+      setProbe({ x, y });
+    };
+
+    const handlePointerUp = () => {
+      draggingRef.current = false;
+    };
+
+    canvas.addEventListener("mousedown", handlePointerDown);
+    canvas.addEventListener("mousemove", handlePointerMove);
+    window.addEventListener("mouseup", handlePointerUp);
+
+    canvas.addEventListener("touchstart", handlePointerDown, { passive: false });
+    canvas.addEventListener("touchmove", handlePointerMove, { passive: false });
+    window.addEventListener("touchend", handlePointerUp);
+    window.addEventListener("touchcancel", handlePointerUp);
+
+    return () => {
+      canvas.removeEventListener("mousedown", handlePointerDown);
+      canvas.removeEventListener("mousemove", handlePointerMove);
+      window.removeEventListener("mouseup", handlePointerUp);
+
+      canvas.removeEventListener("touchstart", handlePointerDown);
+      canvas.removeEventListener("touchmove", handlePointerMove);
+      window.removeEventListener("touchend", handlePointerUp);
+      window.removeEventListener("touchcancel", handlePointerUp);
+    };
+  }, []);
+
+  // Read back B and r from canvas (computed in draw effect)
+  const canvas = canvasRef.current;
+  const Bmag = canvas?._Bmag ?? NaN;
+  const rPix = canvas?._rPix ?? NaN;
+  const metersPerPixel = canvas?._metersPerPixel ?? NaN;
+  const rMeters = isFinite(rPix) && isFinite(metersPerPixel)
+    ? rPix * metersPerPixel
+    : NaN;
 
   return (
     <div
@@ -256,87 +298,127 @@ export default function StraightCurrentFieldDemo() {
         maxWidth: 760,
         margin: "0 auto",
         display: "grid",
-        justifyItems: "center",
         gap: 12,
+        justifyItems: "center",
       }}
     >
-      <canvas
-        ref={canvasRef}
-        style={{
-          width: size.width,
-          height: size.height,
-          cursor: "grab",
-          touchAction: "none",
-          borderRadius: 12,
-        }}
-      />
       <div
-        className="current-field-panel"
         style={{
-          width: "min(720px, 95%)",
-          display: "grid",
-          gap: 10,
-          justifyItems: "stretch",
+          width: "100%",
+          display: "flex",
+          flexWrap: "wrap",
+          gap: "1rem",
+          alignItems: "flex-start",
+          justifyContent: "center",
         }}
       >
-        <div className="current-field-row">
-          <label htmlFor="current-slider" style={{ fontWeight: 600 }}>
-            Current magnitude
-          </label>
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <input
-              id="current-slider"
-              type="range"
-              min="1"
-              max="20"
-              step="0.5"
-              value={current}
-              onChange={(event) => setCurrent(parseFloat(event.target.value))}
-              style={{ flexGrow: 1 }}
-            />
-            <span style={{ minWidth: 64, textAlign: "right" }}>
-              {current.toFixed(1)} A
-            </span>
-          </div>
-        </div>
-        <div className="current-field-row" style={{ marginTop: 4 }}>
-          <span style={{ fontWeight: 600 }}>Direction</span>
-          <div style={{ display: "flex", gap: 8 }}>
-            <button
-              type="button"
-              onClick={() => setDirection("out")}
-              className={
-                direction === "out" ? "current-field-chip active" : "current-field-chip"
-              }
-              title="Out of screen (⨀)"
-            >
-              ⨀ out of screen
-            </button>
-            <button
-              type="button"
-              onClick={() => setDirection("in")}
-              className={
-                direction === "in" ? "current-field-chip active" : "current-field-chip"
-              }
-              title="Into screen (⨂)"
-            >
-              ⨂ into screen
-            </button>
-          </div>
-        </div>
+        {/* Canvas column */}
         <div
-          className="current-field-row"
-          style={{ marginTop: 4, fontSize: 14, color: "#495057" }}
+          style={{
+            flex: "1 1 360px",
+            display: "flex",
+            justifyContent: "center",
+          }}
         >
-          <div>
-            <strong>r</strong> = {(r * 1e-2).toFixed(3)} m (distance from wire)
-          </div>
-          <div>
-            <strong>|B|</strong> = {formatTesla(Bmag)}
-          </div>
-          <div>
-            Right-hand rule: thumb along current, fingers curl with <strong>⇒</strong> the{" "}
-            <span style={{ color: "#1d4ed8", fontWeight: 600 }}>blue</span> arrow.
+          <canvas
+            ref={canvasRef}
+            style={{
+              width: size.width,
+              height: size.height,
+              borderRadius: 12,
+              cursor: "pointer",
+              touchAction: "none",
+            }}
+          />
+        </div>
+
+        {/* Controls column */}
+        <div style={{ flex: "0 0 260px", minWidth: 260 }}>
+          <div
+            className="current-field-panel"
+            style={{
+              width: "100%",
+              display: "grid",
+              gap: 10,
+              justifyItems: "stretch",
+            }}
+          >
+            <div className="current-field-row">
+              <div
+                style={{
+                  fontWeight: 600,
+                  marginBottom: 4,
+                  fontSize: 16,
+                  color: "#111827",
+                }}
+              >
+                Magnetic field of a straight wire
+              </div>
+              <p
+                style={{
+                  margin: 0,
+                  fontSize: 14,
+                  color: "#495057",
+                  lineHeight: 1.4,
+                }}
+              >
+                Drag the probe around the wire and adjust the current to see
+                how <strong>B</strong> depends on distance and current.
+              </p>
+            </div>
+
+            {/* Current slider */}
+            <div className="current-field-row">
+              <span style={{ fontWeight: 600 }}>Current</span>
+              <div style={{ marginTop: 4, marginBottom: 2, fontSize: 13 }}>
+                I ={" "}
+                <span style={{ fontFamily: "monospace" }}>
+                  {current.toFixed(2)} A
+                </span>{" "}
+                ({current >= 0 ? "⨀ out of page" : "⨂ into page"})
+              </div>
+              <input
+                type="range"
+                min={-5}
+                max={5}
+                step={0.1}
+                value={current}
+                onChange={(e) => setCurrent(parseFloat(e.target.value))}
+                style={{ width: "100%" }}
+              />
+              <div
+                style={{
+                  marginTop: 4,
+                  fontSize: 12.5,
+                  color: "#6b7280",
+                }}
+              >
+                Positive = current out of the screen (⨀). Negative = into the screen (⨂).
+              </div>
+            </div>
+
+            {/* Readout */}
+            <div className="current-field-row" style={{ fontSize: 13 }}>
+              <span style={{ fontWeight: 600 }}>Measurement at probe</span>
+              <div style={{ marginTop: 4 }}>
+                <strong>r</strong> ={" "}
+                <span style={{ fontFamily: "monospace" }}>
+                  {isFinite(rMeters) ? rMeters.toFixed(3) : "—"} m
+                </span>{" "}
+                (distance from wire)
+              </div>
+              <div>
+                <strong>|B|</strong> ={" "}
+                <span style={{ fontFamily: "monospace" }}>
+                  {formatTesla(Bmag)}
+                </span>
+              </div>
+              <div style={{ marginTop: 4, color: "#374151", lineHeight: 1.4 }}>
+                Right-hand rule: point your thumb along the current. Your curled fingers
+                show the direction of <strong>B</strong> — matching the{" "}
+                <span style={{ color: "#1d4ed8", fontWeight: 600 }}>blue arrow</span>.
+              </div>
+            </div>
           </div>
         </div>
       </div>
