@@ -2,7 +2,7 @@ import React from "react";
 import { Link } from "react-router-dom";
 import { MathJax, MathJaxContext } from "better-react-mathjax";
 import StraightCurrentFieldDemo from "../components/electricity/StraightCurrentFieldDemo";
-import Ampere from "../components/electricity/Ampere";
+import Ampere from "../components/electricity/AmpereLight";
 import MagneticFieldExplorer from "../components/electricity/MagneticFieldExplorer";
 import HiddenExposition from "../components/shared/HiddenExposition";
 import HiddenQuestion from "../components/shared/HiddenQuestion";
