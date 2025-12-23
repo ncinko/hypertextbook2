@@ -17,6 +17,7 @@ import Sound from "./pages/Sound"
 import Kinematics from "./pages/Kinematics"
 import Kinematics2 from "./pages/Kinematics2"
 import PolarKinematics from "./pages/PolarKinematics";
+import Relativity from './pages/Relativity';
 import Vectors from "./pages/Vectors";
 import Forces from "./pages/Forces";
 import CubePuzzle3x3 from './components/math/CubePuzzle3x3';  
@@ -92,6 +93,7 @@ export default function App() {
                 <Route path="/vectors" element={<Vectors />} />
                 <Route path="/cube" element={<CubePuzzle3x3 />} />
                 <Route path="/kepler" element={<Kepler />} />
+                <Route path="/relativity" element={<Relativity />} />
             </Routes>
         </div>
     );
