@@ -153,6 +153,29 @@ code {
   align-items: center;
 }
 
+/* Conceptual cards for inline demos */
+.concept-card {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 1px 8px rgba(0, 0, 0, 0.06);
+  margin: 12px 0 18px;
+}
+
+.concept-card label {
+  display: flex;
+  flex-direction: column;
+  font-weight: 600;
+  gap: 4px;
+  color: #111;
+  min-width: 140px;
+}
+
+.concept-card input[type="range"] {
+  width: min(240px, 40vw);
+}
+
 /* ===========================
    Buttons
    =========================== */
