@@ -30,6 +30,7 @@ export default function App() {
     return (
         <div>
             <nav className="navbar">
+            
   <div className="nav-container">
     <Link to="/" className="nav-logo">Physics Nook</Link>
     <div className="nav-links">
@@ -42,7 +43,6 @@ export default function App() {
           <Link to="/vectors">Vectors</Link>
           <Link to="/forces">Forces</Link>
           <Link to="/kinematics2">2D Kinematics</Link>
-          <Link to="/momentum">Momentum</Link>
           <Link to="/energy">Energy</Link>
           <Link to="/oscillations">Oscillations</Link>
         </div>

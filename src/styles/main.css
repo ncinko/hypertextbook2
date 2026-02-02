@@ -1,3 +1,7 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 /* main.css - Import all stylesheets */
 @import url('global.css');
 @import url('navbar.css');
@@ -7,3 +11,33 @@
 @import url('responsive.css');
 @import url('app.css');
 @import url('ui-controls.css');
+
+/* Custom styles can be added below */
+/* Restore semantic heading hierarchy */
+h1 {
+  font-size: 2.25rem;
+  font-weight: 700;
+  margin: 0.75em 0 0.5em;
+}
+
+h2 {
+  font-size: 1.75rem;
+  font-weight: 600;
+  margin: 0.75em 0 0.5em;
+}
+
+h3 {
+  font-size: 1.35rem;
+  font-weight: 600;
+  margin: 0.6em 0 0.4em;
+}
+
+h4 {
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+p {
+  line-height: 1.6;
+  margin: 0.5em 0;
+}
