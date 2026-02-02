@@ -4,6 +4,7 @@ import { MathJax, MathJaxContext } from "better-react-mathjax";
 import HiddenExposition from "../components/shared/HiddenExposition";
 import HiddenQuestion from "../components/shared/HiddenQuestion";
 import Coaster from "../components/mechanics/coaster";
+import IsoCoaster from "../components/mechanics/isocoaster";
 
 const chipStyle = {
   display: "inline-block",
@@ -63,7 +64,7 @@ export default function Energy() {
             </li>
           </ul>
 
-          <h2>Energy pathways</h2>
+          <h2>Energy Transformations</h2>
           <Coaster />  
 
           <HiddenExposition title="Why does speed increase as height decreases?">
@@ -82,6 +83,8 @@ export default function Energy() {
               <MathJax inline>{" \\( W_{\\text{fric}} < 0 \\)"}</MathJax>.
             </p>
           </HiddenExposition>
+
+          <IsoCoaster />
 
           <h2>Practice</h2>
           <div className="px-6 py-0 pb-24">
