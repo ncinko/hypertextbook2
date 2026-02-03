@@ -163,9 +163,27 @@ export default function CoasterBuilder3D({ height = 800, className = "" }) {
   const birdsRef = useRef([]);
   const deerRef = useRef([]);
 
-  
 
-  // Control/physics refs
+// Track meta (used for lap wrap + deer boarding)
+const trackMetaRef = useRef({
+  isCircuit: false,
+  start: new THREE.Vector3(0, 0, 0),
+  end: new THREE.Vector3(0, 0, 0),
+  startTangent: new THREE.Vector3(0, 0, 1),
+  endTangent: new THREE.Vector3(0, 0, 1),
+});
+
+// When a circuit is formed, we choose ONE closest deer to the station and have it run to the cart.
+// This ref stores the index of the deer that is currently "assigned" as rider (or null if none).
+const riderRef = useRef(null);
+
+// Mirror sim state for hot loops
+const isSimulatingRef = useRef(isSimulating);
+useEffect(() => {
+  isSimulatingRef.current = isSimulating;
+}, [isSimulating]);
+
+// Control/physics refs
   const controlsRef = useRef({
     rotation: 0.5,
     pitch: 0.5,
@@ -577,7 +595,7 @@ export default function CoasterBuilder3D({ height = 800, className = "" }) {
       });
 
       // Deer animation
-      deerRef.current.forEach((d) => {
+      deerRef.current.forEach((d, di) => {
         // FLIP state
         if (d.state === 3) {
           d.flipProgress += dt * 2.0;
@@ -593,6 +611,58 @@ export default function CoasterBuilder3D({ height = 800, className = "" }) {
           d.legs.forEach((l) => { l.rotation.x = 0; l.rotation.z = 0; });
           return;
         }
+
+// State 4: RUN TO CART
+if (d.state === 4 && cartRef.current) {
+  const target = cartRef.current.position;
+  const dirV = new THREE.Vector3().subVectors(target, d.group.position);
+  dirV.y = 0; // ignore height
+  const dist = dirV.length();
+
+  if (dist < 8) {
+    // Caught the cart!
+    d.state = 5; // RIDING
+  } else {
+    dirV.normalize();
+
+    // Face the cart
+    d.group.lookAt(target.x, d.group.position.y, target.z);
+
+    // Run fast
+    d.group.position.add(dirV.multiplyScalar(0.8));
+
+    // If we were a "strafing deer", running logic overrides that.
+    if (d.internalGroup.rotation.y !== 0) d.internalGroup.rotation.y = 0;
+
+    // Fast run animation
+    const legPhase = now * 0.02;
+    d.legs[0].rotation.x = Math.sin(legPhase) * 0.8;
+    d.legs[1].rotation.x = Math.sin(legPhase + Math.PI) * 0.8;
+    d.legs[2].rotation.x = Math.sin(legPhase + Math.PI) * 0.8;
+    d.legs[3].rotation.x = Math.sin(legPhase) * 0.8;
+
+    // Neck forward
+    d.neckPivot.rotation.x = -0.8;
+  }
+  return;
+}
+
+// State 5: RIDING
+if (d.state === 5 && cartRef.current) {
+  d.group.position.copy(cartRef.current.position);
+  d.group.quaternion.copy(cartRef.current.quaternion);
+
+  // Sit in back seat (offset)
+  d.group.translateY(-0.5);
+  d.group.translateZ(-1.0);
+
+  // Sit pose
+  d.legs.forEach((l) => { l.rotation.x = -1.5; l.rotation.z = 0; });
+  d.neckPivot.rotation.x = -0.5;
+  return;
+}
+
+
 
         d.timer -= dt;
         if (d.timer <= 0) {
@@ -848,7 +918,56 @@ export default function CoasterBuilder3D({ height = 800, className = "" }) {
     curve.tension = 0.2;
     curveRef.current = curve;
 
-    // Polyline length mapping
+
+// --- Circuit detection (used for lap wrap + deer boarding) ---
+const startPt = points[0].clone();
+const endPt = points[points.length - 1].clone();
+const startTan = curve.getTangentAt(0).normalize();
+const endTan = curve.getTangentAt(1 - 1e-4).normalize();
+const dist = startPt.distanceTo(endPt);
+
+// Simple circuit heuristic (matches your HTML prototype logic)
+const isCircuit = points.length > 20 && dist < 20;
+
+trackMetaRef.current = {
+  isCircuit,
+  start: startPt,
+  end: endPt,
+  startTangent: startTan,
+  endTangent: endTan,
+};
+
+// Circuit Detection & Deer Assignment (matches your HTML prototype)
+if (isCircuit && riderRef.current === null) {
+  // Find closest deer to station (track start)
+  let minDist = Infinity;
+  let closestIdx = -1;
+
+  deerRef.current.forEach((d, i) => {
+    const dDist = d.group.position.distanceTo(startPt);
+    if (dDist < minDist) {
+      minDist = dDist;
+      closestIdx = i;
+    }
+  });
+
+  if (closestIdx !== -1) {
+    riderRef.current = closestIdx;
+    deerRef.current[closestIdx].state = 4; // RUN_TO_CART
+  }
+} else if (!isCircuit && riderRef.current !== null) {
+  // Eject if circuit broken
+  const d = deerRef.current[riderRef.current];
+  if (d) {
+    d.state = 0;
+    d.group.rotation.set(0, 0, 0); // reset rot
+    if (d.isStrafing) d.internalGroup.rotation.y = Math.PI / 2; // restore strafe pose
+    d.group.position.y = 0;
+  }
+  riderRef.current = null;
+}
+
+// Polyline length mapping
     const pointLengths = [0];
     let totalPolyLength = 0;
     for (let i = 1; i < points.length; i++) {
@@ -857,7 +976,7 @@ export default function CoasterBuilder3D({ height = 800, className = "" }) {
     }
 
     // Tube + per-vertex color
-    const tubeGeo = new THREE.TubeGeometry(curve, 400, 0.4, 6, false);
+    const tubeGeo = new THREE.TubeGeometry(curve, 400, 0.4, 6, isCircuit);
     const count = tubeGeo.attributes.position.count;
     const colorAttr = new Float32Array(count * 3);
     const radial = 6;
@@ -1020,11 +1139,25 @@ export default function CoasterBuilder3D({ height = 800, className = "" }) {
       // Deadband near zero to reduce jitter
       if (Math.abs(phys.velocity) < 0.02) phys.velocity = 0;
 
-      // Integrate position (wrap both directions)
+      // Integrate position
       const len = curve.getLength();
       phys.t += (phys.velocity * dt) / len;
-      while (phys.t >= 1) phys.t -= 1;
-      while (phys.t < 0) phys.t += 1;
+
+      // Only wrap around if the user has actually built a closed circuit.
+      const isCircuitNow = !!trackMetaRef.current?.isCircuit;
+      if (isCircuitNow) {
+        while (phys.t >= 1) phys.t -= 1;
+        while (phys.t < 0) phys.t += 1;
+      } else {
+        if (phys.t >= 1) {
+          phys.t = 0.999999;
+          phys.velocity = 0;
+        }
+        if (phys.t < 0) {
+          phys.t = 0;
+          phys.velocity = 0;
+        }
+      }
 
       // Orient cart in direction of travel
       const travelSign = phys.velocity >= 0 ? 1 : -1;
