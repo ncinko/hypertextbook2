@@ -5,6 +5,7 @@ import HiddenExposition from "../components/shared/HiddenExposition";
 import HiddenQuestion from "../components/shared/HiddenQuestion";
 import Coaster from "../components/mechanics/coaster";
 import IsoCoaster from "../components/mechanics/isocoaster";
+import CoasterBuilder3D from "../components/mechanics/isocoaster2";
 
 const chipStyle = {
   display: "inline-block",
@@ -84,7 +85,9 @@ export default function Energy() {
             </p>
           </HiddenExposition>
 
-          <IsoCoaster />
+          <div className="w-full h-[80vh] rounded-2xl overflow-hidden">
+      <CoasterBuilder3D />
+    </div>
 
           <h2>Practice</h2>
           <div className="px-6 py-0 pb-24">

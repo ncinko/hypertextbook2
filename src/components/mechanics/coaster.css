@@ -1,0 +1,39 @@
+/* Optional: if this component is on a page with scroll, you probably don't want global body styles.
+   Keep styles scoped to your component classes. */
+
+canvas {
+  display: block;
+  outline: none;
+}
+
+/* Custom Scrollbar */
+.scroller::-webkit-scrollbar {
+  width: 6px;
+}
+.scroller::-webkit-scrollbar-track {
+  background: #e2e8f0;
+}
+.scroller::-webkit-scrollbar-thumb {
+  background: #94a3b8;
+  border-radius: 3px;
+}
+
+.glass-panel {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+}
+
+/* Improved Hover Menu Animation */
+.group:hover .submenu {
+  opacity: 1;
+  transform: translateX(0);
+  pointer-events: auto;
+  visibility: visible;
+}
+
+.simRoot {
+  overscroll-behavior: contain; /* stops scroll chaining to the page */
+  touch-action: none;           /* prevents browser gestures hijacking pointer drags */
+}
