@@ -1,8 +1,9 @@
+// CoasterBuilder3D.jsx
 import React, { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import "./coaster.css";
 
-// --- Configuration ---
+
 const SEGMENT_DEFS = {
   START: { label: "Station", icon: "flag", color: 0x334155 },
   STRAIGHT: {
@@ -10,9 +11,9 @@ const SEGMENT_DEFS = {
     len: 30,
     icon: "minus",
     variants: [
-      { id: "NORMAL", label: "Standard", color: 0x3b82f6 }, // Blue track
-      { id: "BOOST", label: "Booster", color: 0x10b981, force: 12 }, // Emerald
-      { id: "BRAKE", label: "Brakes", color: 0xef4444, drag: 0.15 }, // Red
+      { id: "NORMAL", label: "Standard", color: 0x3b82f6 },
+      { id: "BOOST", label: "Booster", color: 0x10b981, force: 12 },
+      { id: "BRAKE", label: "Brakes", color: 0xef4444, drag: 0.15 },
     ],
   },
   UP: {
@@ -22,7 +23,7 @@ const SEGMENT_DEFS = {
     icon: "arrow-up",
     variants: [
       { id: "NORMAL", label: "Standard", color: 0x3b82f6 },
-      { id: "CHAIN", label: "Chain Lift", color: 0xb45309, chainSpeed: 6 }, // Amber
+      { id: "CHAIN", label: "Chain Lift", color: 0xb45309, chainSpeed: 6 },
     ],
   },
   DOWN: { label: "Drop", len: 40, height: -20, icon: "arrow-down", color: 0x3b82f6 },
@@ -33,10 +34,10 @@ const SEGMENT_DEFS = {
 
 const GRAVITY = 9.81;
 const FRICTION_COEFF = 0.005;
-const INITIAL_SPEED = 20;
+const INITIAL_SPEED = 10;
 
-// --- Icons Component ---
-const Icon = ({ name, size = 18 }) => {
+// Minimal SVG icon set (no dependency)
+function Icon({ name, size = 18 }) {
   const icons = {
     flag: (
       <>
@@ -129,13 +130,17 @@ const Icon = ({ name, size = 18 }) => {
       {icons[name] || icons.square}
     </svg>
   );
-};
+}
 
-export default function CoasterBuilder3D() {
+export default function CoasterBuilder3D({ height = 800, className = "" }) {
   const [segments, setSegments] = useState([{ type: "START", variant: "NORMAL" }]);
   const [isSimulating, setIsSimulating] = useState(false);
   const [cameraMode, setCameraMode] = useState("ORBIT");
   const [showTelemetry, setShowTelemetry] = useState(false);
+
+  const [isFocus, setIsFocus] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
   const [stats, setStats] = useState({
     velocity: 0,
     gVertical: 0,
@@ -145,95 +150,109 @@ export default function CoasterBuilder3D() {
     ke: 0,
   });
 
-  // DOM/Three refs
-  const mountRef = useRef(null);
+  // DOM refs
+  const wrapRef = useRef(null);   // outer wrapper (for focus/fullscreen)
+  const mountRef = useRef(null);  // canvas sizing context
+
+  // Three refs
   const sceneRef = useRef(null);
   const cameraRef = useRef(null);
   const rendererRef = useRef(null);
-
   const curveRef = useRef(null);
   const cartRef = useRef(null);
-
   const birdsRef = useRef([]);
   const deerRef = useRef([]);
 
+  
+
+  // Control/physics refs
   const controlsRef = useRef({
     rotation: 0.5,
     pitch: 0.5,
     zoom: 120,
     target: new THREE.Vector3(0, 0, 0),
   });
-
   const keysRef = useRef({ w: false, a: false, s: false, d: false });
-
   const physicsRef = useRef({
     t: 0,
-    velocity: 0,
+    velocity: INITIAL_SPEED,
     lastVel: new THREE.Vector3(),
     lastBinormal: new THREE.Vector3(1, 0, 0),
   });
-
   const segmentsMapRef = useRef([]);
   const maxEnergyRef = useRef(5000);
 
-  // Avoid stale closures in render loop
+  // Pointer-over-canvas gate for wheel capture
+  const isPointerOverSimRef = useRef(false);
+
+  // State mirrors for hot loops
   const cameraModeRef = useRef(cameraMode);
-  const isSimulatingRef = useRef(isSimulating);
-  useEffect(() => void (cameraModeRef.current = cameraMode), [cameraMode]);
-  useEffect(() => void (isSimulatingRef.current = isSimulating), [isSimulating]);
+  useEffect(() => { cameraModeRef.current = cameraMode; }, [cameraMode]);
 
-  const resetSim = () => {
-    setIsSimulating(false);
+  // Lock page scroll in focus mode
+  useEffect(() => {
+    if (!isFocus) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = prev; };
+  }, [isFocus]);
 
-    if (curveRef.current) {
-      const t = 0;
-      const tangent = curveRef.current.getTangentAt(t).normalize();
-      const binormal = new THREE.Vector3().crossVectors(tangent, new THREE.Vector3(0, 1, 0)).normalize();
+  // Fullscreen state tracking
+  useEffect(() => {
+    const onFs = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener("fullscreenchange", onFs);
+    return () => document.removeEventListener("fullscreenchange", onFs);
+  }, []);
 
-      physicsRef.current = {
-        t: 0,
-        velocity: INITIAL_SPEED,
-        lastVel: new THREE.Vector3(),
-        lastBinormal: binormal,
-      };
+  const resizeToContainer = () => {
+    const mount = mountRef.current;
+    const renderer = rendererRef.current;
+    const camera = cameraRef.current;
+    if (!mount || !renderer || !camera) return;
 
-      if (cartRef.current) {
-        cartRef.current.position.copy(curveRef.current.getPointAt(0));
-        const up = new THREE.Vector3().crossVectors(binormal, tangent).normalize();
-        cartRef.current.up.copy(up);
-        cartRef.current.lookAt(curveRef.current.getPointAt(0).add(tangent));
-      }
+    const rect = mount.getBoundingClientRect();
+    const w = Math.max(1, rect.width);
+    const h = Math.max(1, rect.height);
+
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+  };
+
+  const toggleFullscreen = async () => {
+    const el = wrapRef.current;
+    if (!el) return;
+    try {
+      if (!document.fullscreenElement) await el.requestFullscreen?.();
+      else await document.exitFullscreen?.();
+    } catch {
+      // Browser may block; focus mode still works.
     }
   };
 
-  const addSegment = (type, variant = "NORMAL") => {
-    setSegments((prev) => [...prev, { type, variant }]);
-  };
-
-  const undo = () => {
-    if (segments.length > 1) setSegments((prev) => prev.slice(0, -1));
-  };
-
-  // --- 3D Setup (runs once) ---
+  // --- Init Three ---
   useEffect(() => {
     if (!mountRef.current) return;
 
-    const container = mountRef.current;
+    // Scene
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0xf0f5ff);
     scene.fog = new THREE.Fog(0xf0f5ff, 50, 600);
     sceneRef.current = scene;
 
+    // Camera
     const camera = new THREE.PerspectiveCamera(60, 1, 0.05, 2000);
     cameraRef.current = camera;
 
+    // Renderer
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     rendererRef.current = renderer;
-    container.appendChild(renderer.domElement);
 
-    // Lights
+    mountRef.current.appendChild(renderer.domElement);
+
+    // Lighting
     scene.add(new THREE.AmbientLight(0xffffff, 0.6));
     const dir = new THREE.DirectionalLight(0xffffff, 0.8);
     dir.position.set(100, 200, 100);
@@ -241,15 +260,19 @@ export default function CoasterBuilder3D() {
     dir.shadow.mapSize.set(2048, 2048);
     scene.add(dir);
 
-    // Grid/Ground
+    // Ground + grid
     scene.add(new THREE.GridHelper(2000, 100, 0x708090, 0xa0b0c0));
-    const ground = new THREE.Mesh(new THREE.PlaneGeometry(2000, 2000), new THREE.MeshBasicMaterial({ color: 0x9dcc9a }));
+
+    const ground = new THREE.Mesh(
+      new THREE.PlaneGeometry(2000, 2000),
+      new THREE.MeshBasicMaterial({ color: 0x9dcc9a })
+    );
     ground.rotation.x = -Math.PI / 2;
     ground.position.y = -0.1;
     ground.receiveShadow = true;
     scene.add(ground);
 
-    // Helpers for Trees and Deer
+    // Trees
     const createTree = () => {
       const group = new THREE.Group();
 
@@ -274,28 +297,38 @@ export default function CoasterBuilder3D() {
       return group;
     };
 
+    for (let i = 0; i < 80; i++) {
+      const tree = createTree();
+      const x = (Math.random() - 0.5) * 1600;
+      const z = (Math.random() - 0.5) * 1600;
+      if (Math.abs(x) < 50 && Math.abs(z) < 50) continue;
+      tree.position.set(x, 0, z);
+      const s = 0.8 + Math.random() * 0.6;
+      tree.scale.set(s, s, s);
+      tree.rotation.y = Math.random() * Math.PI * 2;
+      scene.add(tree);
+    }
+
+    // Deer
     const createDeer = (hasAntlers, isStrafing) => {
-      const group = new THREE.Group(); // Parent Group
-      const internalGroup = new THREE.Group(); // Orientation Group
+      const group = new THREE.Group();
+      const internalGroup = new THREE.Group();
       group.add(internalGroup);
 
-      if (isStrafing) internalGroup.rotation.y = Math.PI / 2; // Face sideways
+      if (isStrafing) internalGroup.rotation.y = Math.PI / 2;
 
       const deerMat = new THREE.MeshStandardMaterial({ color: 0x8c5e35, roughness: 0.8 });
       const darkMat = new THREE.MeshStandardMaterial({ color: 0x3d2b1f, roughness: 0.9 });
 
-      const bodyGroup = new THREE.Group();
-      internalGroup.add(bodyGroup);
-
       const body = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.5, 3), deerMat);
       body.position.y = 2.2;
       body.castShadow = true;
-      bodyGroup.add(body);
+      internalGroup.add(body);
 
       const neckPivot = new THREE.Group();
       neckPivot.position.set(0, 2.8, 1.3);
       neckPivot.rotation.x = -0.5;
-      bodyGroup.add(neckPivot);
+      internalGroup.add(neckPivot);
 
       const neck = new THREE.Mesh(new THREE.BoxGeometry(0.8, 2, 0.8), deerMat);
       neck.position.y = 1;
@@ -309,68 +342,48 @@ export default function CoasterBuilder3D() {
 
       if (hasAntlers) {
         const antlerGeo = new THREE.CylinderGeometry(0.05, 0.05, 1.5);
-        const leftAntler = new THREE.Mesh(antlerGeo, darkMat);
-        leftAntler.castShadow = true;
-        leftAntler.position.set(0.3, 0.8, 0);
-        leftAntler.rotation.set(0.2, 0, -0.5);
-        head.add(leftAntler);
+        const left = new THREE.Mesh(antlerGeo, darkMat);
+        left.position.set(0.3, 0.8, 0);
+        left.rotation.set(0.2, 0, -0.5);
+        head.add(left);
 
-        const rightAntler = new THREE.Mesh(antlerGeo, darkMat);
-        rightAntler.castShadow = true;
-        rightAntler.position.set(-0.3, 0.8, 0);
-        rightAntler.rotation.set(0.2, 0, 0.5);
-        head.add(rightAntler);
+        const right = new THREE.Mesh(antlerGeo, darkMat);
+        right.position.set(-0.3, 0.8, 0);
+        right.rotation.set(0.2, 0, 0.5);
+        head.add(right);
       }
 
       const legGeo = new THREE.BoxGeometry(0.5, 2.5, 0.5);
       const legPositions = [
-        [-0.4, 1.25, -1.2],
-        [0.4, 1.25, -1.2],
-        [-0.4, 1.25, 1.2],
-        [0.4, 1.25, 1.2],
+        [-0.4, 1.25, -1.2], [0.4, 1.25, -1.2],
+        [-0.4, 1.25, 1.2], [0.4, 1.25, 1.2],
       ];
-      const legs = [];
-      legPositions.forEach((pos) => {
+      const legs = legPositions.map(([x, y, z]) => {
         const leg = new THREE.Mesh(legGeo, deerMat);
-        leg.position.set(pos[0], 1.25, pos[2]);
+        leg.position.set(x, y, z);
         leg.castShadow = true;
-        legs.push(leg);
         internalGroup.add(leg);
+        return leg;
       });
 
-      return { group, neckPivot, legs, internalGroup };
+      return { group, internalGroup, neckPivot, legs };
     };
 
-    // Trees
-    for (let i = 0; i < 80; i++) {
-      const tree = createTree();
-      const x = (Math.random() - 0.5) * 1600;
-      const z = (Math.random() - 0.5) * 1600;
-      if (Math.abs(x) < 50 && Math.abs(z) < 50) continue;
-      tree.position.set(x, 0, z);
-      const scale = 0.8 + Math.random() * 0.6;
-      tree.scale.set(scale, scale, scale);
-      tree.rotation.y = Math.random() * Math.PI * 2;
-      scene.add(tree);
-    }
-
-    // Deer
     const deerList = [];
     for (let i = 0; i < 15; i++) {
       const hasAntlers = Math.random() > 0.6;
       const isStrafing = Math.random() > 0.5;
-      const deerObj = createDeer(hasAntlers, isStrafing);
-
+      const deer = createDeer(hasAntlers, isStrafing);
       const x = (Math.random() - 0.5) * 1400;
       const z = (Math.random() - 0.5) * 1400;
       if (Math.abs(x) < 60 && Math.abs(z) < 60) continue;
 
-      deerObj.group.position.set(x, 0, z);
-      deerObj.group.rotation.y = Math.random() * Math.PI * 2;
-      scene.add(deerObj.group);
+      deer.group.position.set(x, 0, z);
+      deer.group.rotation.y = Math.random() * Math.PI * 2;
+      scene.add(deer.group);
 
       deerList.push({
-        ...deerObj,
+        ...deer,
         state: 0,
         timer: Math.random() * 5,
         target: new THREE.Vector3(x, 0, z),
@@ -381,47 +394,43 @@ export default function CoasterBuilder3D() {
     deerRef.current = deerList;
 
     // Birds
-    const birdCount = 15;
-    const birdData = [];
     const birdGeo = new THREE.PlaneGeometry(1.2, 0.4);
     birdGeo.rotateX(-Math.PI / 2);
-    const lWingGeo = birdGeo.clone();
-    lWingGeo.translate(-0.6, 0, 0);
-    const rWingGeo = birdGeo.clone();
-    rWingGeo.translate(0.6, 0, 0);
+    const lWingGeo = birdGeo.clone(); lWingGeo.translate(-0.6, 0, 0);
+    const rWingGeo = birdGeo.clone(); rWingGeo.translate(0.6, 0, 0);
     const birdMat = new THREE.MeshBasicMaterial({ color: 0x333333, side: THREE.DoubleSide });
 
-    for (let i = 0; i < birdCount; i++) {
-      const group = new THREE.Group();
-      group.add(new THREE.Mesh(lWingGeo, birdMat));
-      group.add(new THREE.Mesh(rWingGeo, birdMat));
+    const birdData = [];
+    for (let i = 0; i < 15; i++) {
+      const g = new THREE.Group();
+      g.add(new THREE.Mesh(lWingGeo, birdMat));
+      g.add(new THREE.Mesh(rWingGeo, birdMat));
+      g.position.set((Math.random() - 0.5) * 800, 30 + Math.random() * 40, (Math.random() - 0.5) * 800);
+      scene.add(g);
 
-      group.position.set((Math.random() - 0.5) * 800, 30 + Math.random() * 40, (Math.random() - 0.5) * 800);
-      scene.add(group);
-
-      const velocity = new THREE.Vector3(Math.random() - 0.5, 0, Math.random() - 0.5)
+      const v = new THREE.Vector3((Math.random() - 0.5), 0, (Math.random() - 0.5))
         .normalize()
         .multiplyScalar(0.2 + Math.random() * 0.1);
 
       birdData.push({
-        group,
-        lWing: group.children[0],
-        rWing: group.children[1],
-        velocity,
+        group: g,
+        lWing: g.children[0],
+        rWing: g.children[1],
+        velocity: v,
         phase: Math.random() * Math.PI * 2,
       });
     }
     birdsRef.current = birdData;
 
     // Cart
-    const cartGroup = new THREE.Group();
-    const cartBody = new THREE.Mesh(
+    const cart = new THREE.Group();
+    const body = new THREE.Mesh(
       new THREE.BoxGeometry(2.2, 1.2, 3.5),
       new THREE.MeshStandardMaterial({ color: 0xf59e0b, roughness: 0.2, metalness: 0.6 })
     );
-    cartBody.position.y = 1.2;
-    cartBody.castShadow = true;
-    cartGroup.add(cartBody);
+    body.position.y = 1.2;
+    body.castShadow = true;
+    cart.add(body);
 
     [-1, 1].forEach((z) => {
       const axle = new THREE.Mesh(
@@ -430,44 +439,34 @@ export default function CoasterBuilder3D() {
       );
       axle.rotation.z = Math.PI / 2;
       axle.position.set(0, 0.5, z * 1.2);
-      cartGroup.add(axle);
+      cart.add(axle);
     });
 
-    scene.add(cartGroup);
-    cartRef.current = cartGroup;
+    scene.add(cart);
+    cartRef.current = cart;
 
-    // --- ResizeObserver: fit renderer to your component container ---
-    const resizeToContainer = () => {
-      const w = container.clientWidth || 1;
-      const h = container.clientHeight || 1;
-      renderer.setSize(w, h, false);
-      camera.aspect = w / h;
-      camera.updateProjectionMatrix();
-    };
-
-    const ro = new ResizeObserver(resizeToContainer);
-    ro.observe(container);
-    resizeToContainer();
-
-    // Event Listeners
+    // --- Input wiring ---
     let dragType = null;
     let lastMouse = { x: 0, y: 0 };
 
+    const onPointerEnter = () => { isPointerOverSimRef.current = true; };
+    const onPointerLeave = () => { isPointerOverSimRef.current = false; };
+
     const onDown = (e) => {
-      // Raycasting for Deer Click
+      // Deer click raycast
       const rect = renderer.domElement.getBoundingClientRect();
       const mouse = new THREE.Vector2(
         ((e.clientX - rect.left) / rect.width) * 2 - 1,
         -((e.clientY - rect.top) / rect.height) * 2 + 1
       );
       const raycaster = new THREE.Raycaster();
-      raycaster.setFromCamera(mouse, cameraRef.current);
+      raycaster.setFromCamera(mouse, camera);
 
       const deerGroups = deerRef.current.map((d) => d.group);
-      const intersects = raycaster.intersectObjects(deerGroups, true);
+      const hits = raycaster.intersectObjects(deerGroups, true);
 
-      if (intersects.length > 0) {
-        const hitObj = intersects[0].object;
+      if (hits.length > 0) {
+        const hitObj = hits[0].object;
         const deer = deerRef.current.find((d) => {
           let p = hitObj;
           while (p) {
@@ -476,11 +475,10 @@ export default function CoasterBuilder3D() {
           }
           return false;
         });
-
         if (deer) {
-          deer.state = 3; // FLIP
+          deer.state = 3;
           deer.flipProgress = 0;
-          return; // consume click
+          return;
         }
       }
 
@@ -489,11 +487,10 @@ export default function CoasterBuilder3D() {
       lastMouse = { x: e.clientX, y: e.clientY };
     };
 
-    const onUp = () => (dragType = null);
+    const onUp = () => { dragType = null; };
 
     const onMove = (e) => {
-      const mode = cameraModeRef.current;
-      if (!dragType || mode === "RIDE") return;
+      if (!dragType || cameraModeRef.current === "RIDE") return;
 
       const dx = e.clientX - lastMouse.x;
       const dy = e.clientY - lastMouse.y;
@@ -504,21 +501,20 @@ export default function CoasterBuilder3D() {
         controlsRef.current.pitch = Math.max(0.1, Math.min(1.5, controlsRef.current.pitch + dy * 0.005));
       } else if (dragType === "PAN") {
         const sensitivity = controlsRef.current.zoom * 0.0015;
-        const right = new THREE.Vector3(1, 0, 0).applyQuaternion(cameraRef.current.quaternion);
-        const upVec = new THREE.Vector3(0, 1, 0).applyQuaternion(cameraRef.current.quaternion);
-
+        const right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
+        const up = new THREE.Vector3(0, 1, 0).applyQuaternion(camera.quaternion);
         controlsRef.current.target.addScaledVector(right, -dx * sensitivity);
-        controlsRef.current.target.addScaledVector(upVec, dy * sensitivity);
+        controlsRef.current.target.addScaledVector(up, dy * sensitivity);
         controlsRef.current.target.y = Math.max(0, controlsRef.current.target.y);
       }
     };
 
+    // ✅ Wheel zoom without scrolling the page (only when pointer is over canvas)
     const onWheel = (e) => {
-    // if you want zoom to work only in ORBIT:
-    if (cameraModeRef.current === "RIDE") return;
-
-    e.preventDefault(); // <- stops page scroll
-    controlsRef.current.zoom = Math.max(10, Math.min(400, controlsRef.current.zoom + e.deltaY * 0.1));
+      if (!isPointerOverSimRef.current) return;
+      if (cameraModeRef.current === "RIDE") return;
+      e.preventDefault(); // important!
+      controlsRef.current.zoom = Math.max(10, Math.min(400, controlsRef.current.zoom + e.deltaY * 0.1));
     };
 
     const onKeyDown = (e) => {
@@ -533,17 +529,31 @@ export default function CoasterBuilder3D() {
     const onContext = (e) => e.preventDefault();
 
     const canvas = renderer.domElement;
+    canvas.style.position = "absolute";
+    canvas.style.inset = "0";
+    canvas.style.width = "100%";
+    canvas.style.height = "100%";
+    canvas.style.display = "block";
+    canvas.style.zIndex = "0";
+    canvas.style.outline = "none";
+    canvas.addEventListener("pointerenter", onPointerEnter);
+    canvas.addEventListener("pointerleave", onPointerLeave);
     canvas.addEventListener("mousedown", onDown);
     window.addEventListener("mouseup", onUp);
     window.addEventListener("mousemove", onMove);
-
-    // IMPORTANT: passive must be false or preventDefault won't work
     canvas.addEventListener("wheel", onWheel, { passive: false });
     canvas.addEventListener("contextmenu", onContext);
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("keyup", onKeyUp);
 
-    // Main render loop
+    // Container resize: ResizeObserver handles “inner width” pages
+    const ro = new ResizeObserver(() => resizeToContainer());
+    ro.observe(mountRef.current);
+
+    // Initial size
+    resizeToContainer();
+
+    // --- Render loop ---
     let raf = 0;
     const animate = () => {
       raf = requestAnimationFrame(animate);
@@ -551,116 +561,113 @@ export default function CoasterBuilder3D() {
       const dt = 0.016;
 
       // Birds
-      birdsRef.current.forEach((bird) => {
-        bird.group.position.add(bird.velocity);
-        if (Math.abs(bird.group.position.x) > 500) bird.group.position.x *= -1;
-        if (Math.abs(bird.group.position.z) > 500) bird.group.position.z *= -1;
-        bird.group.lookAt(bird.group.position.clone().add(bird.velocity));
-        if (Math.random() < 0.02) bird.velocity.applyAxisAngle(new THREE.Vector3(0, 1, 0), (Math.random() - 0.5) * 0.5);
-        const flap = Math.sin(now * 0.01 + bird.phase) * 0.4;
-        bird.lWing.rotation.z = flap;
-        bird.rWing.rotation.z = -flap;
+      birdsRef.current.forEach((b) => {
+        b.group.position.add(b.velocity);
+        if (Math.abs(b.group.position.x) > 500) b.group.position.x *= -1;
+        if (Math.abs(b.group.position.z) > 500) b.group.position.z *= -1;
+
+        const lookTarget = b.group.position.clone().add(b.velocity);
+        b.group.lookAt(lookTarget);
+
+        if (Math.random() < 0.02) b.velocity.applyAxisAngle(new THREE.Vector3(0, 1, 0), (Math.random() - 0.5) * 0.5);
+
+        const flap = Math.sin(now * 0.01 + b.phase) * 0.4;
+        b.lWing.rotation.z = flap;
+        b.rWing.rotation.z = -flap;
       });
 
-      // Deer
-      deerRef.current.forEach((deer) => {
-        if (deer.state === 3) {
-          deer.flipProgress += dt * 2.0;
-          if (deer.flipProgress >= 1) {
-            deer.state = 0;
-            deer.internalGroup.rotation.x = 0;
-            deer.internalGroup.position.y = 0;
+      // Deer animation
+      deerRef.current.forEach((d) => {
+        // FLIP state
+        if (d.state === 3) {
+          d.flipProgress += dt * 2.0;
+          if (d.flipProgress >= 1) {
+            d.state = 0;
+            d.internalGroup.rotation.x = 0;
+            d.internalGroup.position.y = 0;
           } else {
-            deer.internalGroup.rotation.x = -deer.flipProgress * Math.PI * 2;
-            deer.internalGroup.position.y = 15 * Math.sin(deer.flipProgress * Math.PI);
-            deer.group.translateZ(0.2);
+            d.internalGroup.rotation.x = -d.flipProgress * Math.PI * 2;
+            d.internalGroup.position.y = 15 * Math.sin(d.flipProgress * Math.PI);
+            d.group.translateZ(0.2);
           }
-          deer.legs.forEach((l) => {
-            l.rotation.x = 0;
-            l.rotation.z = 0;
-          });
+          d.legs.forEach((l) => { l.rotation.x = 0; l.rotation.z = 0; });
           return;
         }
 
-        deer.timer -= dt;
-
-        if (deer.timer <= 0) {
+        d.timer -= dt;
+        if (d.timer <= 0) {
           const roll = Math.random();
           if (roll < 0.3) {
-            deer.state = 0;
-            deer.timer = 2 + Math.random() * 3;
+            d.state = 0; // idle
+            d.timer = 2 + Math.random() * 3;
           } else if (roll < 0.6) {
-            deer.state = 2;
-            deer.timer = 3 + Math.random() * 4;
+            d.state = 2; // eat
+            d.timer = 3 + Math.random() * 4;
           } else {
-            deer.state = 1;
-            deer.timer = 4 + Math.random() * 5;
+            d.state = 1; // walk
+            d.timer = 4 + Math.random() * 5;
             const angle = Math.random() * Math.PI * 2;
             const dist = 20 + Math.random() * 30;
-            deer.target.x = deer.group.position.x + Math.cos(angle) * dist;
-            deer.target.z = deer.group.position.z + Math.sin(angle) * dist;
+            d.target.x = d.group.position.x + Math.cos(angle) * dist;
+            d.target.z = d.group.position.z + Math.sin(angle) * dist;
           }
         }
 
-        if (deer.state === 1) {
-          deer.neckPivot.rotation.x = THREE.MathUtils.lerp(deer.neckPivot.rotation.x, -0.5, 0.1);
+        if (d.state === 1) {
+          d.neckPivot.rotation.x = THREE.MathUtils.lerp(d.neckPivot.rotation.x, -0.5, 0.1);
 
-          const dirVec = new THREE.Vector3().subVectors(deer.target, deer.group.position);
-          if (dirVec.length() > 0.5) {
-            dirVec.normalize();
-            const targetRot = Math.atan2(dirVec.x, dirVec.z);
-            let rotDiff = targetRot - deer.group.rotation.y;
+          const dirV = new THREE.Vector3().subVectors(d.target, d.group.position);
+          if (dirV.length() > 0.5) {
+            dirV.normalize();
+            const targetRot = Math.atan2(dirV.x, dirV.z);
+            let rotDiff = targetRot - d.group.rotation.y;
             while (rotDiff > Math.PI) rotDiff -= Math.PI * 2;
             while (rotDiff < -Math.PI) rotDiff += Math.PI * 2;
-            deer.group.rotation.y += rotDiff * 0.05;
+            d.group.rotation.y += rotDiff * 0.05;
 
-            deer.group.translateZ(0.08);
+            d.group.translateZ(0.08);
 
             const legPhase = now * 0.008;
-            if (deer.isStrafing) {
-              deer.legs[0].rotation.z = Math.sin(legPhase) * 0.4;
-              deer.legs[1].rotation.z = Math.sin(legPhase + Math.PI) * 0.4;
-              deer.legs[2].rotation.z = Math.sin(legPhase + Math.PI) * 0.4;
-              deer.legs[3].rotation.z = Math.sin(legPhase) * 0.4;
-              deer.legs.forEach((l) => (l.rotation.x = 0));
+            if (d.isStrafing) {
+              d.legs[0].rotation.z = Math.sin(legPhase) * 0.4;
+              d.legs[1].rotation.z = Math.sin(legPhase + Math.PI) * 0.4;
+              d.legs[2].rotation.z = Math.sin(legPhase + Math.PI) * 0.4;
+              d.legs[3].rotation.z = Math.sin(legPhase) * 0.4;
+              d.legs.forEach((l) => (l.rotation.x = 0));
             } else {
-              deer.legs[0].rotation.x = Math.sin(legPhase) * 0.4;
-              deer.legs[1].rotation.x = Math.sin(legPhase + Math.PI) * 0.4;
-              deer.legs[2].rotation.x = Math.sin(legPhase + Math.PI) * 0.4;
-              deer.legs[3].rotation.x = Math.sin(legPhase) * 0.4;
-              deer.legs.forEach((l) => (l.rotation.z = 0));
+              d.legs[0].rotation.x = Math.sin(legPhase) * 0.4;
+              d.legs[1].rotation.x = Math.sin(legPhase + Math.PI) * 0.4;
+              d.legs[2].rotation.x = Math.sin(legPhase + Math.PI) * 0.4;
+              d.legs[3].rotation.x = Math.sin(legPhase) * 0.4;
+              d.legs.forEach((l) => (l.rotation.z = 0));
             }
           } else {
-            deer.state = 0;
+            d.state = 0;
           }
-        } else if (deer.state === 2) {
-          deer.neckPivot.rotation.x = THREE.MathUtils.lerp(deer.neckPivot.rotation.x, 2.5, 0.05);
-          deer.legs.forEach((l) => {
+        } else if (d.state === 2) {
+          d.neckPivot.rotation.x = THREE.MathUtils.lerp(d.neckPivot.rotation.x, 2.5, 0.05);
+          d.legs.forEach((l) => {
             l.rotation.x = THREE.MathUtils.lerp(l.rotation.x, 0, 0.1);
             l.rotation.z = THREE.MathUtils.lerp(l.rotation.z, 0, 0.1);
           });
         } else {
-          deer.neckPivot.rotation.x = THREE.MathUtils.lerp(deer.neckPivot.rotation.x, -0.5, 0.1);
-          deer.legs.forEach((l) => {
+          d.neckPivot.rotation.x = THREE.MathUtils.lerp(d.neckPivot.rotation.x, -0.5, 0.1);
+          d.legs.forEach((l) => {
             l.rotation.x = THREE.MathUtils.lerp(l.rotation.x, 0, 0.1);
             l.rotation.z = THREE.MathUtils.lerp(l.rotation.z, 0, 0.1);
           });
         }
       });
 
-      // Camera controls
-      const mode = cameraModeRef.current;
-      if (mode === "ORBIT") {
+      // Camera controls / ride cam
+      if (cameraModeRef.current === "ORBIT") {
         const { w, a, s, d } = keysRef.current;
         if (w || a || s || d) {
           const speed = controlsRef.current.zoom * 0.02;
-          const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(cameraRef.current.quaternion);
-          forward.y = 0;
-          forward.normalize();
-
-          const right = new THREE.Vector3(1, 0, 0).applyQuaternion(cameraRef.current.quaternion);
-          right.y = 0;
-          right.normalize();
+          const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+          forward.y = 0; forward.normalize();
+          const right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
+          right.y = 0; right.normalize();
 
           const move = new THREE.Vector3();
           if (w) move.add(forward);
@@ -679,21 +686,25 @@ export default function CoasterBuilder3D() {
         const y = zoom * Math.sin(pitch);
         camera.position.set(target.x + x, target.y + y, target.z + z);
         camera.lookAt(target);
-      } else if (mode === "RIDE" && curveRef.current) {
+      } else if (cameraModeRef.current === "RIDE" && curveRef.current) {
         if (cartRef.current) cartRef.current.visible = false;
 
         const t = physicsRef.current.t;
         const point = curveRef.current.getPointAt(t);
         const tangent = curveRef.current.getTangentAt(t).normalize();
-        const frameBinormal = physicsRef.current.lastBinormal.clone();
-        const normal = new THREE.Vector3().crossVectors(frameBinormal, tangent).normalize();
+        const v = physicsRef.current.velocity || 0;
+        const sign = v >= 0 ? 1 : -1;
+        const forward = tangent.clone().multiplyScalar(sign);
 
-        const eyeOffset = normal.clone().multiplyScalar(1.2).add(tangent.clone().multiplyScalar(0.5));
+        const binormal = physicsRef.current.lastBinormal.clone();
+        const normal = new THREE.Vector3().crossVectors(binormal, tangent).normalize();
+
+        const eyeOffset = normal.clone().multiplyScalar(1.2).add(forward.clone().multiplyScalar(0.5));
         const eyePos = point.clone().add(eyeOffset);
 
         camera.position.copy(eyePos);
         camera.up.copy(normal);
-        camera.lookAt(eyePos.clone().add(tangent));
+        camera.lookAt(eyePos.clone().add(forward));
       }
 
       renderer.render(scene, camera);
@@ -701,11 +712,12 @@ export default function CoasterBuilder3D() {
 
     animate();
 
-    // Cleanup
     return () => {
       cancelAnimationFrame(raf);
       ro.disconnect();
 
+      canvas.removeEventListener("pointerenter", onPointerEnter);
+      canvas.removeEventListener("pointerleave", onPointerLeave);
       canvas.removeEventListener("mousedown", onDown);
       window.removeEventListener("mouseup", onUp);
       window.removeEventListener("mousemove", onMove);
@@ -714,19 +726,18 @@ export default function CoasterBuilder3D() {
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
 
-      // Remove canvas
-      if (container.contains(renderer.domElement)) container.removeChild(renderer.domElement);
-
-      // Dispose renderer (basic)
+      if (mountRef.current && renderer.domElement) mountRef.current.removeChild(renderer.domElement);
       renderer.dispose();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // --- Track Generation ---
+  // --- Build track whenever segments change ---
   useEffect(() => {
-    if (!sceneRef.current) return;
     const scene = sceneRef.current;
+    if (!scene) return;
 
+    // Clear previous track/supports
     ["TRACK", "SUPPORTS"].forEach((name) => {
       const obj = scene.getObjectByName(name);
       if (obj) scene.remove(obj);
@@ -738,7 +749,7 @@ export default function CoasterBuilder3D() {
 
     let pos = new THREE.Vector3(0, 5, 0);
     let dir = new THREE.Vector3(0, 0, 1);
-    const up = new THREE.Vector3(0, 1, 0);
+    let up = new THREE.Vector3(0, 1, 0);
 
     points.push(pos.clone());
     colors.push(0.3, 0.3, 0.3);
@@ -746,10 +757,12 @@ export default function CoasterBuilder3D() {
     segments.forEach((seg) => {
       const def = SEGMENT_DEFS[seg.type];
       let segColor = def.color || 0xff3333;
+
       if (def.variants) {
         const v = def.variants.find((vv) => vv.id === seg.variant);
-        if (v && v.color) segColor = v.color;
+        if (v?.color) segColor = v.color;
       }
+
       const colorObj = new THREE.Color(segColor);
       const startIdx = points.length;
 
@@ -773,10 +786,9 @@ export default function CoasterBuilder3D() {
 
         const rightVec = new THREE.Vector3().crossVectors(dir, up).normalize();
         const leftVec = new THREE.Vector3().crossVectors(up, dir).normalize();
-
         const turnCenterDir = seg.type === "LEFT" ? leftVec : rightVec;
-        const turnCenter = pos.clone().add(turnCenterDir.clone().multiplyScalar(r));
 
+        const turnCenter = pos.clone().add(turnCenterDir.clone().multiplyScalar(r));
         const startVec = pos.clone().sub(turnCenter);
         const totalAngle = seg.type === "LEFT" ? Math.PI / 2 : -Math.PI / 2;
 
@@ -803,10 +815,12 @@ export default function CoasterBuilder3D() {
           const loopY = (1 - Math.cos(angle)) * r;
           const loopFwd = Math.sin(angle) * r;
           const spacing = tt * 2;
+
           const finalPt = pos
             .clone()
             .add(forward.clone().multiplyScalar(loopFwd + spacing))
             .add(upVec.clone().multiplyScalar(loopY));
+
           points.push(finalPt);
         }
         pos.copy(points[points.length - 1]);
@@ -824,7 +838,8 @@ export default function CoasterBuilder3D() {
       });
     });
 
-    const maxY = points.reduce((max, p) => Math.max(max, p.y), 0);
+    // Energy scaling
+    const maxY = points.reduce((m, p) => Math.max(m, p.y), 0);
     maxEnergyRef.current = GRAVITY * (maxY + 15);
 
     if (points.length < 2) return;
@@ -833,7 +848,7 @@ export default function CoasterBuilder3D() {
     curve.tension = 0.2;
     curveRef.current = curve;
 
-    // Length mapping
+    // Polyline length mapping
     const pointLengths = [0];
     let totalPolyLength = 0;
     for (let i = 1; i < points.length; i++) {
@@ -841,11 +856,10 @@ export default function CoasterBuilder3D() {
       pointLengths.push(totalPolyLength);
     }
 
-    // Track mesh
+    // Tube + per-vertex color
     const tubeGeo = new THREE.TubeGeometry(curve, 400, 0.4, 6, false);
     const count = tubeGeo.attributes.position.count;
     const colorAttr = new Float32Array(count * 3);
-
     const radial = 6;
     const tubular = 400;
     let currentPtIdx = 0;
@@ -870,22 +884,17 @@ export default function CoasterBuilder3D() {
     }
 
     tubeGeo.setAttribute("color", new THREE.BufferAttribute(colorAttr, 3));
-
-    const mesh = new THREE.Mesh(
+    const track = new THREE.Mesh(
       tubeGeo,
-      new THREE.MeshStandardMaterial({
-        color: 0xffffff,
-        vertexColors: true,
-        roughness: 0.4,
-      })
+      new THREE.MeshStandardMaterial({ color: 0xffffff, vertexColors: true, roughness: 0.4 })
     );
-    mesh.name = "TRACK";
-    mesh.castShadow = true;
-    mesh.receiveShadow = true;
-    mesh.frustumCulled = false;
-    scene.add(mesh);
+    track.name = "TRACK";
+    track.castShadow = true;
+    track.receiveShadow = true;
+    track.frustumCulled = false;
+    scene.add(track);
 
-    // Supports (skip loops)
+    // Supports
     const supports = new THREE.Group();
     supports.name = "SUPPORTS";
     const suppMat = new THREE.MeshStandardMaterial({ color: 0x64748b });
@@ -895,7 +904,8 @@ export default function CoasterBuilder3D() {
 
     const pointSegmentTypes = new Array(points.length).fill("NORMAL");
     let curSegIdx = 0;
-    let nextEndIdx = segmentInfoList[0]?.endPointIndex ?? 0;
+    let nextEndIdx = segmentInfoList[0]?.endPointIndex ?? (points.length - 1);
+
     for (let i = 0; i < points.length; i++) {
       if (i > nextEndIdx && curSegIdx < segmentInfoList.length - 1) {
         curSegIdx++;
@@ -908,11 +918,9 @@ export default function CoasterBuilder3D() {
     for (let i = 0; i <= supCount; i++) {
       const t = i / supCount;
       const targetLen = t * totalPolyLength;
-
       while (supportPtIdx < pointLengths.length - 1 && targetLen > pointLengths[supportPtIdx + 1]) supportPtIdx++;
 
-      const segType = pointSegmentTypes[supportPtIdx];
-      if (segType === "LOOP") continue;
+      if (pointSegmentTypes[supportPtIdx] === "LOOP") continue;
 
       const pt = curve.getPointAt(t);
       if (pt.y > 1) {
@@ -925,7 +933,7 @@ export default function CoasterBuilder3D() {
     }
     scene.add(supports);
 
-    // Segment map
+    // Segment map for physics
     const map = [];
     let lastEndT = 0;
     segmentInfoList.forEach((info) => {
@@ -941,31 +949,32 @@ export default function CoasterBuilder3D() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [segments]);
 
-  // --- Physics ---
+  // --- Physics loop (signed velocity = rollback) ---
   useEffect(() => {
     if (!isSimulating) return;
 
     const dt = 0.016;
-    const interval = setInterval(() => {
-      if (!curveRef.current || !cartRef.current) return;
+    const id = setInterval(() => {
+      const curve = curveRef.current;
+      const cart = cartRef.current;
+      if (!curve || !cart) return;
 
       const phys = physicsRef.current;
-      const curve = curveRef.current;
       const map = segmentsMapRef.current;
 
-      const currentSeg = map.find((s) => phys.t >= s.startT && phys.t < s.endT) || map[map.length - 1];
+      const currentSeg =
+        map.find((s) => phys.t >= s.startT && phys.t < s.endT) || map[map.length - 1];
 
       const point = curve.getPointAt(phys.t);
       const tangent = curve.getTangentAt(phys.t).normalize();
       const worldUp = new THREE.Vector3(0, 1, 0);
 
-      // --- PARALLEL TRANSPORT ---
+      // Parallel transport-ish frame
       let frameBinormal = phys.lastBinormal.clone().projectOnPlane(tangent).normalize();
       if (frameBinormal.length() === 0) frameBinormal = new THREE.Vector3(1, 0, 0);
 
       let worldBinormal = new THREE.Vector3().crossVectors(tangent, worldUp);
-      const worldBinormalLen = worldBinormal.length();
-      if (worldBinormalLen > 0.9) {
+      if (worldBinormal.length() > 0.9) {
         worldBinormal.normalize();
         if (worldBinormal.dot(frameBinormal) > 0.8) frameBinormal.copy(worldBinormal);
       }
@@ -975,47 +984,57 @@ export default function CoasterBuilder3D() {
       const normal = new THREE.Vector3().crossVectors(frameBinormal, tangent).normalize();
       const localUp = normal;
 
-      const sinSlope = tangent.y;
-      const accelG = -GRAVITY * sinSlope;
+      // Along-track acceleration: a = -g sin(theta) where sin(theta)=tangent.y
+      const accelG = -GRAVITY * tangent.y;
 
+      // Friction opposes signed velocity
       let friction = -FRICTION_COEFF * phys.velocity;
       let accelExternal = 0;
 
+      // Segment logic
       if (currentSeg) {
         if (currentSeg.type === "UP" && currentSeg.variant === "CHAIN") {
           const def = SEGMENT_DEFS.UP.variants.find((v) => v.id === "CHAIN");
           const target = def?.chainSpeed ?? 5;
+          // Pull forward even if rolling backward / too slow
           if (phys.velocity < target) {
             phys.velocity = THREE.MathUtils.lerp(phys.velocity, target, 0.1);
             friction = 0;
           }
         }
+
         if (currentSeg.type === "STRAIGHT" && currentSeg.variant === "BOOST") {
           const def = SEGMENT_DEFS.STRAIGHT.variants.find((v) => v.id === "BOOST");
-          accelExternal = def?.force ?? 20;
+          accelExternal = def?.force ?? 12;
         }
+
         if (currentSeg.type === "STRAIGHT" && currentSeg.variant === "BRAKE") {
           const def = SEGMENT_DEFS.STRAIGHT.variants.find((v) => v.id === "BRAKE");
           friction = -phys.velocity * (def?.drag ?? 2.0);
         }
       }
 
+      // Integrate velocity (✅ allow negative)
       phys.velocity += (accelG + friction + accelExternal) * dt;
-      if (phys.velocity < 0.1) phys.velocity = 0.1;
 
+      // Deadband near zero to reduce jitter
+      if (Math.abs(phys.velocity) < 0.02) phys.velocity = 0;
+
+      // Integrate position (wrap both directions)
       const len = curve.getLength();
-      const dist = phys.velocity * dt;
-      phys.t += dist / len;
+      phys.t += (phys.velocity * dt) / len;
+      while (phys.t >= 1) phys.t -= 1;
+      while (phys.t < 0) phys.t += 1;
 
-      if (phys.t >= 1) {
-        phys.t = 0;
-        phys.velocity = INITIAL_SPEED;
-      }
+      // Orient cart in direction of travel
+      const travelSign = phys.velocity >= 0 ? 1 : -1;
+      const travelTangent = tangent.clone().multiplyScalar(travelSign);
 
-      cartRef.current.position.copy(point);
-      cartRef.current.up.copy(normal);
-      cartRef.current.lookAt(point.clone().add(tangent));
+      cart.position.copy(point);
+      cart.up.copy(normal);
+      cart.lookAt(point.clone().add(travelTangent));
 
+      // Telemetry
       const vVec = tangent.clone().multiplyScalar(phys.velocity);
       const accelVec = vVec.clone().sub(phys.lastVel).divideScalar(dt);
       phys.lastVel.copy(vVec);
@@ -1030,11 +1049,10 @@ export default function CoasterBuilder3D() {
       const pe = GRAVITY * point.y;
       const ke = 0.5 * phys.velocity * phys.velocity;
       const totalE = pe + ke;
-
       if (totalE > maxEnergyRef.current) maxEnergyRef.current = totalE;
 
       setStats({
-        velocity: (phys.velocity * 3.6).toFixed(0),
+        velocity: Math.abs(phys.velocity * 3.6).toFixed(0), // show speed magnitude
         gVertical: vertG.toFixed(1),
         gLateral: latG.toFixed(1),
         gTotal: totalG.toFixed(1),
@@ -1043,213 +1061,290 @@ export default function CoasterBuilder3D() {
       });
     }, 16);
 
-    return () => clearInterval(interval);
+    return () => clearInterval(id);
   }, [isSimulating]);
 
+  const resetSim = () => {
+    setIsSimulating(false);
+
+    const curve = curveRef.current;
+    if (!curve) return;
+
+    const t = 0;
+    const tangent = curve.getTangentAt(t).normalize();
+    const binormal = new THREE.Vector3().crossVectors(tangent, new THREE.Vector3(0, 1, 0)).normalize();
+
+    physicsRef.current = {
+      t: 0,
+      velocity: INITIAL_SPEED,
+      lastVel: new THREE.Vector3(),
+      lastBinormal: binormal,
+    };
+
+    const cart = cartRef.current;
+    if (cart) {
+      const p = curve.getPointAt(0);
+      cart.position.copy(p);
+      const up = new THREE.Vector3().crossVectors(binormal, tangent).normalize();
+      cart.up.copy(up);
+      cart.lookAt(p.clone().add(tangent));
+    }
+  };
+
+  const addSegment = (type, variant = "NORMAL") => {
+    setSegments((prev) => [...prev, { type, variant }]);
+  };
+
+  const undo = () => {
+    setSegments((prev) => (prev.length > 1 ? prev.slice(0, -1) : prev));
+  };
+
+  // Re-resize when focus/fullscreen changes (container geometry changes)
+  useEffect(() => {
+    const id = requestAnimationFrame(() => resizeToContainer());
+    return () => cancelAnimationFrame(id);
+  }, [isFocus, isFullscreen]);
+
   return (
-    <div className="relative w-full h-full text-slate-800 select-none overflow-hidden font-sans">
-      <div ref={mountRef} className="absolute inset-0 z-0" />
+    <div
+      ref={wrapRef}
+      className={
+        isFocus
+          ? "fixed inset-0 z-[9999] bg-slate-950/40 backdrop-blur-sm"
+          : `relative ${className}`
+      }
+    >
+      <div
+        className={
+          isFocus
+            ? "absolute inset-3 md:inset-6 rounded-2xl overflow-hidden bg-[#eef2f5]"
+            : "relative"
+        }
+        style={!isFocus ? { height } : undefined}
+      >
+        <div
+          className="relative w-full h-full select-none overflow-hidden font-sans"
+          style={{
+            overscrollBehavior: "contain",
+            touchAction: "none",
+          }}
+        >
+          <div ref={mountRef} className="absolute inset-0 z-0" />
 
-      {/* UI Overlay */}
-      <div className="absolute inset-0 pointer-events-none flex flex-col justify-between p-6 z-10">
-        {/* Top Bar */}
-        <div className="flex justify-between items-start pointer-events-auto">
-          <div className="glass-panel px-6 py-4 rounded-2xl">
-            <h1 className="text-2xl font-black italic tracking-tighter text-blue-600">
-              COASTER<span className="text-slate-800">BUILDER</span>
-            </h1>
-            <div className="text-xs text-slate-500 font-mono mt-1 font-semibold">
-              {segments.length} SEGM • BUILD MODE
+          {/* UI Overlay */}
+          <div className="absolute inset-0 pointer-events-none flex flex-col justify-between p-6 z-10">
+            {/* Top Bar */}
+            <div className="flex justify-between items-start pointer-events-auto">
+              <div className="bg-white/85 backdrop-blur-md border border-white/60 shadow-[0_4px_20px_rgba(0,0,0,0.08)] px-6 py-4 rounded-2xl">
+                <h1 className="text-2xl font-black italic tracking-tighter text-blue-600">
+                  COASTER<span className="text-slate-800">BUILDER</span>
+                </h1>
+                <div className="text-xs text-slate-500 font-mono mt-1 font-semibold">
+                  {segments.length} SEGM • BUILD MODE
+                </div>
+              </div>
+
+              <div className="flex gap-2 pointer-events-auto">
+                <button
+                  onClick={() => setShowTelemetry((v) => !v)}
+                  className={`flex items-center gap-2 px-4 py-3 rounded-xl backdrop-blur-md transition-all border shadow-sm ${
+                    showTelemetry
+                      ? "bg-blue-600 text-white border-blue-500"
+                      : "bg-white/90 border-white/60 hover:bg-white text-slate-700"
+                  }`}
+                >
+                  <Icon name="activity" size={20} />
+                  <span className="font-bold text-sm">TELEMETRY</span>
+                </button>
+
+                <button
+                  onClick={() => setIsFocus((v) => !v)}
+                  className="flex items-center gap-2 px-4 py-3 rounded-xl bg-white/90 border border-white/60 text-slate-700 hover:bg-white shadow-sm"
+                >
+                  <span className="font-bold text-sm">{isFocus ? "EXIT" : "FOCUS"}</span>
+                </button>
+
+            
+              </div>
             </div>
-          </div>
 
-          <button
-            onClick={() => setShowTelemetry((v) => !v)}
-            className={`flex items-center gap-2 px-4 py-3 rounded-xl backdrop-blur-md transition-all border shadow-sm ${
-              showTelemetry
-                ? "bg-blue-600 text-white border-blue-500"
-                : "bg-white/90 border-white/60 hover:bg-white text-slate-700"
-            }`}
-          >
-            <Icon name="activity" size={20} />
-            <span className="font-bold text-sm">TELEMETRY</span>
-          </button>
-        </div>
+            {/* Telemetry Panel */}
+            {showTelemetry && (
+              <div className="absolute top-24 right-6 w-64 bg-white/85 backdrop-blur-md border border-white/60 shadow-[0_4px_20px_rgba(0,0,0,0.08)] p-4 rounded-xl pointer-events-auto">
+                <div className="flex justify-between items-center mb-4 border-b border-slate-200 pb-2">
+                  <h3 className="font-bold text-sm text-blue-600">LIVE DATA</h3>
+                  <button onClick={() => setShowTelemetry(false)} className="hover:text-red-500 text-slate-400">
+                    <Icon name="x" size={14} />
+                  </button>
+                </div>
 
-        {/* Telemetry Panel */}
-        {showTelemetry && (
-          <div className="absolute top-24 right-6 w-64 glass-panel p-4 rounded-xl pointer-events-auto animate-in fade-in slide-in-from-right-4">
-            <div className="flex justify-between items-center mb-4 border-b border-slate-200 pb-2">
-              <h3 className="font-bold text-sm text-blue-600">LIVE DATA</h3>
-              <button onClick={() => setShowTelemetry(false)} className="hover:text-red-500 text-slate-400">
-                <Icon name="x" size={14} />
+                <div className="space-y-4">
+                  <div>
+                    <div className="flex justify-between text-xs text-slate-500 mb-1 font-bold">
+                      <span>VERTICAL G</span>
+                      <span className={Math.abs(stats.gVertical) > 4 ? "text-red-500" : "text-slate-800"}>
+                        {stats.gVertical} G
+                      </span>
+                    </div>
+                    <div className="h-2 bg-slate-200 rounded-full overflow-hidden relative">
+                      <div className="absolute top-0 bottom-0 w-0.5 bg-slate-400 left-1/2" />
+                      <div
+                        className={`h-full ${Math.abs(stats.gVertical) > 4 ? "bg-red-500" : "bg-blue-500"}`}
+                        style={{
+                          width: `${Math.min(100, Math.abs(stats.gVertical) * 10)}%`,
+                          left: stats.gVertical < 0 ? `${50 - Math.min(50, Math.abs(stats.gVertical) * 10)}%` : "50%",
+                          position: "absolute",
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="flex justify-between text-xs text-slate-500 mb-1 font-bold">
+                      <span>LATERAL G</span>
+                      <span className={Math.abs(stats.gLateral) > 2 ? "text-red-500" : "text-slate-800"}>
+                        {stats.gLateral} G
+                      </span>
+                    </div>
+                    <div className="h-2 bg-slate-200 rounded-full overflow-hidden relative">
+                      <div className="absolute top-0 bottom-0 w-0.5 bg-slate-400 left-1/2" />
+                      <div
+                        className="h-full bg-yellow-500"
+                        style={{
+                          width: `${Math.min(100, Math.abs(stats.gLateral) * 20)}%`,
+                          left: stats.gLateral < 0 ? `${50 - Math.min(50, Math.abs(stats.gLateral) * 20)}%` : "50%",
+                          position: "absolute",
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="pt-2 border-t border-slate-200">
+                    <div className="flex justify-between text-[10px] text-slate-400 mb-1 font-bold uppercase">
+                      <span>Energy</span>
+                    </div>
+                    <div className="flex h-16 items-end gap-1">
+                      <div className="w-1/2 h-full bg-emerald-100 rounded-t relative overflow-hidden">
+                        <div
+                          className="absolute bottom-0 w-full bg-emerald-500 rounded-t"
+                          style={{ height: `${Math.min(100, (stats.ke / maxEnergyRef.current) * 100)}%` }}
+                        />
+                        <div className="absolute top-1 w-full text-center text-[9px] font-bold text-emerald-700">KE</div>
+                      </div>
+                      <div className="w-1/2 h-full bg-purple-100 rounded-t relative overflow-hidden">
+                        <div
+                          className="absolute bottom-0 w-full bg-purple-500 rounded-t"
+                          style={{ height: `${Math.min(100, (stats.pe / maxEnergyRef.current) * 100)}%` }}
+                        />
+                        <div className="absolute top-1 w-full text-center text-[9px] font-bold text-purple-700">PE</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Builder Toolbar */}
+            <div className="pointer-events-auto self-start mt-4 flex flex-col gap-3">
+              {Object.entries(SEGMENT_DEFS).map(([key, def]) => {
+                if (key === "START") return null;
+                return (
+                  <div key={key} className="group relative flex items-center hover:z-30">
+                    <button
+                      onClick={() => addSegment(key)}
+                      className="w-14 h-14 bg-white hover:bg-blue-50 text-slate-700 hover:text-blue-600 border border-slate-200 hover:border-blue-300 rounded-xl flex flex-col items-center justify-center gap-1 transition-all shadow-md active:scale-95 z-20 relative"
+                    >
+                      <Icon name={def.icon} />
+                      <span className="text-[10px] font-bold uppercase">{def.label.split(" ")[0]}</span>
+                    </button>
+
+                    {def.variants && (
+                      <div className="submenu absolute left-12 ml-2 pl-4 flex gap-2 opacity-0 invisible -translate-x-4 transition-all duration-200 z-10">
+                        <div className="relative z-10 flex gap-2 bg-white p-2 rounded-xl border border-slate-200 shadow-xl">
+                          {def.variants.map((v) => (
+                            <button
+                              key={v.id}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                addSegment(key, v.id);
+                              }}
+                              className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-slate-50 text-xs font-bold whitespace-nowrap transition-colors border border-transparent hover:border-slate-200"
+                              style={{ color: "#" + v.color.toString(16).padStart(6, "0") }}
+                            >
+                              {v.id === "CHAIN" && <Icon name="chevrons-up" size={14} />}
+                              {v.id === "BOOST" && <Icon name="zap" size={14} />}
+                              {v.id === "BRAKE" && <Icon name="anchor" size={14} />}
+                              {v.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+
+              <div className="h-px bg-slate-300 my-2 w-14" />
+
+              <button
+                onClick={undo}
+                className="w-14 h-14 bg-white hover:bg-red-50 text-slate-600 hover:text-red-500 border border-slate-200 hover:border-red-200 rounded-xl flex items-center justify-center transition-all shadow-md"
+              >
+                <Icon name="rotate-ccw" />
               </button>
             </div>
 
-            <div className="space-y-4">
-              <div>
-                <div className="flex justify-between text-xs text-slate-500 mb-1 font-bold">
-                  <span>VERTICAL G</span>
-                  <span className={Math.abs(stats.gVertical) > 4 ? "text-red-500" : "text-slate-800"}>
-                    {stats.gVertical} G
-                  </span>
-                </div>
-                <div className="h-2 bg-slate-200 rounded-full overflow-hidden relative">
-                  <div className="absolute top-0 bottom-0 w-0.5 bg-slate-400 left-1/2"></div>
-                  <div
-                    className={`h-full ${Math.abs(stats.gVertical) > 4 ? "bg-red-500" : "bg-blue-500"}`}
-                    style={{
-                      width: `${Math.min(100, Math.abs(stats.gVertical) * 10)}%`,
-                      left: stats.gVertical < 0 ? `${50 - Math.min(50, Math.abs(stats.gVertical) * 10)}%` : "50%",
-                      position: "absolute",
-                    }}
-                  />
-                </div>
-              </div>
+            {/* Dashboard */}
+            <div className="pointer-events-auto self-center bg-white/85 backdrop-blur-md border border-white/60 shadow-[0_4px_20px_rgba(0,0,0,0.08)] rounded-2xl p-2 flex items-center gap-4 pr-6 mt-auto flex-wrap">
+              <button
+                onClick={() => setIsSimulating((v) => !v)}
+                className={`w-16 h-16 rounded-xl flex items-center justify-center transition-all shadow-lg ${
+                  isSimulating ? "bg-amber-400 text-black animate-pulse" : "bg-green-500 hover:bg-green-400 text-white"
+                }`}
+              >
+                <Icon name={isSimulating ? "square" : "play"} size={24} />
+              </button>
 
-              <div>
-                <div className="flex justify-between text-xs text-slate-500 mb-1 font-bold">
-                  <span>LATERAL G</span>
-                  <span className={Math.abs(stats.gLateral) > 2 ? "text-red-500" : "text-slate-800"}>
-                    {stats.gLateral} G
-                  </span>
-                </div>
-                <div className="h-2 bg-slate-200 rounded-full overflow-hidden relative">
-                  <div className="absolute top-0 bottom-0 w-0.5 bg-slate-400 left-1/2"></div>
-                  <div
-                    className="h-full bg-yellow-500"
-                    style={{
-                      width: `${Math.min(100, Math.abs(stats.gLateral) * 20)}%`,
-                      left: stats.gLateral < 0 ? `${50 - Math.min(50, Math.abs(stats.gLateral) * 20)}%` : "50%",
-                      position: "absolute",
-                    }}
-                  />
-                </div>
-              </div>
+              <button
+                onClick={resetSim}
+                className="w-12 h-12 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center"
+              >
+                <Icon name="refresh-cw" />
+              </button>
 
-              <div className="pt-2 border-t border-slate-200">
-                <div className="flex justify-between text-[10px] text-slate-400 mb-1 font-bold uppercase">
-                  <span>Energy (J/kg)</span>
-                </div>
-                <div className="flex h-16 items-end gap-1">
-                  <div className="w-1/2 h-full bg-emerald-100 rounded-t relative group overflow-hidden">
-                    <div
-                      className="absolute bottom-0 w-full bg-emerald-500 rounded-t"
-                      style={{ height: `${Math.min(100, (stats.ke / maxEnergyRef.current) * 100)}%` }}
-                    />
-                    <div className="absolute top-1 w-full text-center text-[9px] font-bold text-emerald-700">KE</div>
+              <button
+                onClick={() => setCameraMode((m) => (m === "ORBIT" ? "RIDE" : "ORBIT"))}
+                className={`px-4 py-3 rounded-xl font-bold text-sm flex items-center gap-2 transition-colors ${
+                  cameraMode === "RIDE" ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                }`}
+              >
+                <Icon name="video" />
+                {cameraMode === "RIDE" ? "RIDE CAM" : "ORBIT"}
+              </button>
+
+              <div className="flex gap-8 ml-2">
+                <div>
+                  <div className="text-[10px] text-slate-400 font-bold tracking-wider">SPEED</div>
+                  <div className="text-2xl font-mono font-bold text-slate-800">
+                    {stats.velocity} <span className="text-sm text-slate-500">km/h</span>
                   </div>
-                  <div className="w-1/2 h-full bg-purple-100 rounded-t relative group overflow-hidden">
-                    <div
-                      className="absolute bottom-0 w-full bg-purple-500 rounded-t"
-                      style={{ height: `${Math.min(100, (stats.pe / maxEnergyRef.current) * 100)}%` }}
-                    />
-                    <div className="absolute top-1 w-full text-center text-[9px] font-bold text-purple-700">PE</div>
+                </div>
+                <div>
+                  <div className="text-[10px] text-slate-400 font-bold tracking-wider">TOTAL G</div>
+                  <div className={`text-2xl font-mono font-bold ${Math.abs(stats.gTotal) > 4 ? "text-red-500" : "text-slate-800"}`}>
+                    {stats.gTotal} <span className="text-sm text-slate-500">G</span>
                   </div>
                 </div>
               </div>
             </div>
-          </div>
-        )}
 
-        {/* Builder Toolbar */}
-        <div className="pointer-events-auto self-start mt-4 flex flex-col gap-3">
-          {Object.entries(SEGMENT_DEFS).map(([key, def]) => {
-            if (key === "START") return null;
-            return (
-              <div key={key} className="group relative flex items-center hover:z-30">
-                <button
-                  onClick={() => addSegment(key)}
-                  className="w-14 h-14 bg-white hover:bg-blue-50 text-slate-700 hover:text-blue-600 border border-slate-200 hover:border-blue-300 rounded-xl flex flex-col items-center justify-center gap-1 transition-all shadow-md active:scale-95 z-20 relative"
-                >
-                  <Icon name={def.icon} />
-                  <span className="text-[10px] font-bold uppercase">{def.label.split(" ")[0]}</span>
-                </button>
-
-                {def.variants && (
-                  <div className="submenu absolute left-12 ml-2 pl-4 flex gap-2 opacity-0 invisible -translate-x-4 transition-all duration-200 z-10 before:absolute before:inset-0 before:-left-4 before:w-full before:h-full before:content-[''] before:z-[-1]">
-                    <div className="relative z-10 flex gap-2 bg-white p-2 rounded-xl border border-slate-200 shadow-xl">
-                      {def.variants.map((v) => (
-                        <button
-                          key={v.id}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            addSegment(key, v.id);
-                          }}
-                          className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-slate-50 text-xs font-bold whitespace-nowrap transition-colors border border-transparent hover:border-slate-200"
-                          style={{ color: `#${v.color.toString(16).padStart(6, "0")}` }}
-                        >
-                          {v.id === "CHAIN" && <Icon name="chevrons-up" size={14} />}
-                          {v.id === "BOOST" && <Icon name="zap" size={14} />}
-                          {v.id === "BRAKE" && <Icon name="anchor" size={14} />}
-                          {v.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-
-          <div className="h-px bg-slate-300 my-2 w-14" />
-
-          <button
-            onClick={undo}
-            className="w-14 h-14 bg-white hover:bg-red-50 text-slate-600 hover:text-red-500 border border-slate-200 hover:border-red-200 rounded-xl flex items-center justify-center transition-all shadow-md"
-          >
-            <Icon name="rotate-ccw" />
-          </button>
-        </div>
-
-        {/* Dashboard */}
-        <div className="pointer-events-auto self-center glass-panel rounded-2xl p-2 flex items-center gap-6 pr-8 mt-auto">
-          <button
-            onClick={() => setIsSimulating((v) => !v)}
-            className={`w-16 h-16 rounded-xl flex items-center justify-center transition-all shadow-lg ${
-              isSimulating ? "bg-amber-400 text-black animate-pulse" : "bg-green-500 hover:bg-green-400 text-white"
-            }`}
-          >
-            <Icon name={isSimulating ? "square" : "play"} size={24} />
-          </button>
-
-          <button
-            onClick={resetSim}
-            className="w-12 h-12 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center"
-          >
-            <Icon name="refresh-cw" />
-          </button>
-
-          <div className="h-10 w-px bg-slate-300 mx-2" />
-
-          <button
-            onClick={() => setCameraMode((m) => (m === "ORBIT" ? "RIDE" : "ORBIT"))}
-            className={`px-4 py-3 rounded-xl font-bold text-sm flex items-center gap-2 transition-colors ${
-              cameraMode === "RIDE" ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-            }`}
-          >
-            <Icon name="video" />
-            {cameraMode === "RIDE" ? "RIDE CAM" : "ORBIT"}
-          </button>
-
-          <div className="flex gap-8 ml-4">
-            <div>
-              <div className="text-[10px] text-slate-400 font-bold tracking-wider">SPEED</div>
-              <div className="text-2xl font-mono font-bold text-slate-800">
-                {stats.velocity} <span className="text-sm text-slate-500">km/h</span>
-              </div>
-            </div>
-            <div>
-              <div className="text-[10px] text-slate-400 font-bold tracking-wider">TOTAL G</div>
-              <div className={`text-2xl font-mono font-bold ${Math.abs(stats.gTotal) > 4 ? "text-red-500" : "text-slate-800"}`}>
-                {stats.gTotal} <span className="text-sm text-slate-500">G</span>
-              </div>
+            {/* Tiny hint (optional) */}
+            <div className="pointer-events-none self-center mb-2 text-xs text-slate-600/80">
+              Scroll to zoom • Right-drag to pan • WASD to move
             </div>
           </div>
         </div>
       </div>
-
-      {/* NOTE: parent controls height. This component fills its container. */}
     </div>
   );
 }

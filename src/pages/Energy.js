@@ -85,9 +85,9 @@ export default function Energy() {
             </p>
           </HiddenExposition>
 
-          <div className="w-full h-[80vh] rounded-2xl overflow-hidden">
-      <CoasterBuilder3D />
-    </div>
+          <div className="mx-auto w-full max-w-5xl">
+          <CoasterBuilder3D className="w-full h-full" />
+          </div>
 
           <h2>Practice</h2>
           <div className="px-6 py-0 pb-24">
