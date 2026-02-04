@@ -8,33 +8,55 @@ const SEGMENT_DEFS = {
   START: { label: "Station", icon: "flag", color: 0x334155 },
   STRAIGHT: {
     label: "Straight",
-    len: 30,
+    len: 20,
     icon: "minus",
     variants: [
       { id: "NORMAL", label: "Standard", color: 0x3b82f6 },
-      { id: "BOOST", label: "Booster", color: 0x10b981, force: 12 },
-      { id: "BRAKE", label: "Brakes", color: 0xef4444, drag: 0.15 },
+      { id: "BOOST", label: "Booster", color: 0x10b981, force: 20 },
+      { id: "BRAKE", label: "Brakes", color: 0xef4444, drag: 0.3 },
     ],
   },
   UP: {
     label: "Hill Up",
-    len: 40,
-    height: 20,
+    len: 30,
+    height: 15,
     icon: "arrow-up",
     variants: [
       { id: "NORMAL", label: "Standard", color: 0x3b82f6 },
-      { id: "CHAIN", label: "Chain Lift", color: 0xb45309, chainSpeed: 6 },
+      { id: "CHAIN", label: "Chain Lift", color: 0xb45309, chainSpeed: 8 },
     ],
   },
-  DOWN: { label: "Drop", len: 40, height: -20, icon: "arrow-down", color: 0x3b82f6 },
-  LEFT: { label: "Left Turn", len: 40, radius: 25, icon: "corner-up-left", color: 0x3b82f6 },
-  RIGHT: { label: "Right Turn", len: 40, radius: 25, icon: "corner-up-right", color: 0x3b82f6 },
-  LOOP: { label: "Loop", len: 10, radius: 20, icon: "rotate-ccw", color: 0x3b82f6 },
+  DOWN: { label: "Drop", len: 30, height: -15, icon: "arrow-down", color: 0x3b82f6 },
+  LEFT: {
+    label: "Left Turn",
+    len: 30,
+    radius: 20,
+    icon: "corner-up-left",
+    color: 0x3b82f6,
+    variants: [
+      { id: "TIGHT", label: "Tight", radius: 10, color: 0x3b82f6 },
+      { id: "NORMAL", label: "Normal", radius: 20, color: 0x3b82f6 },
+      { id: "WIDE", label: "Wide", radius: 40, color: 0x3b82f6 },
+    ],
+  },
+  RIGHT: {
+    label: "Right Turn",
+    len: 30,
+    radius: 20,
+    icon: "corner-up-right",
+    color: 0x3b82f6,
+    variants: [
+      { id: "TIGHT", label: "Tight", radius: 10, color: 0x3b82f6 },
+      { id: "NORMAL", label: "Normal", radius: 20, color: 0x3b82f6 },
+      { id: "WIDE", label: "Wide", radius: 40, color: 0x3b82f6 },
+    ],
+  },
+  LOOP: { label: "Loop", len: 10, radius: 12, icon: "rotate-ccw", color: 0x3b82f6 },
 };
 
 const GRAVITY = 9.81;
-const FRICTION_COEFF = 0.005;
-const INITIAL_SPEED = 10;
+const FRICTION_COEFF = 0.002;
+const INITIAL_SPEED = 15;
 
 // Minimal SVG icon set (no dependency)
 function Icon({ name, size = 18 }) {
@@ -104,6 +126,18 @@ function Icon({ name, size = 18 }) {
       <>
         <polyline points="17 11 12 6 7 11" />
         <polyline points="17 18 12 13 7 18" />
+      </>
+    ),
+    minimize: (
+      <>
+        <polyline points="4 14 10 14 10 20" />
+        <polyline points="20 10 14 10 14 4" />
+      </>
+    ),
+    maximize: (
+      <>
+        <polyline points="15 3 21 3 21 9" />
+        <polyline points="9 21 3 21 3 15" />
       </>
     ),
     activity: <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />,
@@ -824,7 +858,8 @@ if (d.state === 5 && cartRef.current) {
     points.push(pos.clone());
     colors.push(0.3, 0.3, 0.3);
 
-    segments.forEach((seg) => {
+    for (let i = 0; i < segments.length; i++) {
+      const seg = segments[i];
       const def = SEGMENT_DEFS[seg.type];
       let segColor = def.color || 0xff3333;
 
@@ -843,16 +878,50 @@ if (d.state === 5 && cartRef.current) {
         pos.add(dir.clone().multiplyScalar(def.len));
         points.push(pos.clone());
       } else if (seg.type === "UP" || seg.type === "DOWN") {
-        const p1 = pos.clone().add(dir.clone().multiplyScalar(def.len * 0.33));
-        p1.y += def.height * 0.1;
-        const p2 = pos.clone().add(dir.clone().multiplyScalar(def.len * 0.66));
-        p2.y += def.height * 0.9;
-        pos.add(dir.clone().multiplyScalar(def.len));
-        pos.y += def.height;
-        points.push(p1, p2, pos.clone());
+        let count = 1;
+        let j = i + 1;
+        while (j < segments.length && segments[j].type === seg.type) {
+          count += 1;
+          j += 1;
+        }
+
+        const totalLen = def.len * count;
+        const totalHeight = def.height * count;
+        const steps = 15 * count;
+        const startPos = pos.clone();
+        const endPos = pos.clone().add(dir.clone().multiplyScalar(totalLen));
+        endPos.y += totalHeight;
+
+        for (let k = 1; k <= steps; k++) {
+          const t = k / steps;
+          const smoothT = t * t * (3 - 2 * t);
+          const curPos = startPos.clone().lerp(endPos, t);
+          curPos.y = startPos.y + smoothT * totalHeight;
+          points.push(curPos);
+        }
+
+        pos.copy(points[points.length - 1]);
+
+        const endIdx = points.length;
+        for (let k = startIdx; k < endIdx; k++) {
+          colors.push(colorObj.r, colorObj.g, colorObj.b);
+        }
+
+        segmentInfoList.push({
+          type: seg.type,
+          variant: seg.variant,
+          endPointIndex: endIdx - 1,
+        });
+
+        i += count - 1;
+        continue;
       } else if (seg.type === "LEFT" || seg.type === "RIGHT") {
-        const r = def.radius || 25;
-        const steps = 8;
+        let r = def.radius || 25;
+        if (def.variants) {
+          const v = def.variants.find((vv) => vv.id === seg.variant);
+          if (v?.radius) r = v.radius;
+        }
+        const steps = 20;
 
         const rightVec = new THREE.Vector3().crossVectors(dir, up).normalize();
         const leftVec = new THREE.Vector3().crossVectors(up, dir).normalize();
@@ -862,8 +931,8 @@ if (d.state === 5 && cartRef.current) {
         const startVec = pos.clone().sub(turnCenter);
         const totalAngle = seg.type === "LEFT" ? Math.PI / 2 : -Math.PI / 2;
 
-        for (let i = 1; i <= steps; i++) {
-          const tt = i / steps;
+        for (let k = 1; k <= steps; k++) {
+          const tt = k / steps;
           const theta = tt * totalAngle;
           const rotatedVec = startVec.clone().applyAxisAngle(up, theta);
           const nextPt = turnCenter.clone().add(rotatedVec);
@@ -875,16 +944,16 @@ if (d.state === 5 && cartRef.current) {
         dir.applyAxisAngle(up, totalAngle);
       } else if (seg.type === "LOOP") {
         const r = def.radius;
-        const steps = 24;
+        const steps = 40;
         const forward = dir.clone().normalize();
         const upVec = new THREE.Vector3(0, 1, 0);
 
-        for (let i = 1; i <= steps; i++) {
-          const tt = i / steps;
+        for (let k = 1; k <= steps; k++) {
+          const tt = k / steps;
           const angle = tt * Math.PI * 2;
           const loopY = (1 - Math.cos(angle)) * r;
           const loopFwd = Math.sin(angle) * r;
-          const spacing = tt * 2;
+          const spacing = tt * 5;
 
           const finalPt = pos
             .clone()
@@ -897,7 +966,7 @@ if (d.state === 5 && cartRef.current) {
       }
 
       const endIdx = points.length;
-      for (let i = startIdx; i < endIdx; i++) {
+      for (let k = startIdx; k < endIdx; k++) {
         colors.push(colorObj.r, colorObj.g, colorObj.b);
       }
 
@@ -906,7 +975,7 @@ if (d.state === 5 && cartRef.current) {
         variant: seg.variant,
         endPointIndex: endIdx - 1,
       });
-    });
+    }
 
     // Energy scaling
     const maxY = points.reduce((m, p) => Math.max(m, p.y), 0);
@@ -1106,8 +1175,8 @@ if (isCircuit && riderRef.current === null) {
       // Along-track acceleration: a = -g sin(theta) where sin(theta)=tangent.y
       const accelG = -GRAVITY * tangent.y;
 
-      // Friction opposes signed velocity
-      let friction = -FRICTION_COEFF * phys.velocity;
+      // Friction opposes signed velocity (quadratic drag)
+      let friction = -FRICTION_COEFF * phys.velocity * Math.abs(phys.velocity);
       let accelExternal = 0;
 
       // Segment logic
@@ -1135,6 +1204,9 @@ if (isCircuit && riderRef.current === null) {
 
       // Integrate velocity (✅ allow negative)
       phys.velocity += (accelG + friction + accelExternal) * dt;
+
+      if (phys.velocity > 60) phys.velocity = 60;
+      if (phys.velocity < -60) phys.velocity = -60;
 
       // Deadband near zero to reduce jitter
       if (Math.abs(phys.velocity) < 0.02) phys.velocity = 0;
@@ -1230,6 +1302,10 @@ if (isCircuit && riderRef.current === null) {
 
   const undo = () => {
     setSegments((prev) => (prev.length > 1 ? prev.slice(0, -1) : prev));
+  };
+
+  const clearTrack = () => {
+    setSegments([{ type: "START", variant: "NORMAL" }]);
   };
 
   // Re-resize when focus/fullscreen changes (container geometry changes)
@@ -1354,7 +1430,7 @@ if (isCircuit && riderRef.current === null) {
 
                   <div className="pt-2 border-t border-slate-200">
                     <div className="flex justify-between text-[10px] text-slate-400 mb-1 font-bold uppercase">
-                      <span>Energy</span>
+                      <span>Energy (J/kg)</span>
                     </div>
                     <div className="flex h-16 items-end gap-1">
                       <div className="w-1/2 h-full bg-emerald-100 rounded-t relative overflow-hidden">
@@ -1407,6 +1483,8 @@ if (isCircuit && riderRef.current === null) {
                               {v.id === "CHAIN" && <Icon name="chevrons-up" size={14} />}
                               {v.id === "BOOST" && <Icon name="zap" size={14} />}
                               {v.id === "BRAKE" && <Icon name="anchor" size={14} />}
+                              {v.id === "TIGHT" && <Icon name="minimize" size={14} />}
+                              {v.id === "WIDE" && <Icon name="maximize" size={14} />}
                               {v.label}
                             </button>
                           ))}
@@ -1424,6 +1502,13 @@ if (isCircuit && riderRef.current === null) {
                 className="w-14 h-14 bg-white hover:bg-red-50 text-slate-600 hover:text-red-500 border border-slate-200 hover:border-red-200 rounded-xl flex items-center justify-center transition-all shadow-md"
               >
                 <Icon name="rotate-ccw" />
+              </button>
+
+              <button
+                onClick={clearTrack}
+                className="w-14 h-14 bg-white hover:bg-red-50 text-slate-400 hover:text-red-500 border border-slate-200 hover:border-red-200 rounded-xl flex items-center justify-center transition-all shadow-md text-xs font-bold"
+              >
+                CLR
               </button>
             </div>
 
