@@ -3,7 +3,6 @@ import React, { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import "./coaster.css";
 
-
 const SEGMENT_DEFS = {
   START: { label: "Station", icon: "flag", color: 0x334155 },
   STRAIGHT: {
@@ -26,7 +25,13 @@ const SEGMENT_DEFS = {
       { id: "CHAIN", label: "Chain Lift", color: 0xb45309, chainSpeed: 8 },
     ],
   },
-  DOWN: { label: "Drop", len: 30, height: -15, icon: "arrow-down", color: 0x3b82f6 },
+  DOWN: {
+    label: "Drop",
+    len: 30,
+    height: -15,
+    icon: "arrow-down",
+    color: 0x3b82f6,
+  },
   LEFT: {
     label: "Left Turn",
     len: 30,
@@ -55,7 +60,7 @@ const SEGMENT_DEFS = {
 };
 
 const GRAVITY = 9.81;
-const FRICTION_COEFF = 0.002;
+const FRICTION_COEFF = 0.0010;
 const INITIAL_SPEED = 15;
 
 // Minimal SVG icon set (no dependency)
@@ -185,8 +190,8 @@ export default function CoasterBuilder3D({ height = 800, className = "" }) {
   });
 
   // DOM refs
-  const wrapRef = useRef(null);   // outer wrapper (for focus/fullscreen)
-  const mountRef = useRef(null);  // canvas sizing context
+  const wrapRef = useRef(null); // outer wrapper (for focus/fullscreen)
+  const mountRef = useRef(null); // canvas sizing context
 
   // Three refs
   const sceneRef = useRef(null);
@@ -197,27 +202,25 @@ export default function CoasterBuilder3D({ height = 800, className = "" }) {
   const birdsRef = useRef([]);
   const deerRef = useRef([]);
 
+  // Track meta (used for lap wrap + deer boarding)
+  const trackMetaRef = useRef({
+    isCircuit: false,
+    start: new THREE.Vector3(0, 0, 0),
+    end: new THREE.Vector3(0, 0, 0),
+    startTangent: new THREE.Vector3(0, 0, 1),
+    endTangent: new THREE.Vector3(0, 0, 1),
+  });
 
-// Track meta (used for lap wrap + deer boarding)
-const trackMetaRef = useRef({
-  isCircuit: false,
-  start: new THREE.Vector3(0, 0, 0),
-  end: new THREE.Vector3(0, 0, 0),
-  startTangent: new THREE.Vector3(0, 0, 1),
-  endTangent: new THREE.Vector3(0, 0, 1),
-});
+  // When a circuit is formed, we choose ONE closest deer to the station and have it run to the cart.
+  const riderRef = useRef(null);
 
-// When a circuit is formed, we choose ONE closest deer to the station and have it run to the cart.
-// This ref stores the index of the deer that is currently "assigned" as rider (or null if none).
-const riderRef = useRef(null);
+  // Mirror sim state for hot loops
+  const isSimulatingRef = useRef(isSimulating);
+  useEffect(() => {
+    isSimulatingRef.current = isSimulating;
+  }, [isSimulating]);
 
-// Mirror sim state for hot loops
-const isSimulatingRef = useRef(isSimulating);
-useEffect(() => {
-  isSimulatingRef.current = isSimulating;
-}, [isSimulating]);
-
-// Control/physics refs
+  // Control/physics refs
   const controlsRef = useRef({
     rotation: 0.5,
     pitch: 0.5,
@@ -225,12 +228,14 @@ useEffect(() => {
     target: new THREE.Vector3(0, 0, 0),
   });
   const keysRef = useRef({ w: false, a: false, s: false, d: false });
+
   const physicsRef = useRef({
     t: 0,
     velocity: INITIAL_SPEED,
     lastVel: new THREE.Vector3(),
     lastBinormal: new THREE.Vector3(1, 0, 0),
   });
+
   const segmentsMapRef = useRef([]);
   const maxEnergyRef = useRef(5000);
 
@@ -239,14 +244,29 @@ useEffect(() => {
 
   // State mirrors for hot loops
   const cameraModeRef = useRef(cameraMode);
-  useEffect(() => { cameraModeRef.current = cameraMode; }, [cameraMode]);
+  useEffect(() => {
+    cameraModeRef.current = cameraMode;
+  }, [cameraMode]);
+
+  // Smooth render state (prev/curr) for interpolation + fixed-step accumulator
+  const renderStateRef = useRef({
+    prevT: 0,
+    currT: 0,
+    prevVel: INITIAL_SPEED,
+    currVel: INITIAL_SPEED,
+    accumulator: 0,
+    lastTime: performance.now(),
+    statsTimer: 0,
+  });
 
   // Lock page scroll in focus mode
   useEffect(() => {
     if (!isFocus) return;
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-    return () => { document.body.style.overflow = prev; };
+    return () => {
+      document.body.style.overflow = prev;
+    };
   }, [isFocus]);
 
   // Fullscreen state tracking
@@ -280,6 +300,113 @@ useEffect(() => {
     } catch {
       // Browser may block; focus mode still works.
     }
+  };
+
+  // --- Physics single fixed-step (called from RAF loop) ---
+  const stepPhysics = (dt) => {
+    const curve = curveRef.current;
+    const cart = cartRef.current;
+    if (!curve || !cart) return null;
+
+    const phys = physicsRef.current;
+    const map = segmentsMapRef.current;
+
+    const currentSeg =
+      map.find((s) => phys.t >= s.startT && phys.t < s.endT) || map[map.length - 1];
+
+    const point = curve.getPointAt(phys.t);
+    const tangent = curve.getTangentAt(phys.t).normalize();
+    const worldUp = new THREE.Vector3(0, 1, 0);
+
+    // Parallel transport-ish frame (your logic)
+    let frameBinormal = phys.lastBinormal.clone().projectOnPlane(tangent).normalize();
+    if (frameBinormal.length() === 0) frameBinormal = new THREE.Vector3(1, 0, 0);
+
+    let worldBinormal = new THREE.Vector3().crossVectors(tangent, worldUp);
+    if (worldBinormal.length() > 0.9) {
+      worldBinormal.normalize();
+      if (worldBinormal.dot(frameBinormal) > 0.8) frameBinormal.copy(worldBinormal);
+    }
+    phys.lastBinormal.copy(frameBinormal);
+
+    const normal = new THREE.Vector3().crossVectors(frameBinormal, tangent).normalize();
+    const localUp = normal;
+
+    // Along-track acceleration
+    const accelG = -GRAVITY * tangent.y;
+
+    // Friction
+    let friction = -FRICTION_COEFF * phys.velocity * Math.abs(phys.velocity);
+    let accelExternal = 0;
+
+    // Segment logic
+    if (currentSeg) {
+      if (currentSeg.type === "UP" && currentSeg.variant === "CHAIN") {
+        const def = SEGMENT_DEFS.UP.variants.find((v) => v.id === "CHAIN");
+        const target = def?.chainSpeed ?? 5;
+        if (phys.velocity < target) {
+          phys.velocity = THREE.MathUtils.lerp(phys.velocity, target, 0.1);
+          friction = 0;
+        }
+      }
+
+      if (currentSeg.type === "STRAIGHT" && currentSeg.variant === "BOOST") {
+        const def = SEGMENT_DEFS.STRAIGHT.variants.find((v) => v.id === "BOOST");
+        accelExternal = def?.force ?? 12;
+      }
+
+      if (currentSeg.type === "STRAIGHT" && currentSeg.variant === "BRAKE") {
+        const def = SEGMENT_DEFS.STRAIGHT.variants.find((v) => v.id === "BRAKE");
+        friction = -phys.velocity * (def?.drag ?? 2.0);
+      }
+    }
+
+    // Integrate velocity
+    phys.velocity += (accelG + friction + accelExternal) * dt;
+    if (phys.velocity > 60) phys.velocity = 60;
+    if (phys.velocity < -60) phys.velocity = -60;
+
+    // Deadband near zero
+    if (Math.abs(phys.velocity) < 0.02) phys.velocity = 0;
+
+    // Integrate position along curve (Curve.getPointAt is arc-length parameterized)
+    const len = curve.getLength();
+    phys.t += (phys.velocity * dt) / len;
+
+    // Wrap/clamp
+    const isCircuitNow = !!trackMetaRef.current?.isCircuit;
+    if (isCircuitNow) {
+      while (phys.t >= 1) phys.t -= 1;
+      while (phys.t < 0) phys.t += 1;
+    } else {
+      if (phys.t >= 1) {
+        phys.t = 0.999999;
+        phys.velocity = 0;
+      }
+      if (phys.t < 0) {
+        phys.t = 0;
+        phys.velocity = 0;
+      }
+    }
+
+    // Telemetry
+    const vVec = tangent.clone().multiplyScalar(phys.velocity);
+    const accelVec = vVec.clone().sub(phys.lastVel).divideScalar(dt);
+    phys.lastVel.copy(vVec);
+
+    const gVec = new THREE.Vector3(0, -GRAVITY, 0);
+    const feltAccel = accelVec.sub(gVec);
+
+    const vertG = feltAccel.dot(localUp) / GRAVITY;
+    const latG = feltAccel.dot(frameBinormal) / GRAVITY;
+    const totalG = feltAccel.length() / GRAVITY;
+
+    const pe = GRAVITY * point.y;
+    const ke = 0.5 * phys.velocity * phys.velocity;
+    const totalE = pe + ke;
+    if (totalE > maxEnergyRef.current) maxEnergyRef.current = totalE;
+
+    return { point, tangent, normal, frameBinormal, vertG, latG, totalG, pe, ke };
   };
 
   // --- Init Three ---
@@ -407,8 +534,10 @@ useEffect(() => {
 
       const legGeo = new THREE.BoxGeometry(0.5, 2.5, 0.5);
       const legPositions = [
-        [-0.4, 1.25, -1.2], [0.4, 1.25, -1.2],
-        [-0.4, 1.25, 1.2], [0.4, 1.25, 1.2],
+        [-0.4, 1.25, -1.2],
+        [0.4, 1.25, -1.2],
+        [-0.4, 1.25, 1.2],
+        [0.4, 1.25, 1.2],
       ];
       const legs = legPositions.map(([x, y, z]) => {
         const leg = new THREE.Mesh(legGeo, deerMat);
@@ -448,8 +577,10 @@ useEffect(() => {
     // Birds
     const birdGeo = new THREE.PlaneGeometry(1.2, 0.4);
     birdGeo.rotateX(-Math.PI / 2);
-    const lWingGeo = birdGeo.clone(); lWingGeo.translate(-0.6, 0, 0);
-    const rWingGeo = birdGeo.clone(); rWingGeo.translate(0.6, 0, 0);
+    const lWingGeo = birdGeo.clone();
+    lWingGeo.translate(-0.6, 0, 0);
+    const rWingGeo = birdGeo.clone();
+    rWingGeo.translate(0.6, 0, 0);
     const birdMat = new THREE.MeshBasicMaterial({ color: 0x333333, side: THREE.DoubleSide });
 
     const birdData = [];
@@ -457,10 +588,14 @@ useEffect(() => {
       const g = new THREE.Group();
       g.add(new THREE.Mesh(lWingGeo, birdMat));
       g.add(new THREE.Mesh(rWingGeo, birdMat));
-      g.position.set((Math.random() - 0.5) * 800, 30 + Math.random() * 40, (Math.random() - 0.5) * 800);
+      g.position.set(
+        (Math.random() - 0.5) * 800,
+        30 + Math.random() * 40,
+        (Math.random() - 0.5) * 800
+      );
       scene.add(g);
 
-      const v = new THREE.Vector3((Math.random() - 0.5), 0, (Math.random() - 0.5))
+      const v = new THREE.Vector3(Math.random() - 0.5, 0, Math.random() - 0.5)
         .normalize()
         .multiplyScalar(0.2 + Math.random() * 0.1);
 
@@ -501,8 +636,12 @@ useEffect(() => {
     let dragType = null;
     let lastMouse = { x: 0, y: 0 };
 
-    const onPointerEnter = () => { isPointerOverSimRef.current = true; };
-    const onPointerLeave = () => { isPointerOverSimRef.current = false; };
+    const onPointerEnter = () => {
+      isPointerOverSimRef.current = true;
+    };
+    const onPointerLeave = () => {
+      isPointerOverSimRef.current = false;
+    };
 
     const onDown = (e) => {
       // Deer click raycast
@@ -539,7 +678,9 @@ useEffect(() => {
       lastMouse = { x: e.clientX, y: e.clientY };
     };
 
-    const onUp = () => { dragType = null; };
+    const onUp = () => {
+      dragType = null;
+    };
 
     const onMove = (e) => {
       if (!dragType || cameraModeRef.current === "RIDE") return;
@@ -550,7 +691,10 @@ useEffect(() => {
 
       if (dragType === "ROTATE") {
         controlsRef.current.rotation -= dx * 0.005;
-        controlsRef.current.pitch = Math.max(0.1, Math.min(1.5, controlsRef.current.pitch + dy * 0.005));
+        controlsRef.current.pitch = Math.max(
+          0.1,
+          Math.min(1.5, controlsRef.current.pitch + dy * 0.005)
+        );
       } else if (dragType === "PAN") {
         const sensitivity = controlsRef.current.zoom * 0.0015;
         const right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
@@ -561,11 +705,11 @@ useEffect(() => {
       }
     };
 
-    // ✅ Wheel zoom without scrolling the page (only when pointer is over canvas)
+    // Wheel zoom without scrolling page (only when pointer over canvas)
     const onWheel = (e) => {
       if (!isPointerOverSimRef.current) return;
       if (cameraModeRef.current === "RIDE") return;
-      e.preventDefault(); // important!
+      e.preventDefault();
       controlsRef.current.zoom = Math.max(10, Math.min(400, controlsRef.current.zoom + e.deltaY * 0.1));
     };
 
@@ -607,21 +751,31 @@ useEffect(() => {
 
     // --- Render loop ---
     let raf = 0;
+
+    const FIXED_DT = 1 / 120; // 120Hz physics = smooth
+    const MAX_DT = 0.05; // clamp tab-switch spikes
+
     const animate = () => {
       raf = requestAnimationFrame(animate);
-      const now = Date.now();
-      const dt = 0.016;
 
-      // Birds
+      const rs = renderStateRef.current;
+      const now = performance.now();
+      let frameDt = (now - rs.lastTime) / 1000;
+      rs.lastTime = now;
+      frameDt = Math.min(MAX_DT, Math.max(0, frameDt));
+
+      // Birds (use frameDt instead of hardcoded dt)
       birdsRef.current.forEach((b) => {
-        b.group.position.add(b.velocity);
+        b.group.position.addScaledVector(b.velocity, frameDt * 60);
         if (Math.abs(b.group.position.x) > 500) b.group.position.x *= -1;
         if (Math.abs(b.group.position.z) > 500) b.group.position.z *= -1;
 
         const lookTarget = b.group.position.clone().add(b.velocity);
         b.group.lookAt(lookTarget);
 
-        if (Math.random() < 0.02) b.velocity.applyAxisAngle(new THREE.Vector3(0, 1, 0), (Math.random() - 0.5) * 0.5);
+        if (Math.random() < 0.02) {
+          b.velocity.applyAxisAngle(new THREE.Vector3(0, 1, 0), (Math.random() - 0.5) * 0.5);
+        }
 
         const flap = Math.sin(now * 0.01 + b.phase) * 0.4;
         b.lWing.rotation.z = flap;
@@ -629,10 +783,10 @@ useEffect(() => {
       });
 
       // Deer animation
-      deerRef.current.forEach((d, di) => {
+      deerRef.current.forEach((d) => {
         // FLIP state
         if (d.state === 3) {
-          d.flipProgress += dt * 2.0;
+          d.flipProgress += frameDt * 2.0;
           if (d.flipProgress >= 1) {
             d.state = 0;
             d.internalGroup.rotation.x = 0;
@@ -642,73 +796,66 @@ useEffect(() => {
             d.internalGroup.position.y = 15 * Math.sin(d.flipProgress * Math.PI);
             d.group.translateZ(0.2);
           }
-          d.legs.forEach((l) => { l.rotation.x = 0; l.rotation.z = 0; });
+          d.legs.forEach((l) => {
+            l.rotation.x = 0;
+            l.rotation.z = 0;
+          });
           return;
         }
 
-// State 4: RUN TO CART
-if (d.state === 4 && cartRef.current) {
-  const target = cartRef.current.position;
-  const dirV = new THREE.Vector3().subVectors(target, d.group.position);
-  dirV.y = 0; // ignore height
-  const dist = dirV.length();
+        // State 4: RUN TO CART
+        if (d.state === 4 && cartRef.current) {
+          const target = cartRef.current.position;
+          const dirV = new THREE.Vector3().subVectors(target, d.group.position);
+          dirV.y = 0;
+          const dist = dirV.length();
 
-  if (dist < 8) {
-    // Caught the cart!
-    d.state = 5; // RIDING
-  } else {
-    dirV.normalize();
+          if (dist < 8) {
+            d.state = 5; // RIDING
+          } else {
+            dirV.normalize();
+            d.group.lookAt(target.x, d.group.position.y, target.z);
+            d.group.position.add(dirV.multiplyScalar(0.8));
+            if (d.internalGroup.rotation.y !== 0) d.internalGroup.rotation.y = 0;
 
-    // Face the cart
-    d.group.lookAt(target.x, d.group.position.y, target.z);
+            const legPhase = now * 0.02;
+            d.legs[0].rotation.x = Math.sin(legPhase) * 0.8;
+            d.legs[1].rotation.x = Math.sin(legPhase + Math.PI) * 0.8;
+            d.legs[2].rotation.x = Math.sin(legPhase + Math.PI) * 0.8;
+            d.legs[3].rotation.x = Math.sin(legPhase) * 0.8;
 
-    // Run fast
-    d.group.position.add(dirV.multiplyScalar(0.8));
+            d.neckPivot.rotation.x = -0.8;
+          }
+          return;
+        }
 
-    // If we were a "strafing deer", running logic overrides that.
-    if (d.internalGroup.rotation.y !== 0) d.internalGroup.rotation.y = 0;
+        // State 5: RIDING
+        if (d.state === 5 && cartRef.current) {
+          d.group.position.copy(cartRef.current.position);
+          d.group.quaternion.copy(cartRef.current.quaternion);
 
-    // Fast run animation
-    const legPhase = now * 0.02;
-    d.legs[0].rotation.x = Math.sin(legPhase) * 0.8;
-    d.legs[1].rotation.x = Math.sin(legPhase + Math.PI) * 0.8;
-    d.legs[2].rotation.x = Math.sin(legPhase + Math.PI) * 0.8;
-    d.legs[3].rotation.x = Math.sin(legPhase) * 0.8;
+          d.group.translateY(-0.5);
+          d.group.translateZ(-1.0);
 
-    // Neck forward
-    d.neckPivot.rotation.x = -0.8;
-  }
-  return;
-}
+          d.legs.forEach((l) => {
+            l.rotation.x = -1.5;
+            l.rotation.z = 0;
+          });
+          d.neckPivot.rotation.x = -0.5;
+          return;
+        }
 
-// State 5: RIDING
-if (d.state === 5 && cartRef.current) {
-  d.group.position.copy(cartRef.current.position);
-  d.group.quaternion.copy(cartRef.current.quaternion);
-
-  // Sit in back seat (offset)
-  d.group.translateY(-0.5);
-  d.group.translateZ(-1.0);
-
-  // Sit pose
-  d.legs.forEach((l) => { l.rotation.x = -1.5; l.rotation.z = 0; });
-  d.neckPivot.rotation.x = -0.5;
-  return;
-}
-
-
-
-        d.timer -= dt;
+        d.timer -= frameDt;
         if (d.timer <= 0) {
           const roll = Math.random();
           if (roll < 0.3) {
-            d.state = 0; // idle
+            d.state = 0;
             d.timer = 2 + Math.random() * 3;
           } else if (roll < 0.6) {
-            d.state = 2; // eat
+            d.state = 2;
             d.timer = 3 + Math.random() * 4;
           } else {
-            d.state = 1; // walk
+            d.state = 1;
             d.timer = 4 + Math.random() * 5;
             const angle = Math.random() * Math.PI * 2;
             const dist = 20 + Math.random() * 30;
@@ -763,15 +910,84 @@ if (d.state === 5 && cartRef.current) {
         }
       });
 
+      // --- Smooth physics + interpolated render ---
+      if (isSimulatingRef.current && curveRef.current && cartRef.current) {
+        rs.accumulator += frameDt;
+
+        while (rs.accumulator >= FIXED_DT) {
+          rs.prevT = physicsRef.current.t;
+          rs.prevVel = physicsRef.current.velocity;
+
+          const telem = stepPhysics(FIXED_DT);
+
+          rs.currT = physicsRef.current.t;
+          rs.currVel = physicsRef.current.velocity;
+
+          // Throttle React updates (prevents re-render jitter)
+          rs.statsTimer += FIXED_DT;
+          if (telem && rs.statsTimer >= 0.05) {
+            rs.statsTimer = 0;
+            setStats({
+              velocity: Math.abs(physicsRef.current.velocity * 3.6).toFixed(0),
+              gVertical: telem.vertG.toFixed(1),
+              gLateral: telem.latG.toFixed(1),
+              gTotal: telem.totalG.toFixed(1),
+              pe: telem.pe.toFixed(0),
+              ke: telem.ke.toFixed(0),
+            });
+          }
+
+          rs.accumulator -= FIXED_DT;
+        }
+
+        const alpha = rs.accumulator / FIXED_DT;
+        const isCircuitNow = !!trackMetaRef.current?.isCircuit;
+
+        // Handle wrap for interpolation on circuits (avoid lerp across 0/1 discontinuity)
+        let t0 = rs.prevT;
+        let t1 = rs.currT;
+        if (isCircuitNow) {
+          const d = t1 - t0;
+          if (d > 0.5) t0 += 1;
+          else if (d < -0.5) t1 += 1;
+        }
+        let tInterp = THREE.MathUtils.lerp(t0, t1, alpha);
+        if (isCircuitNow) tInterp = ((tInterp % 1) + 1) % 1;
+
+        const curve = curveRef.current;
+        const cart = cartRef.current;
+
+        const p = curve.getPointAt(tInterp);
+        const tan = curve.getTangentAt(tInterp).normalize();
+
+        const vInterp = THREE.MathUtils.lerp(rs.prevVel, rs.currVel, alpha);
+        const travelSign = vInterp >= 0 ? 1 : -1;
+        const travelTan = tan.clone().multiplyScalar(travelSign);
+
+        // Stable-ish up from our transported binormal (prevents popping in sharp curvature)
+        const bin = physicsRef.current.lastBinormal.clone().projectOnPlane(tan).normalize();
+        const nrm = new THREE.Vector3().crossVectors(bin.length() ? bin : new THREE.Vector3(1, 0, 0), tan).normalize();
+
+        // Target quaternion
+        const m = new THREE.Matrix4().lookAt(p, p.clone().add(travelTan), nrm);
+        const targetQ = new THREE.Quaternion().setFromRotationMatrix(m);
+
+        // Smooth out any remaining micro-snaps
+        cart.position.lerp(p, 0.85);
+        cart.quaternion.slerp(targetQ, 0.85);
+      }
+
       // Camera controls / ride cam
       if (cameraModeRef.current === "ORBIT") {
         const { w, a, s, d } = keysRef.current;
         if (w || a || s || d) {
           const speed = controlsRef.current.zoom * 0.02;
           const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
-          forward.y = 0; forward.normalize();
+          forward.y = 0;
+          forward.normalize();
           const right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
-          right.y = 0; right.normalize();
+          right.y = 0;
+          right.normalize();
 
           const move = new THREE.Vector3();
           if (w) move.add(forward);
@@ -987,56 +1203,52 @@ if (d.state === 5 && cartRef.current) {
     curve.tension = 0.2;
     curveRef.current = curve;
 
+    // --- Circuit detection (used for lap wrap + deer boarding) ---
+    const startPt = points[0].clone();
+    const endPt = points[points.length - 1].clone();
+    const startTan = curve.getTangentAt(0).normalize();
+    const endTan = curve.getTangentAt(1 - 1e-4).normalize();
+    const dist = startPt.distanceTo(endPt);
 
-// --- Circuit detection (used for lap wrap + deer boarding) ---
-const startPt = points[0].clone();
-const endPt = points[points.length - 1].clone();
-const startTan = curve.getTangentAt(0).normalize();
-const endTan = curve.getTangentAt(1 - 1e-4).normalize();
-const dist = startPt.distanceTo(endPt);
+    const isCircuit = points.length > 20 && dist < 20;
 
-// Simple circuit heuristic (matches your HTML prototype logic)
-const isCircuit = points.length > 20 && dist < 20;
+    trackMetaRef.current = {
+      isCircuit,
+      start: startPt,
+      end: endPt,
+      startTangent: startTan,
+      endTangent: endTan,
+    };
 
-trackMetaRef.current = {
-  isCircuit,
-  start: startPt,
-  end: endPt,
-  startTangent: startTan,
-  endTangent: endTan,
-};
+    // Circuit Detection & Deer Assignment
+    if (isCircuit && riderRef.current === null) {
+      let minDist = Infinity;
+      let closestIdx = -1;
 
-// Circuit Detection & Deer Assignment (matches your HTML prototype)
-if (isCircuit && riderRef.current === null) {
-  // Find closest deer to station (track start)
-  let minDist = Infinity;
-  let closestIdx = -1;
+      deerRef.current.forEach((d, i) => {
+        const dDist = d.group.position.distanceTo(startPt);
+        if (dDist < minDist) {
+          minDist = dDist;
+          closestIdx = i;
+        }
+      });
 
-  deerRef.current.forEach((d, i) => {
-    const dDist = d.group.position.distanceTo(startPt);
-    if (dDist < minDist) {
-      minDist = dDist;
-      closestIdx = i;
+      if (closestIdx !== -1) {
+        riderRef.current = closestIdx;
+        deerRef.current[closestIdx].state = 4; // RUN_TO_CART
+      }
+    } else if (!isCircuit && riderRef.current !== null) {
+      const d = deerRef.current[riderRef.current];
+      if (d) {
+        d.state = 0;
+        d.group.rotation.set(0, 0, 0);
+        if (d.isStrafing) d.internalGroup.rotation.y = Math.PI / 2;
+        d.group.position.y = 0;
+      }
+      riderRef.current = null;
     }
-  });
 
-  if (closestIdx !== -1) {
-    riderRef.current = closestIdx;
-    deerRef.current[closestIdx].state = 4; // RUN_TO_CART
-  }
-} else if (!isCircuit && riderRef.current !== null) {
-  // Eject if circuit broken
-  const d = deerRef.current[riderRef.current];
-  if (d) {
-    d.state = 0;
-    d.group.rotation.set(0, 0, 0); // reset rot
-    if (d.isStrafing) d.internalGroup.rotation.y = Math.PI / 2; // restore strafe pose
-    d.group.position.y = 0;
-  }
-  riderRef.current = null;
-}
-
-// Polyline length mapping
+    // Polyline length mapping
     const pointLengths = [0];
     let totalPolyLength = 0;
     for (let i = 1; i < points.length; i++) {
@@ -1057,7 +1269,8 @@ if (isCircuit && riderRef.current === null) {
       const t = ringIndex / tubular;
       const targetLen = t * totalPolyLength;
 
-      while (currentPtIdx < pointLengths.length - 1 && targetLen > pointLengths[currentPtIdx + 1]) currentPtIdx++;
+      while (currentPtIdx < pointLengths.length - 1 && targetLen > pointLengths[currentPtIdx + 1])
+        currentPtIdx++;
       while (currentPtIdx > 0 && targetLen < pointLengths[currentPtIdx]) currentPtIdx--;
 
       if (colors[currentPtIdx * 3] !== undefined) {
@@ -1092,7 +1305,7 @@ if (isCircuit && riderRef.current === null) {
 
     const pointSegmentTypes = new Array(points.length).fill("NORMAL");
     let curSegIdx = 0;
-    let nextEndIdx = segmentInfoList[0]?.endPointIndex ?? (points.length - 1);
+    let nextEndIdx = segmentInfoList[0]?.endPointIndex ?? points.length - 1;
 
     for (let i = 0; i < points.length; i++) {
       if (i > nextEndIdx && curSegIdx < segmentInfoList.length - 1) {
@@ -1105,8 +1318,9 @@ if (isCircuit && riderRef.current === null) {
     let supportPtIdx = 0;
     for (let i = 0; i <= supCount; i++) {
       const t = i / supCount;
-      const targetLen = t * totalPolyLength;
-      while (supportPtIdx < pointLengths.length - 1 && targetLen > pointLengths[supportPtIdx + 1]) supportPtIdx++;
+      const targetLen2 = t * totalPolyLength;
+      while (supportPtIdx < pointLengths.length - 1 && targetLen2 > pointLengths[supportPtIdx + 1])
+        supportPtIdx++;
 
       if (pointSegmentTypes[supportPtIdx] === "LOOP") continue;
 
@@ -1137,138 +1351,6 @@ if (isCircuit && riderRef.current === null) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [segments]);
 
-  // --- Physics loop (signed velocity = rollback) ---
-  useEffect(() => {
-    if (!isSimulating) return;
-
-    const dt = 0.016;
-    const id = setInterval(() => {
-      const curve = curveRef.current;
-      const cart = cartRef.current;
-      if (!curve || !cart) return;
-
-      const phys = physicsRef.current;
-      const map = segmentsMapRef.current;
-
-      const currentSeg =
-        map.find((s) => phys.t >= s.startT && phys.t < s.endT) || map[map.length - 1];
-
-      const point = curve.getPointAt(phys.t);
-      const tangent = curve.getTangentAt(phys.t).normalize();
-      const worldUp = new THREE.Vector3(0, 1, 0);
-
-      // Parallel transport-ish frame
-      let frameBinormal = phys.lastBinormal.clone().projectOnPlane(tangent).normalize();
-      if (frameBinormal.length() === 0) frameBinormal = new THREE.Vector3(1, 0, 0);
-
-      let worldBinormal = new THREE.Vector3().crossVectors(tangent, worldUp);
-      if (worldBinormal.length() > 0.9) {
-        worldBinormal.normalize();
-        if (worldBinormal.dot(frameBinormal) > 0.8) frameBinormal.copy(worldBinormal);
-      }
-
-      phys.lastBinormal.copy(frameBinormal);
-
-      const normal = new THREE.Vector3().crossVectors(frameBinormal, tangent).normalize();
-      const localUp = normal;
-
-      // Along-track acceleration: a = -g sin(theta) where sin(theta)=tangent.y
-      const accelG = -GRAVITY * tangent.y;
-
-      // Friction opposes signed velocity (quadratic drag)
-      let friction = -FRICTION_COEFF * phys.velocity * Math.abs(phys.velocity);
-      let accelExternal = 0;
-
-      // Segment logic
-      if (currentSeg) {
-        if (currentSeg.type === "UP" && currentSeg.variant === "CHAIN") {
-          const def = SEGMENT_DEFS.UP.variants.find((v) => v.id === "CHAIN");
-          const target = def?.chainSpeed ?? 5;
-          // Pull forward even if rolling backward / too slow
-          if (phys.velocity < target) {
-            phys.velocity = THREE.MathUtils.lerp(phys.velocity, target, 0.1);
-            friction = 0;
-          }
-        }
-
-        if (currentSeg.type === "STRAIGHT" && currentSeg.variant === "BOOST") {
-          const def = SEGMENT_DEFS.STRAIGHT.variants.find((v) => v.id === "BOOST");
-          accelExternal = def?.force ?? 12;
-        }
-
-        if (currentSeg.type === "STRAIGHT" && currentSeg.variant === "BRAKE") {
-          const def = SEGMENT_DEFS.STRAIGHT.variants.find((v) => v.id === "BRAKE");
-          friction = -phys.velocity * (def?.drag ?? 2.0);
-        }
-      }
-
-      // Integrate velocity (✅ allow negative)
-      phys.velocity += (accelG + friction + accelExternal) * dt;
-
-      if (phys.velocity > 60) phys.velocity = 60;
-      if (phys.velocity < -60) phys.velocity = -60;
-
-      // Deadband near zero to reduce jitter
-      if (Math.abs(phys.velocity) < 0.02) phys.velocity = 0;
-
-      // Integrate position
-      const len = curve.getLength();
-      phys.t += (phys.velocity * dt) / len;
-
-      // Only wrap around if the user has actually built a closed circuit.
-      const isCircuitNow = !!trackMetaRef.current?.isCircuit;
-      if (isCircuitNow) {
-        while (phys.t >= 1) phys.t -= 1;
-        while (phys.t < 0) phys.t += 1;
-      } else {
-        if (phys.t >= 1) {
-          phys.t = 0.999999;
-          phys.velocity = 0;
-        }
-        if (phys.t < 0) {
-          phys.t = 0;
-          phys.velocity = 0;
-        }
-      }
-
-      // Orient cart in direction of travel
-      const travelSign = phys.velocity >= 0 ? 1 : -1;
-      const travelTangent = tangent.clone().multiplyScalar(travelSign);
-
-      cart.position.copy(point);
-      cart.up.copy(normal);
-      cart.lookAt(point.clone().add(travelTangent));
-
-      // Telemetry
-      const vVec = tangent.clone().multiplyScalar(phys.velocity);
-      const accelVec = vVec.clone().sub(phys.lastVel).divideScalar(dt);
-      phys.lastVel.copy(vVec);
-
-      const gVec = new THREE.Vector3(0, -GRAVITY, 0);
-      const feltAccel = accelVec.sub(gVec);
-
-      const vertG = feltAccel.dot(localUp) / GRAVITY;
-      const latG = feltAccel.dot(frameBinormal) / GRAVITY;
-      const totalG = feltAccel.length() / GRAVITY;
-
-      const pe = GRAVITY * point.y;
-      const ke = 0.5 * phys.velocity * phys.velocity;
-      const totalE = pe + ke;
-      if (totalE > maxEnergyRef.current) maxEnergyRef.current = totalE;
-
-      setStats({
-        velocity: Math.abs(phys.velocity * 3.6).toFixed(0), // show speed magnitude
-        gVertical: vertG.toFixed(1),
-        gLateral: latG.toFixed(1),
-        gTotal: totalG.toFixed(1),
-        pe: pe.toFixed(0),
-        ke: ke.toFixed(0),
-      });
-    }, 16);
-
-    return () => clearInterval(id);
-  }, [isSimulating]);
-
   const resetSim = () => {
     setIsSimulating(false);
 
@@ -1286,12 +1368,22 @@ if (isCircuit && riderRef.current === null) {
       lastBinormal: binormal,
     };
 
+    // Reset render interpolation state too
+    const rs = renderStateRef.current;
+    rs.prevT = 0;
+    rs.currT = 0;
+    rs.prevVel = INITIAL_SPEED;
+    rs.currVel = INITIAL_SPEED;
+    rs.accumulator = 0;
+    rs.lastTime = performance.now();
+    rs.statsTimer = 0;
+
     const cart = cartRef.current;
     if (cart) {
       const p = curve.getPointAt(0);
       cart.position.copy(p);
-      const up = new THREE.Vector3().crossVectors(binormal, tangent).normalize();
-      cart.up.copy(up);
+      const upVec = new THREE.Vector3().crossVectors(binormal, tangent).normalize();
+      cart.up.copy(upVec);
       cart.lookAt(p.clone().add(tangent));
     }
   };
@@ -1318,9 +1410,7 @@ if (isCircuit && riderRef.current === null) {
     <div
       ref={wrapRef}
       className={
-        isFocus
-          ? "fixed inset-0 z-[9999] bg-slate-950/40 backdrop-blur-sm"
-          : `relative ${className}`
+        isFocus ? "fixed inset-0 z-[9999] bg-slate-950/40 backdrop-blur-sm" : `relative ${className}`
       }
     >
       <div
@@ -1373,7 +1463,13 @@ if (isCircuit && riderRef.current === null) {
                   <span className="font-bold text-sm">{isFocus ? "EXIT" : "FOCUS"}</span>
                 </button>
 
-            
+                {/* Optional: Fullscreen toggle if you want it visible */}
+                {/* <button
+                  onClick={toggleFullscreen}
+                  className="flex items-center gap-2 px-4 py-3 rounded-xl bg-white/90 border border-white/60 text-slate-700 hover:bg-white shadow-sm"
+                >
+                  <span className="font-bold text-sm">FULL</span>
+                </button> */}
               </div>
             </div>
 
@@ -1382,7 +1478,10 @@ if (isCircuit && riderRef.current === null) {
               <div className="absolute top-24 right-6 w-64 bg-white/85 backdrop-blur-md border border-white/60 shadow-[0_4px_20px_rgba(0,0,0,0.08)] p-4 rounded-xl pointer-events-auto">
                 <div className="flex justify-between items-center mb-4 border-b border-slate-200 pb-2">
                   <h3 className="font-bold text-sm text-blue-600">LIVE DATA</h3>
-                  <button onClick={() => setShowTelemetry(false)} className="hover:text-red-500 text-slate-400">
+                  <button
+                    onClick={() => setShowTelemetry(false)}
+                    className="hover:text-red-500 text-slate-400"
+                  >
                     <Icon name="x" size={14} />
                   </button>
                 </div>
@@ -1549,14 +1648,18 @@ if (isCircuit && riderRef.current === null) {
                 </div>
                 <div>
                   <div className="text-[10px] text-slate-400 font-bold tracking-wider">TOTAL G</div>
-                  <div className={`text-2xl font-mono font-bold ${Math.abs(stats.gTotal) > 4 ? "text-red-500" : "text-slate-800"}`}>
+                  <div
+                    className={`text-2xl font-mono font-bold ${
+                      Math.abs(stats.gTotal) > 4 ? "text-red-500" : "text-slate-800"
+                    }`}
+                  >
                     {stats.gTotal} <span className="text-sm text-slate-500">G</span>
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* Tiny hint (optional) */}
+            {/* Tiny hint */}
             <div className="pointer-events-none self-center mb-2 text-xs text-slate-600/80">
               Scroll to zoom • Right-drag to pan • WASD to move
             </div>
