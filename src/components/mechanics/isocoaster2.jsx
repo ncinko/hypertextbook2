@@ -60,7 +60,7 @@ const SEGMENT_DEFS = {
 };
 
 const GRAVITY = 9.81;
-const FRICTION_COEFF = 0.0010;
+const FRICTION_COEFF = 0.002;
 const INITIAL_SPEED = 15;
 
 // Minimal SVG icon set (no dependency)
@@ -323,9 +323,8 @@ export default function CoasterBuilder3D({ height = 800, className = "" }) {
     if (frameBinormal.length() === 0) frameBinormal = new THREE.Vector3(1, 0, 0);
 
     let worldBinormal = new THREE.Vector3().crossVectors(tangent, worldUp);
-    if (worldBinormal.length() > 0.9) {
-      worldBinormal.normalize();
-      if (worldBinormal.dot(frameBinormal) > 0.8) frameBinormal.copy(worldBinormal);
+    if (worldBinormal.length() > 0.9 && worldBinormal.dot(frameBinormal) > 0.8) {
+      frameBinormal.copy(worldBinormal).normalize();
     }
     phys.lastBinormal.copy(frameBinormal);
 
@@ -380,8 +379,9 @@ export default function CoasterBuilder3D({ height = 800, className = "" }) {
       while (phys.t < 0) phys.t += 1;
     } else {
       if (phys.t >= 1) {
-        phys.t = 0.999999;
-        phys.velocity = 0;
+        phys.t = 0;
+        phys.velocity = INITIAL_SPEED;
+        phys.lastVel.set(0, 0, 0);
       }
       if (phys.t < 0) {
         phys.t = 0;
@@ -1361,10 +1361,11 @@ export default function CoasterBuilder3D({ height = 800, className = "" }) {
     const tangent = curve.getTangentAt(t).normalize();
     const binormal = new THREE.Vector3().crossVectors(tangent, new THREE.Vector3(0, 1, 0)).normalize();
 
+    const startVel = tangent.clone().multiplyScalar(INITIAL_SPEED);
     physicsRef.current = {
       t: 0,
       velocity: INITIAL_SPEED,
-      lastVel: new THREE.Vector3(),
+      lastVel: startVel,
       lastBinormal: binormal,
     };
 
