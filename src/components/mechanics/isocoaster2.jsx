@@ -171,7 +171,7 @@ function Icon({ name, size = 18 }) {
   );
 }
 
-export default function CoasterBuilder3D({ height = 800, className = "" }) {
+export default function CoasterBuilder3D({ height = 820, className = "" }) {
   const [segments, setSegments] = useState([{ type: "START", variant: "NORMAL" }]);
   const [isSimulating, setIsSimulating] = useState(false);
   const [cameraMode, setCameraMode] = useState("ORBIT");
@@ -696,7 +696,7 @@ export default function CoasterBuilder3D({ height = 800, className = "" }) {
           Math.min(1.5, controlsRef.current.pitch + dy * 0.005)
         );
       } else if (dragType === "PAN") {
-        const sensitivity = controlsRef.current.zoom * 0.0015;
+        const sensitivity = Math.sqrt(controlsRef.current.zoom) * 0.01;
         const right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
         const up = new THREE.Vector3(0, 1, 0).applyQuaternion(camera.quaternion);
         controlsRef.current.target.addScaledVector(right, -dx * sensitivity);
@@ -981,7 +981,7 @@ export default function CoasterBuilder3D({ height = 800, className = "" }) {
       if (cameraModeRef.current === "ORBIT") {
         const { w, a, s, d } = keysRef.current;
         if (w || a || s || d) {
-          const speed = controlsRef.current.zoom * 0.02;
+          const speed = Math.sqrt(controlsRef.current.zoom) * 0.2;
           const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
           forward.y = 0;
           forward.normalize();
