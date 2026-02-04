@@ -59,8 +59,8 @@ const SEGMENT_DEFS = {
   LOOP: { label: "Loop", len: 10, radius: 12, icon: "rotate-ccw", color: 0x3b82f6 },
 };
 
-const GRAVITY = 9.81;
-const FRICTION_COEFF = 0.002;
+const GRAVITY = 16; // greater than 9.8 for better visual effect
+const FRICTION_COEFF = 0.0015;
 const INITIAL_SPEED = 15;
 
 // Minimal SVG icon set (no dependency)
@@ -440,10 +440,10 @@ export default function CoasterBuilder3D({ height = 800, className = "" }) {
     scene.add(dir);
 
     // Ground + grid
-    scene.add(new THREE.GridHelper(2000, 100, 0x708090, 0xa0b0c0));
+    scene.add(new THREE.GridHelper(1000, 100, 0x708090, 0xa0b0c0));
 
     const ground = new THREE.Mesh(
-      new THREE.PlaneGeometry(2000, 2000),
+      new THREE.PlaneGeometry(1000, 1000),
       new THREE.MeshBasicMaterial({ color: 0x9dcc9a })
     );
     ground.rotation.x = -Math.PI / 2;
