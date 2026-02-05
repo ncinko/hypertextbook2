@@ -23,6 +23,7 @@ import Vectors from "./pages/Vectors";
 import Forces from "./pages/Forces";
 import CubePuzzle3x3 from './components/math/CubePuzzle3x3';  
 import Kepler from './pages/Kepler';
+import Nuclear from './pages/Nuclear';
 
 import './styles/main.css';
 
@@ -66,6 +67,7 @@ export default function App() {
         <div className="dropdown-content">
           <Link to="/chaos">Chaos</Link>
           <Link to="/kepler">Kepler</Link>
+          <Link to="/nuclear">Nuclear</Link>
         </div>
       </div>
 
@@ -96,6 +98,7 @@ export default function App() {
                 <Route path="/vectors" element={<Vectors />} />
                 <Route path="/cube" element={<CubePuzzle3x3 />} />
                 <Route path="/kepler" element={<Kepler />} />
+                <Route path="/nuclear" element={<Nuclear />} />
                 <Route path="/relativity" element={<Relativity />} />
             </Routes>
         </div>
