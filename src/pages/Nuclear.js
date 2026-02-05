@@ -3,6 +3,7 @@ import { MathJax, MathJaxContext } from "better-react-mathjax";
 import HiddenQuestion from "../components/shared/HiddenQuestion";
 import HiddenExposition from "../components/shared/HiddenExposition";
 import NuclearDecayExplorer from "../components/modern/NuclearDecayExplorer";
+import NuclearBindingApp from "../components/modern/NuclearBindingApp";
 
 export default function Nuclear() {
   return (
@@ -59,6 +60,15 @@ export default function Nuclear() {
             nucleus population decays over time.
           </p>
           <NuclearDecayExplorer />
+
+
+
+          <h2>Binding Energy: Interactive Visualizer</h2>
+          <p>
+            Explore how mass defect turns into binding energy and see where isotopes fall on the
+            binding-energy-per-nucleon curve.
+          </p>
+          <NuclearBindingApp />
 
           <HiddenExposition title="Why do we see exponential decay?">
             <p>
