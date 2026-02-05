@@ -17,8 +17,8 @@ const SEGMENT_DEFS = {
   },
   UP: {
     label: "Hill Up",
-    len: 30,
-    height: 15,
+    len: 20,
+    height: 10,
     icon: "arrow-up",
     variants: [
       { id: "NORMAL", label: "Standard", color: 0x3b82f6 },
@@ -27,8 +27,8 @@ const SEGMENT_DEFS = {
   },
   DOWN: {
     label: "Drop",
-    len: 30,
-    height: -15,
+    len: 20,
+    height: -10,
     icon: "arrow-down",
     color: 0x3b82f6,
   },
@@ -60,7 +60,7 @@ const SEGMENT_DEFS = {
 };
 
 const GRAVITY = 16; // greater than 9.8 for better visual effect
-const FRICTION_COEFF = 0.0015;
+const FRICTION_COEFF = 0.001;
 const INITIAL_SPEED = 15;
 
 // Minimal SVG icon set (no dependency)
@@ -152,6 +152,21 @@ function Icon({ name, size = 18 }) {
         <line x1="6" y1="6" x2="18" y2="18" />
       </>
     ),
+    shield: (
+      <>
+        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+      </>
+    ),
+    move: (
+      <>
+        <polyline points="5 9 2 12 5 15" />
+        <polyline points="9 5 12 2 15 5" />
+        <polyline points="15 19 12 22 9 19" />
+        <polyline points="19 9 22 12 19 15" />
+        <line x1="2" y1="12" x2="22" y2="12" />
+        <line x1="12" y1="2" x2="12" y2="22" />
+      </>
+    ),
   };
 
   return (
@@ -176,6 +191,8 @@ export default function CoasterBuilder3D({ height = 820, className = "" }) {
   const [isSimulating, setIsSimulating] = useState(false);
   const [cameraMode, setCameraMode] = useState("ORBIT");
   const [showTelemetry, setShowTelemetry] = useState(false);
+  const [safetyOn, setSafetyOn] = useState(true);
+  const [autoOrbitOn, setAutoOrbitOn] = useState(false);
 
   const [isFocus, setIsFocus] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -220,6 +237,16 @@ export default function CoasterBuilder3D({ height = 820, className = "" }) {
     isSimulatingRef.current = isSimulating;
   }, [isSimulating]);
 
+  const safetyOnRef = useRef(safetyOn);
+  useEffect(() => {
+    safetyOnRef.current = safetyOn;
+  }, [safetyOn]);
+
+  const autoOrbitOnRef = useRef(autoOrbitOn);
+  useEffect(() => {
+    autoOrbitOnRef.current = autoOrbitOn;
+  }, [autoOrbitOn]);
+
   // Control/physics refs
   const controlsRef = useRef({
     rotation: 0.5,
@@ -234,6 +261,8 @@ export default function CoasterBuilder3D({ height = 820, className = "" }) {
     velocity: INITIAL_SPEED,
     lastVel: new THREE.Vector3(),
     lastBinormal: new THREE.Vector3(1, 0, 0),
+    isOffTrack: false,
+    offTrackState: null,
   });
 
   const segmentsMapRef = useRef([]);
@@ -310,6 +339,25 @@ export default function CoasterBuilder3D({ height = 820, className = "" }) {
 
     const phys = physicsRef.current;
     const map = segmentsMapRef.current;
+
+    // Off-track projectile motion
+    if (phys.isOffTrack) {
+      if (phys.offTrackState) {
+        const { pos, vel, angVel, quat } = phys.offTrackState;
+        vel.y -= GRAVITY * dt;
+        pos.addScaledVector(vel, dt);
+
+        const deltaRotation = new THREE.Quaternion().setFromAxisAngle(angVel, dt).normalize();
+        quat.premultiply(deltaRotation);
+        
+        if (pos.y < 0.6) {
+           // Simplified ground collision
+           resetSim();
+        }
+      }
+      return null; // No telemetry when off-track
+    }
+
 
     const currentSeg =
       map.find((s) => phys.t >= s.startT && phys.t < s.endT) || map[map.length - 1];
@@ -400,6 +448,25 @@ export default function CoasterBuilder3D({ height = 820, className = "" }) {
     const vertG = feltAccel.dot(localUp) / GRAVITY;
     const latG = feltAccel.dot(frameBinormal) / GRAVITY;
     const totalG = feltAccel.length() / GRAVITY;
+    
+    // Safety check
+    if (!safetyOnRef.current && !phys.isOffTrack) {
+        if (vertG < 0 || Math.abs(latG) > 2.5) {
+            phys.isOffTrack = true;
+            phys.offTrackState = {
+                pos: point.clone(),
+                vel: vVec.clone(),
+                angVel: new THREE.Vector3(
+                  (Math.random() - 0.5) * 2,
+                  (Math.random() - 0.5) * 2,
+                  (Math.random() - 0.5) * 2,
+                ).normalize(),
+                quat: cart.quaternion.clone(),
+            };
+            return null;
+        }
+    }
+
 
     const pe = GRAVITY * point.y;
     const ke = 0.5 * phys.velocity * phys.velocity;
@@ -915,66 +982,77 @@ export default function CoasterBuilder3D({ height = 820, className = "" }) {
         rs.accumulator += frameDt;
 
         while (rs.accumulator >= FIXED_DT) {
-          rs.prevT = physicsRef.current.t;
-          rs.prevVel = physicsRef.current.velocity;
+          const phys = physicsRef.current;
+          
+          if (phys.isOffTrack) {
+            // If off-track, we just step physics and the render part will pick it up
+            stepPhysics(FIXED_DT);
+          } else {
+            // If on-track, we do the whole interpolation dance
+            rs.prevT = phys.t;
+            rs.prevVel = phys.velocity;
 
-          const telem = stepPhysics(FIXED_DT);
+            const telem = stepPhysics(FIXED_DT);
 
-          rs.currT = physicsRef.current.t;
-          rs.currVel = physicsRef.current.velocity;
+            rs.currT = phys.t;
+            rs.currVel = phys.velocity;
 
-          // Throttle React updates (prevents re-render jitter)
-          rs.statsTimer += FIXED_DT;
-          if (telem && rs.statsTimer >= 0.05) {
-            rs.statsTimer = 0;
-            setStats({
-              velocity: Math.abs(physicsRef.current.velocity * 3.6).toFixed(0),
-              gVertical: telem.vertG.toFixed(1),
-              gLateral: telem.latG.toFixed(1),
-              gTotal: telem.totalG.toFixed(1),
-              pe: telem.pe.toFixed(0),
-              ke: telem.ke.toFixed(0),
-            });
+            // Throttle React updates
+            rs.statsTimer += FIXED_DT;
+            if (telem && rs.statsTimer >= 0.05) {
+              rs.statsTimer = 0;
+              setStats({
+                velocity: Math.abs(phys.velocity * 3.6).toFixed(0),
+                gVertical: telem.vertG.toFixed(1),
+                gLateral: telem.latG.toFixed(1),
+                gTotal: telem.totalG.toFixed(1),
+                pe: telem.pe.toFixed(0),
+                ke: telem.ke.toFixed(0),
+              });
+            }
           }
-
           rs.accumulator -= FIXED_DT;
         }
-
-        const alpha = rs.accumulator / FIXED_DT;
-        const isCircuitNow = !!trackMetaRef.current?.isCircuit;
-
-        // Handle wrap for interpolation on circuits (avoid lerp across 0/1 discontinuity)
-        let t0 = rs.prevT;
-        let t1 = rs.currT;
-        if (isCircuitNow) {
-          const d = t1 - t0;
-          if (d > 0.5) t0 += 1;
-          else if (d < -0.5) t1 += 1;
-        }
-        let tInterp = THREE.MathUtils.lerp(t0, t1, alpha);
-        if (isCircuitNow) tInterp = ((tInterp % 1) + 1) % 1;
-
-        const curve = curveRef.current;
+        
+        const phys = physicsRef.current;
         const cart = cartRef.current;
 
-        const p = curve.getPointAt(tInterp);
-        const tan = curve.getTangentAt(tInterp).normalize();
+        if (phys.isOffTrack && phys.offTrackState) {
+          // Directly render the off-track state
+          cart.position.copy(phys.offTrackState.pos);
+          cart.quaternion.copy(phys.offTrackState.quat);
+        } else {
+          // Interpolate for smooth on-track rendering
+          const alpha = rs.accumulator / FIXED_DT;
+          const isCircuitNow = !!trackMetaRef.current?.isCircuit;
 
-        const vInterp = THREE.MathUtils.lerp(rs.prevVel, rs.currVel, alpha);
-        const travelSign = vInterp >= 0 ? 1 : -1;
-        const travelTan = tan.clone().multiplyScalar(travelSign);
+          let t0 = rs.prevT;
+          let t1 = rs.currT;
+          if (isCircuitNow) {
+            const d = t1 - t0;
+            if (d > 0.5) t0 += 1;
+            else if (d < -0.5) t1 += 1;
+          }
+          let tInterp = THREE.MathUtils.lerp(t0, t1, alpha);
+          if (isCircuitNow) tInterp = ((tInterp % 1) + 1) % 1;
+          
+          const curve = curveRef.current;
+          const p = curve.getPointAt(tInterp);
+          const tan = curve.getTangentAt(tInterp).normalize();
+          
+          const vInterp = THREE.MathUtils.lerp(rs.prevVel, rs.currVel, alpha);
+          const travelSign = vInterp >= 0 ? 1 : -1;
+          const travelTan = tan.clone().multiplyScalar(travelSign);
+          
+          const bin = phys.lastBinormal.clone().projectOnPlane(tan).normalize();
+          const nrm = new THREE.Vector3().crossVectors(bin.length() ? bin : new THREE.Vector3(1,0,0), tan).normalize();
 
-        // Stable-ish up from our transported binormal (prevents popping in sharp curvature)
-        const bin = physicsRef.current.lastBinormal.clone().projectOnPlane(tan).normalize();
-        const nrm = new THREE.Vector3().crossVectors(bin.length() ? bin : new THREE.Vector3(1, 0, 0), tan).normalize();
-
-        // Target quaternion
-        const m = new THREE.Matrix4().lookAt(p, p.clone().add(travelTan), nrm);
-        const targetQ = new THREE.Quaternion().setFromRotationMatrix(m);
-
-        // Smooth out any remaining micro-snaps
-        cart.position.lerp(p, 0.85);
-        cart.quaternion.slerp(targetQ, 0.85);
+          const m = new THREE.Matrix4().lookAt(p, p.clone().add(travelTan), nrm);
+          const targetQ = new THREE.Quaternion().setFromRotationMatrix(m);
+          
+          cart.position.lerp(p, 0.85);
+          cart.quaternion.slerp(targetQ, 0.85);
+        }
       }
 
       // Camera controls / ride cam
@@ -1001,30 +1079,56 @@ export default function CoasterBuilder3D({ height = 820, className = "" }) {
         if (cartRef.current) cartRef.current.visible = true;
 
         const { rotation, pitch, zoom, target } = controlsRef.current;
+        if(autoOrbitOnRef.current && cartRef.current && (isSimulatingRef.current || physicsRef.current.isOffTrack)){
+          target.lerp(cartRef.current.position, 0.05);
+        }
+
         const x = Math.sin(rotation) * zoom * Math.cos(pitch);
         const z = Math.cos(rotation) * zoom * Math.cos(pitch);
         const y = zoom * Math.sin(pitch);
         camera.position.set(target.x + x, target.y + y, target.z + z);
         camera.lookAt(target);
-      } else if (cameraModeRef.current === "RIDE" && curveRef.current) {
-        if (cartRef.current) cartRef.current.visible = false;
+      } else if (cameraModeRef.current === "RIDE" && cartRef.current) {
+        if (cartRef.current) {
+          cartRef.current.visible = physicsRef.current.isOffTrack;
+        }
 
-        const t = physicsRef.current.t;
-        const point = curveRef.current.getPointAt(t);
-        const tangent = curveRef.current.getTangentAt(t).normalize();
-        const v = physicsRef.current.velocity || 0;
-        const sign = v >= 0 ? 1 : -1;
-        const forward = tangent.clone().multiplyScalar(sign);
+        const phys = physicsRef.current;
+        let eyePos, lookAt;
 
-        const binormal = physicsRef.current.lastBinormal.clone();
-        const normal = new THREE.Vector3().crossVectors(binormal, tangent).normalize();
+        if (phys.isOffTrack && phys.offTrackState) {
+            const { pos, vel, quat } = phys.offTrackState;
+            const forward = vel.clone().normalize();
+            const up = new THREE.Vector3(0, 1, 0).applyQuaternion(quat);
+            
+            const eyeOffset = up.clone().multiplyScalar(1.2).add(forward.clone().multiplyScalar(0.5));
+            eyePos = pos.clone().add(eyeOffset);
+            lookAt = eyePos.clone().add(forward);
+            
+            camera.up.copy(up);
 
-        const eyeOffset = normal.clone().multiplyScalar(1.2).add(forward.clone().multiplyScalar(0.5));
-        const eyePos = point.clone().add(eyeOffset);
+        } else if(curveRef.current) {
+            const t = phys.t;
+            const point = curveRef.current.getPointAt(t);
+            const tangent = curveRef.current.getTangentAt(t).normalize();
+            const v = phys.velocity || 0;
+            const sign = v >= 0 ? 1 : -1;
+            const forward = tangent.clone().multiplyScalar(sign);
 
-        camera.position.copy(eyePos);
-        camera.up.copy(normal);
-        camera.lookAt(eyePos.clone().add(forward));
+            const binormal = phys.lastBinormal.clone();
+            const normal = new THREE.Vector3().crossVectors(binormal, tangent).normalize();
+
+            const eyeOffset = normal.clone().multiplyScalar(1.2).add(forward.clone().multiplyScalar(0.5));
+            eyePos = point.clone().add(eyeOffset);
+            lookAt = eyePos.clone().add(forward)
+            
+            camera.up.copy(normal);
+        }
+        
+        if (eyePos && lookAt) {
+            camera.position.copy(eyePos);
+            camera.lookAt(lookAt);
+        }
       }
 
       renderer.render(scene, camera);
@@ -1367,6 +1471,8 @@ export default function CoasterBuilder3D({ height = 820, className = "" }) {
       velocity: INITIAL_SPEED,
       lastVel: startVel,
       lastBinormal: binormal,
+      isOffTrack: false,
+      offTrackState: null,
     };
 
     // Reset render interpolation state too
@@ -1381,6 +1487,7 @@ export default function CoasterBuilder3D({ height = 820, className = "" }) {
 
     const cart = cartRef.current;
     if (cart) {
+      cart.visible = true;
       const p = curve.getPointAt(0);
       cart.position.copy(p);
       const upVec = new THREE.Vector3().crossVectors(binormal, tangent).normalize();
@@ -1455,6 +1562,29 @@ export default function CoasterBuilder3D({ height = 820, className = "" }) {
                 >
                   <Icon name="activity" size={20} />
                   <span className="font-bold text-sm">TELEMETRY</span>
+                </button>
+
+                <button
+                  onClick={() => setSafetyOn((v) => !v)}
+                  className={`flex items-center gap-2 px-4 py-3 rounded-xl backdrop-blur-md transition-all border shadow-sm ${
+                    safetyOn
+                      ? "bg-green-600 text-white border-green-500"
+                      : "bg-red-600 text-white border-red-500"
+                  }`}
+                >
+                  <Icon name="shield" size={20} />
+                  <span className="font-bold text-sm">SAFETY {safetyOn ? "ON" : "OFF"}</span>
+                </button>
+
+                <button
+                  onClick={() => setAutoOrbitOn((v) => !v)}
+                  className={`flex items-center gap-2 px-4 py-3 rounded-xl backdrop-blur-md transition-all border shadow-sm ${
+                    autoOrbitOn
+                      ? "bg-blue-600 text-white border-blue-500"
+                      : "bg-white/90 border-white/60 hover:bg-white text-slate-700"
+                  }`}
+                >
+                  <Icon name="move" size={20} />
                 </button>
 
                 <button
