@@ -50,8 +50,6 @@ export default function NuclearBindingApp() {
       <div className="max-w-6xl mx-auto space-y-8">
         <header className="space-y-2">
           <h1 className="text-3xl md:text-4xl font-bold text-indigo-900 flex items-center gap-3">
-            <Atom className="w-10 h-10 text-indigo-600" />
-            Nuclear Binding Energy Visualizer
           </h1>
           <p className="text-slate-600 max-w-2xl">
             Select an isotope to weigh its ingredients against its actual nucleus, revealing the
@@ -111,17 +109,14 @@ export default function NuclearBindingApp() {
 
           <div className="md:col-span-8 bg-white rounded-2xl shadow-sm border border-slate-200 p-6 flex flex-col">
             <h2 className="text-xl font-bold text-slate-800 mb-6 flex items-center gap-2">
-              <Scale className="w-6 h-6 text-indigo-500" />
-              The Mass Defect Calculation
+              Mass Defect Calculation
             </h2>
 
             <div className="flex-1 flex flex-col justify-center">
               <div className="flex flex-col md:flex-row items-center justify-between gap-4 mb-8">
                 <div className="bg-red-50 p-4 rounded-xl border border-red-100 w-full md:w-1/3 text-center relative overflow-hidden group">
-                  <div className="absolute top-0 right-0 p-2 opacity-10">
-                    <Atom size={64} />
-                  </div>
-                  <h3 className="text-red-800 font-semibold mb-2">Ingredients</h3>
+
+                  <h3 className="text-red-800 font-semibold mb-2">Free Nucleons</h3>
                   <div className="text-3xl font-mono text-red-600 font-bold mb-1">
                     {data.ingredientsMass.toFixed(4)} <span className="text-sm">u</span>
                   </div>
@@ -133,10 +128,8 @@ export default function NuclearBindingApp() {
                 <div className="text-slate-400 font-bold text-2xl">-</div>
 
                 <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-100 w-full md:w-1/3 text-center relative overflow-hidden">
-                  <div className="absolute top-0 right-0 p-2 opacity-10">
-                    <Scale size={64} />
-                  </div>
-                  <h3 className="text-emerald-800 font-semibold mb-2">Actual Nucleus</h3>
+
+                  <h3 className="text-emerald-800 font-semibold mb-2">Bound Nucleus</h3>
                   <div className="text-3xl font-mono text-emerald-600 font-bold mb-1">
                     {currentIsotope.actualMass.toFixed(4)} <span className="text-sm">u</span>
                   </div>
@@ -146,9 +139,7 @@ export default function NuclearBindingApp() {
                 <div className="text-slate-400 font-bold text-2xl">=</div>
 
                 <div className="bg-indigo-50 p-4 rounded-xl border-2 border-indigo-500 w-full md:w-1/3 text-center relative shadow-lg transform scale-105">
-                  <div className="absolute top-0 right-0 p-2 opacity-10">
-                    <Zap size={64} />
-                  </div>
+
                   <h3 className="text-indigo-900 font-bold mb-2">Mass Defect (Δm)</h3>
                   <div className="text-3xl font-mono text-indigo-700 font-bold mb-1">
                     {data.massDefect.toFixed(4)} <span className="text-sm">u</span>
@@ -204,12 +195,7 @@ export default function NuclearBindingApp() {
               <p className="text-slate-500 text-sm">Binding Energy per Nucleon vs. Mass Number (A)</p>
             </div>
             <div className="flex gap-4 text-xs font-semibold uppercase tracking-wider mt-4 md:mt-0">
-              <div className="flex items-center gap-2">
-                <span className="w-3 h-3 rounded-full bg-orange-400" /> Fusion Region
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="w-3 h-3 rounded-full bg-blue-400" /> Fission Region
-              </div>
+
             </div>
           </div>
 
@@ -221,7 +207,7 @@ export default function NuclearBindingApp() {
             <InfoCard
               title="Fusion (Left Slope)"
               color="orange"
-              text="Light nuclei (like Hydrogen) release huge energy when combining because the curve rises steeply here. Moving up the hill releases energy."
+              text="Light nuclei (like Hydrogen) release large amounts of energy when combining because the curve rises steeply here."
             />
             <InfoCard
               title="Peak Stability (Iron-56)"
@@ -231,7 +217,7 @@ export default function NuclearBindingApp() {
             <InfoCard
               title="Fission (Right Slope)"
               color="blue"
-              text="Heavy nuclei (like Uranium) are less tightly bound than Iron. Splitting them lets them slide up the hill towards Iron, releasing energy."
+              text="Heavy nuclei (like Uranium) are less tightly bound than Iron. Splitting them lets them slide up the hill, releasing energy."
             />
           </div>
         </div>
@@ -250,7 +236,7 @@ function InfoCard({ title, text, color }) {
   return (
     <div className={`p-4 rounded-xl border ${colors[color]}`}>
       <h4 className="font-bold mb-2 flex items-center gap-2">
-        <Info className="w-4 h-4 opacity-50" /> {title}
+        {title}
       </h4>
       <p className="text-sm opacity-90 leading-relaxed">{text}</p>
     </div>
@@ -334,7 +320,7 @@ function BindingEnergyChart({ data, highlightIsotope }) {
             x={padding.left - 10}
             y={yScale(val) + 4}
             textAnchor="end"
-            className="text-xs fill-slate-400 font-mono"
+            className="text-s fill-slate-400 font-mono"
           >
             {val}
           </text>
@@ -361,19 +347,19 @@ function BindingEnergyChart({ data, highlightIsotope }) {
           />
           <text
             x={xScale(val)}
-            y={height - padding.bottom + 20}
+            y={height - padding.bottom + 25}
             textAnchor="middle"
-            className="text-xs fill-slate-500 font-bold"
+            className="text-s fill-slate-500 font-bold"
           >
             {val}
           </text>
         </g>
       ))}
       <text
-        x={width / 2}
-        y={height - 5}
+        x={width / 2+15}
+        y={height - 0}
         textAnchor="middle"
-        className="text-sm fill-slate-500 font-semibold uppercase tracking-wider"
+        className="text-m fill-slate-500 font-semibold uppercase tracking-wider"
       >
         Mass Number (A)
       </text>
@@ -391,7 +377,7 @@ function BindingEnergyChart({ data, highlightIsotope }) {
         y={height / 2}
         transform={`rotate(-90, 15, ${height / 2})`}
         textAnchor="middle"
-        className="text-sm fill-slate-500 font-semibold uppercase tracking-wider"
+        className="text-m fill-slate-500 font-semibold uppercase tracking-wider"
       >
         Binding Energy / Nucleon (MeV)
       </text>
@@ -406,7 +392,6 @@ function BindingEnergyChart({ data, highlightIsotope }) {
         className="drop-shadow-lg"
       />
 
-      <circle cx={xScale(56)} cy={yScale(8.79)} r="4" fill="#ef4444" opacity="0.5" />
 
       {data.map((d) => (
         <circle
