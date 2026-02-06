@@ -266,6 +266,7 @@ export default function CoasterBuilder3D({ height = 820, className = "" }) {
   });
 
   const segmentsMapRef = useRef([]);
+  const swarmModeRef = useRef(false);
   const maxEnergyRef = useRef(5000);
 
   // Pointer-over-canvas gate for wheel capture
@@ -283,6 +284,8 @@ export default function CoasterBuilder3D({ height = 820, className = "" }) {
     currT: 0,
     prevVel: INITIAL_SPEED,
     currVel: INITIAL_SPEED,
+    prevBinormal: new THREE.Vector3(1, 0, 0),
+    currBinormal: new THREE.Vector3(1, 0, 0),
     accumulator: 0,
     lastTime: performance.now(),
     statsTimer: 0,
@@ -371,8 +374,8 @@ export default function CoasterBuilder3D({ height = 820, className = "" }) {
     if (frameBinormal.length() === 0) frameBinormal = new THREE.Vector3(1, 0, 0);
 
     let worldBinormal = new THREE.Vector3().crossVectors(tangent, worldUp);
-    if (worldBinormal.length() > 0.9 && worldBinormal.dot(frameBinormal) > 0.8) {
-      frameBinormal.copy(worldBinormal).normalize();
+    if (worldBinormal.length() > 0.9 && worldBinormal.dot(frameBinormal) > 0.9) {
+      frameBinormal.lerp(worldBinormal, 0.1).normalize();
     }
     phys.lastBinormal.copy(frameBinormal);
 
@@ -448,6 +451,12 @@ export default function CoasterBuilder3D({ height = 820, className = "" }) {
     const vertG = feltAccel.dot(localUp) / GRAVITY;
     const latG = feltAccel.dot(frameBinormal) / GRAVITY;
     const totalG = feltAccel.length() / GRAVITY;
+
+    // Swarm check
+    const isRiderActive = riderRef.current !== null;
+    if (isRiderActive && totalG > 8 && !swarmModeRef.current) {
+        swarmModeRef.current = true;
+    }
     
     // Safety check
     if (!safetyOnRef.current && !phys.isOffTrack) {
@@ -545,8 +554,8 @@ export default function CoasterBuilder3D({ height = 820, className = "" }) {
 
     for (let i = 0; i < 80; i++) {
       const tree = createTree();
-      const x = (Math.random() - 0.5) * 1600;
-      const z = (Math.random() - 0.5) * 1600;
+      const x = (Math.random() - 0.5) * 1000;
+      const z = (Math.random() - 0.5) * 1000;
       if (Math.abs(x) < 50 && Math.abs(z) < 50) continue;
       tree.position.set(x, 0, z);
       const s = 0.8 + Math.random() * 0.6;
@@ -586,6 +595,17 @@ export default function CoasterBuilder3D({ height = 820, className = "" }) {
       head.castShadow = true;
       neckPivot.add(head);
 
+      const earGeo = new THREE.BoxGeometry(0.2, 0.5, 0.3);
+      const leftEar = new THREE.Mesh(earGeo, deerMat);
+      leftEar.position.set(0.5, 0.6, -0.2);
+      leftEar.rotation.z = -0.3;
+      head.add(leftEar);
+
+      const rightEar = new THREE.Mesh(earGeo, deerMat);
+      rightEar.position.set(-0.5, 0.6, -0.2);
+      rightEar.rotation.z = 0.3;
+      head.add(rightEar);
+
       if (hasAntlers) {
         const antlerGeo = new THREE.CylinderGeometry(0.05, 0.05, 1.5);
         const left = new THREE.Mesh(antlerGeo, darkMat);
@@ -622,8 +642,8 @@ export default function CoasterBuilder3D({ height = 820, className = "" }) {
       const hasAntlers = Math.random() > 0.6;
       const isStrafing = Math.random() > 0.5;
       const deer = createDeer(hasAntlers, isStrafing);
-      const x = (Math.random() - 0.5) * 1400;
-      const z = (Math.random() - 0.5) * 1400;
+      const x = (Math.random() - 0.5) * 1000;
+      const z = (Math.random() - 0.5) * 1000;
       if (Math.abs(x) < 60 && Math.abs(z) < 60) continue;
 
       deer.group.position.set(x, 0, z);
@@ -833,6 +853,13 @@ export default function CoasterBuilder3D({ height = 820, className = "" }) {
 
       // Birds (use frameDt instead of hardcoded dt)
       birdsRef.current.forEach((b) => {
+        if (swarmModeRef.current && cartRef.current) {
+            const target = cartRef.current.position;
+            const dir = new THREE.Vector3().subVectors(target, b.group.position);
+            const desiredVel = dir.normalize().multiplyScalar(0.4);
+            b.velocity.lerp(desiredVel, 0.05);
+        }
+
         b.group.position.addScaledVector(b.velocity, frameDt * 60);
         if (Math.abs(b.group.position.x) > 500) b.group.position.x *= -1;
         if (Math.abs(b.group.position.z) > 500) b.group.position.z *= -1;
@@ -851,6 +878,34 @@ export default function CoasterBuilder3D({ height = 820, className = "" }) {
 
       // Deer animation
       deerRef.current.forEach((d) => {
+        if (swarmModeRef.current && riderRef.current !== null && deerRef.current[riderRef.current] !== d) {
+            d.state = 6;
+        }
+
+        // State 6: SWARM
+        if (d.state === 6 && cartRef.current) {
+            const target = cartRef.current.position;
+            const dirV = new THREE.Vector3().subVectors(target, d.group.position);
+            dirV.y = 0;
+            const dist = dirV.length();
+
+            if (dist > 15) { // Keep some distance
+                dirV.normalize();
+                d.group.lookAt(target.x, d.group.position.y, target.z);
+                d.group.position.add(dirV.multiplyScalar(0.8));
+                if (d.internalGroup.rotation.y !== 0) d.internalGroup.rotation.y = 0;
+
+                const legPhase = now * 0.025; // Faster run
+                d.legs[0].rotation.x = Math.sin(legPhase) * 0.9;
+                d.legs[1].rotation.x = Math.sin(legPhase + Math.PI) * 0.9;
+                d.legs[2].rotation.x = Math.sin(legPhase + Math.PI) * 0.9;
+                d.legs[3].rotation.x = Math.sin(legPhase) * 0.9;
+
+                d.neckPivot.rotation.x = -0.8;
+            }
+            return;
+        }
+
         // FLIP state
         if (d.state === 3) {
           d.flipProgress += frameDt * 2.0;
@@ -991,11 +1046,13 @@ export default function CoasterBuilder3D({ height = 820, className = "" }) {
             // If on-track, we do the whole interpolation dance
             rs.prevT = phys.t;
             rs.prevVel = phys.velocity;
+            rs.prevBinormal.copy(phys.lastBinormal);
 
             const telem = stepPhysics(FIXED_DT);
 
             rs.currT = phys.t;
             rs.currVel = phys.velocity;
+            rs.currBinormal.copy(phys.lastBinormal);
 
             // Throttle React updates
             rs.statsTimer += FIXED_DT;
@@ -1044,14 +1101,15 @@ export default function CoasterBuilder3D({ height = 820, className = "" }) {
           const travelSign = vInterp >= 0 ? 1 : -1;
           const travelTan = tan.clone().multiplyScalar(travelSign);
           
-          const bin = phys.lastBinormal.clone().projectOnPlane(tan).normalize();
+          const interpBinormal = rs.prevBinormal.clone().lerp(rs.currBinormal, alpha).normalize();
+          const bin = interpBinormal.clone().projectOnPlane(tan).normalize();
           const nrm = new THREE.Vector3().crossVectors(bin.length() ? bin : new THREE.Vector3(1,0,0), tan).normalize();
 
           const m = new THREE.Matrix4().lookAt(p, p.clone().add(travelTan), nrm);
           const targetQ = new THREE.Quaternion().setFromRotationMatrix(m);
           
-          cart.position.lerp(p, 0.85);
-          cart.quaternion.slerp(targetQ, 0.85);
+          cart.position.copy(p);
+          cart.quaternion.copy(targetQ);
         }
       }
 
@@ -1107,24 +1165,36 @@ export default function CoasterBuilder3D({ height = 820, className = "" }) {
             
             camera.up.copy(up);
 
-        } else if(curveRef.current) {
-            const t = phys.t;
-            const point = curveRef.current.getPointAt(t);
-            const tangent = curveRef.current.getTangentAt(t).normalize();
-            const v = phys.velocity || 0;
-            const sign = v >= 0 ? 1 : -1;
-            const forward = tangent.clone().multiplyScalar(sign);
-
-            const binormal = phys.lastBinormal.clone();
-            const normal = new THREE.Vector3().crossVectors(binormal, tangent).normalize();
-
-            const eyeOffset = normal.clone().multiplyScalar(1.2).add(forward.clone().multiplyScalar(0.5));
-            eyePos = point.clone().add(eyeOffset);
-            lookAt = eyePos.clone().add(forward)
-            
-            camera.up.copy(normal);
-        }
+            } else if(curveRef.current) {
+                const alpha = rs.accumulator / FIXED_DT;
+                const isCircuitNow = !!trackMetaRef.current?.isCircuit;
+                let t0 = rs.prevT;
+                let t1 = rs.currT;
+                if (isCircuitNow) {
+                    const d = t1 - t0;
+                    if (d > 0.5) t0 += 1;
+                    else if (d < -0.5) t1 += 1;
+                }
+                let tInterp = THREE.MathUtils.lerp(t0, t1, alpha);
+                if (isCircuitNow) tInterp = ((tInterp % 1) + 1) % 1;
+                
+                const point = curveRef.current.getPointAt(tInterp);
+                const tangent = curveRef.current.getTangentAt(tInterp).normalize();
+                
+                const vInterp = THREE.MathUtils.lerp(rs.prevVel, rs.currVel, alpha);
+                const sign = vInterp >= 0 ? 1 : -1;
+                const forward = tangent.clone().multiplyScalar(sign);
         
+                const interpBinormal = rs.prevBinormal.clone().lerp(rs.currBinormal, alpha).normalize();
+                const binormal = interpBinormal.clone().projectOnPlane(tangent).normalize();
+                const normal = new THREE.Vector3().crossVectors(binormal.length() ? binormal : new THREE.Vector3(1,0,0), tangent).normalize();
+        
+                const eyeOffset = normal.clone().multiplyScalar(1.2).add(forward.clone().multiplyScalar(0.5));
+                eyePos = point.clone().add(eyeOffset);
+                lookAt = eyePos.clone().add(forward)
+                
+                camera.up.copy(normal);
+            }        
         if (eyePos && lookAt) {
             camera.position.copy(eyePos);
             camera.lookAt(lookAt);
@@ -1161,6 +1231,16 @@ export default function CoasterBuilder3D({ height = 820, className = "" }) {
     const scene = sceneRef.current;
     if (!scene) return;
 
+    // --- Preserve cart state if simulating ---
+    const oldCurve = curveRef.current;
+    let oldPos = null;
+    if (isSimulatingRef.current && oldCurve) {
+      const oldT = physicsRef.current.t;
+      if (oldT >= 0 && oldT <= 1) {
+        oldPos = oldCurve.getPointAt(oldT);
+      }
+    }
+
     // Clear previous track/supports
     ["TRACK", "SUPPORTS"].forEach((name) => {
       const obj = scene.getObjectByName(name);
@@ -1195,8 +1275,13 @@ export default function CoasterBuilder3D({ height = 820, className = "" }) {
         pos.add(dir.clone().multiplyScalar(15));
         points.push(pos.clone());
       } else if (seg.type === "STRAIGHT") {
-        pos.add(dir.clone().multiplyScalar(def.len));
-        points.push(pos.clone());
+        const len = def.len;
+        const steps = Math.max(2, Math.ceil(len / 1.5));
+        const startPos = pos.clone();
+        for (let k = 1; k <= steps; k++) {
+          points.push(startPos.clone().add(dir.clone().multiplyScalar((k * len) / steps)));
+        }
+        pos.copy(points[points.length - 1]);
       } else if (seg.type === "UP" || seg.type === "DOWN") {
         let count = 1;
         let j = i + 1;
@@ -1306,6 +1391,39 @@ export default function CoasterBuilder3D({ height = 820, className = "" }) {
     const curve = new THREE.CatmullRomCurve3(points);
     curve.tension = 0.2;
     curveRef.current = curve;
+
+    // --- Remap cart position to new curve ---
+    if (oldPos) {
+      const divisions = Math.max(200, curve.points.length * 10);
+      const searchPoints = curve.getPoints(divisions);
+      let closestDistSq = Infinity;
+      let closestIdx = -1;
+
+      for (let i = 0; i < searchPoints.length; i++) {
+        const distSq = searchPoints[i].distanceToSquared(oldPos);
+        if (distSq < closestDistSq) {
+          closestDistSq = distSq;
+          closestIdx = i;
+        }
+      }
+
+      if (closestIdx !== -1) {
+        const newT = closestIdx / divisions;
+        physicsRef.current.t = newT;
+        renderStateRef.current.prevT = newT;
+        renderStateRef.current.currT = newT;
+
+        // Re-initialize orientation to prevent flips
+        const newTangent = curve.getTangentAt(newT).normalize();
+        const newBinormal = new THREE.Vector3().crossVectors(newTangent, new THREE.Vector3(0, 1, 0)).normalize();
+        if (newBinormal.length() > 0) {
+          physicsRef.current.lastBinormal.copy(newBinormal);
+          renderStateRef.current.prevBinormal.copy(newBinormal);
+          renderStateRef.current.currBinormal.copy(newBinormal);
+        }
+      }
+    }
+
 
     // --- Circuit detection (used for lap wrap + deer boarding) ---
     const startPt = points[0].clone();
@@ -1451,7 +1569,9 @@ export default function CoasterBuilder3D({ height = 820, className = "" }) {
     });
     segmentsMapRef.current = map;
 
-    resetSim();
+    if (!isSimulatingRef.current) {
+      resetSim();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [segments]);
 
@@ -1484,6 +1604,8 @@ export default function CoasterBuilder3D({ height = 820, className = "" }) {
     rs.accumulator = 0;
     rs.lastTime = performance.now();
     rs.statsTimer = 0;
+    rs.prevBinormal.copy(binormal);
+    rs.currBinormal.copy(binormal);
 
     const cart = cartRef.current;
     if (cart) {
@@ -1496,15 +1618,28 @@ export default function CoasterBuilder3D({ height = 820, className = "" }) {
     }
   };
 
+  const resetSwarm = () => {
+    if (swarmModeRef.current) {
+        swarmModeRef.current = false;
+        deerRef.current.forEach(d => {
+            if (d.state === 6) {
+                d.state = 0;
+            }
+        });
+    }
+  }
+
   const addSegment = (type, variant = "NORMAL") => {
     setSegments((prev) => [...prev, { type, variant }]);
   };
 
   const undo = () => {
+    resetSwarm();
     setSegments((prev) => (prev.length > 1 ? prev.slice(0, -1) : prev));
   };
 
   const clearTrack = () => {
+    resetSwarm();
     setSegments([{ type: "START", variant: "NORMAL" }]);
   };
 
