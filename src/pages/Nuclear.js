@@ -1,11 +1,15 @@
-import React from "react";
+import React, { useState } from "react";
 import { MathJax, MathJaxContext } from "better-react-mathjax";
 import HiddenQuestion from "../components/shared/HiddenQuestion";
 import HiddenExposition from "../components/shared/HiddenExposition";
 import NuclearDecayExplorer from "../components/modern/NuclearDecayExplorer";
 import NuclearBindingApp from "../components/modern/NuclearBindingApp";
+import RetroReactor from "../components/modern/RetroReactor";
+import PWRSimulator from "../components/modern/PWRReactor";
 
 export default function Nuclear() {
+  const [selectedReactor, setSelectedReactor] = useState("retro");
+
   return (
     <div className="mathjax-container">
       <MathJaxContext>
@@ -71,6 +75,27 @@ export default function Nuclear() {
               }
             </MathJax>
           </HiddenExposition>
+
+          
+          <h2>Reactor Simulations</h2>
+          <div className="flex space-x-4 mb-4">
+            <button 
+              onClick={() => setSelectedReactor("retro")}
+              className={`px-4 py-2 rounded ${selectedReactor === 'retro' ? 'bg-blue-500 text-white' : 'bg-gray-200'}`}
+            >
+              RBMK Reactor
+            </button>
+            <button 
+              onClick={() => setSelectedReactor("pwr")}
+              className={`px-4 py-2 rounded ${selectedReactor === 'pwr' ? 'bg-blue-500 text-white' : 'bg-gray-200'}`}
+            >
+              PWR Reactor
+            </button>
+          </div>
+
+          {selectedReactor === "retro" ? <RetroReactor /> : <PWRSimulator />}
+
+          
 
           <h2>Practice</h2>
           <div className="px-6 py-0 pb-24">

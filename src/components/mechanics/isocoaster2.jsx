@@ -595,7 +595,7 @@ export default function CoasterBuilder3D({ height = 820, className = "" }) {
       head.castShadow = true;
       neckPivot.add(head);
 
-      const earGeo = new THREE.BoxGeometry(0.2, 0.5, 0.3);
+      const earGeo = new THREE.BoxGeometry(0.15, 0.45, 0.25);
       const leftEar = new THREE.Mesh(earGeo, deerMat);
       leftEar.position.set(0.5, 0.6, -0.2);
       leftEar.rotation.z = -0.3;
