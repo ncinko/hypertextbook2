@@ -430,18 +430,17 @@ const RetroReactor = () => {
       {gamePhase === 'MENU' && (
           <div className="fixed inset-0 z-[60] bg-black/90 flex items-center justify-center p-4">
               <div className="max-w-2xl w-full border-4 border-green-600 bg-black p-8 shadow-[0_0_50px_rgba(0,255,0,0.2)] text-center">
-                  <h1 className="text-6xl font-black mb-2 text-green-500 tracking-tighter crt-flicker">ATOMICA</h1>
+                  <h1 className="text-6xl font-black mb-2 text-green-500 tracking-tighter crt-flicker">SKALA</h1>
                   <p className="text-xl mb-8 text-green-700 tracking-[0.5em] uppercase">Shift Manager Career</p>
                   
                   <div className="space-y-4 mb-8 text-left border border-green-900 p-6">
                       <p className="text-green-400">OBJECTIVE: Fulfill the energy quota for your shift.</p>
                       <p className="text-green-400">WARNING: Do not exceed thermal or pressure limits.</p>
-                      <p className="text-amber-500">TIP: The shift ends immediately once the quota is met.</p>
                   </div>
 
                   <div className="flex flex-col gap-4">
                     <button onClick={() => startGame(0)} className="bg-green-700 text-black font-bold text-2xl px-12 py-4 hover:bg-green-500 hover:scale-105 transition-all uppercase tracking-widest">
-                        Start Shift 1
+                        Start Shift
                     </button>
                     <button onClick={startSimulator} className="border border-green-700 text-green-500 text-sm px-4 py-2 hover:bg-green-900/50">
                         RETURN TO SANDBOX
@@ -515,7 +514,7 @@ const RetroReactor = () => {
       <header className="border-b-2 border-green-800 pb-4 mb-8 flex flex-col md:flex-row justify-between items-end relative z-10">
         <div>
             <h1 className="text-3xl font-black tracking-widest text-green-500 mb-1">
-                ATOMICA <span className="text-xs align-top opacity-50">v3.4</span>
+                SKALA <span className="text-xs align-top opacity-50">v1.0</span>
             </h1>
             <div className="flex items-center gap-4 text-xs text-green-700 uppercase tracking-wider">
                 {gamePhase === 'PLAYING' ? (
@@ -523,7 +522,7 @@ const RetroReactor = () => {
                 ) : (
                      <span>MODE: SANDBOX // UNLIMITED</span>
                 )}
-                <span>ID: 884-21-X</span>
+                <span>Reactor-4</span>
             </div>
         </div>
         
