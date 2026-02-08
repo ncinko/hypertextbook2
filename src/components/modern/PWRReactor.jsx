@@ -47,7 +47,7 @@ const Win95Button = ({ onClick, disabled, children, className = "" }) => (
       border-b-black border-r-black
       active:not(:disabled):border-t-black active:not(:disabled):border-l-black
       active:not(:disabled):border-b-white active:not(:disabled):border-r-white
-      disabled:text-gray-500
+      disabled:text-gray-500 disabled:bg-[#b0b0b0]
       ${className}
     `}
   >
@@ -132,6 +132,14 @@ const ControlSlider = memo(({ label, value, onChange, disabled, min = 0, max = 1
             [&::-webkit-slider-thumb]:border-t-2 [&::-webkit-slider-thumb]:border-l-2 [&::-webkit-slider-thumb]:border-white
             [&::-webkit-slider-thumb]:border-b-2 [&::-webkit-slider-thumb]:border-r-2 [&::-webkit-slider-thumb]:border-black
             [&::-webkit-slider-thumb]:-mt-1
+            [&::-webkit-slider-runnable-track]:bg-transparent
+            [&::-moz-range-track]:bg-transparent
+            [&::-moz-range-thumb]:w-4
+            [&::-moz-range-thumb]:h-6
+            [&::-moz-range-thumb]:bg-[#c0c0c0]
+            [&::-moz-range-thumb]:border-t-2 [&::-moz-range-thumb]:border-l-2 [&::-moz-range-thumb]:border-white
+            [&::-moz-range-thumb]:border-b-2 [&::-moz-range-thumb]:border-r-2 [&::-moz-range-thumb]:border-black
+            [&::-moz-range-thumb]:border-radius-0
           "
         />
       </div>
@@ -1244,16 +1252,13 @@ const PWRSimulator = () => {
 
               {/* SCRAM Button Area */}
               <div className="mt-4 p-2 border-2 border-gray-500 border-b-white border-r-white bg-gray-300">
-                 <button 
+                <Win95Button 
                   onClick={handleScram}
                   disabled={simState.isScrammed}
-                  className={`
-                    w-full py-2 font-bold text-lg border-2 border-black
-                    ${simState.isScrammed ? 'bg-gray-400 text-gray-600 border-gray-500' : 'bg-red-600 text-white hover:bg-red-500 active:border-t-black active:border-l-black active:bg-red-700 shadow-md'}
-                  `}
+                  className={`w-full py-2 text-lg ${simState.isScrammed ? 'bg-[#b0b0b0] text-gray-600' : 'bg-[#ff0000] text-white hover:bg-[#e00000]'}`}
                 >
                   ⚠ SCRAM ⚠
-                </button>
+                </Win95Button>
               </div>
             </fieldset>
 
