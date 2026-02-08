@@ -223,17 +223,23 @@ const FluxMonitor = ({ flux, isCritical }) => {
 // This view now shows a static cross-section of the core without neutron animations.
 const CoreInternalsView = ({ state, onClose, onRodChange, onBoronChange }) => {
   // Recalculate reactivity locally for visualization - synchronized with engine
-  const reactivityBase = (100 - state.controlRodPosition) / 100;
-  const rodWorth = reactivityBase * 0.25;
-  const boronWorth = (state.boronConcentration / 2000) * 0.25;
-  const tempWorth = (state.coreTemp - 30) * 0.00015;
-  // Calculate saturation for void penalty logic
-  const avgTemp = (state.coolantTempHot + state.coolantTempCold) / 2;
-  const p = 1 + (avgTemp / 320) * 155;
-  const satTemp = 100 + p * 1.6;
-  let voidPenalty = 0;
-  if (state.coolantTempHot > satTemp) voidPenalty = (state.coolantTempHot - satTemp) * 0.1;
-  const reactivity = rodWorth - boronWorth - tempWorth - voidPenalty - 0.02;
+  const clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
+  const rodWithdrawFrac = clamp((100 - state.controlRodPosition) / 100, 0, 1);
+  const rhoRodsPcm = rodWithdrawFrac * 2500;
+  const boronEff = state._boronEff ?? state.boronConcentration;
+  const rhoBoronPcm = -(boronEff - 1500) * 1.5;
+  const rhoTempPcm = -(state.coreTemp - 300) * 4.0;
+  const saturationTemp = 100 + state.pressure * 1.6;
+  const subcoolMargin = saturationTemp - state.coolantTempHot;
+  const boilOvershoot = Math.max(0, 10 - subcoolMargin);
+  const rhoVoidPcm = -boilOvershoot * 120;
+  const rhoOffsetPcm = -350;
+  let rhoPcm = rhoRodsPcm + rhoBoronPcm + rhoTempPcm + rhoVoidPcm + rhoOffsetPcm;
+  if (state.isScrammed) rhoPcm = -5000;
+  rhoPcm = clamp(rhoPcm, -8000, 2500);
+  const reactivity = rhoPcm / 10000;
+  const tempWorth = rhoTempPcm / 10000;
+  const boronWorth = rhoBoronPcm / 10000;
   const isCritical = state.flux > 0.0001;
   const fuelColor = `rgb(${100 + (state.coreTemp / 10) * 4}, ${100 - state.coreTemp / 10}, ${100 - state.coreTemp / 10})`;
   const moderatorColor = `rgba(0, ${Math.max(100, 255 - state.coreTemp / 3)}, 255, 0.4)`;
@@ -305,11 +311,11 @@ const CoreInternalsView = ({ state, onClose, onRodChange, onBoronChange }) => {
                 </div>
                 <div className="flex justify-between">
                   <span>Doppler:</span>
-                  <span className="text-blue-800">-{tempWorth.toFixed(5)}</span>
+                  <span className="text-blue-800">{tempWorth.toFixed(5)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span>Boron:</span>
-                  <span className="text-yellow-700">-{boronWorth.toFixed(5)}</span>
+                  <span className="text-yellow-700">{boronWorth.toFixed(5)}</span>
                 </div>
                 <div className="mt-2 pt-2 border-t border-gray-400">
                   <ControlSlider
@@ -604,6 +610,7 @@ const PWRSimulator = () => {
     _power: 0,
     _precursor: 0,
     _boronEff: 1500,
+    reactivityPcm: -350,
   });
   const [activeView, setActiveView] = useState(null); // null, 'CORE', 'SG', 'TURBINE'
   // Constants for global simulation
@@ -698,8 +705,10 @@ const PWRSimulator = () => {
         newP = 0;
         newC = 0;
       }
-      // Keep normalized within bounds
-      let newPNorm = clamp(newP, 0, 1.25);
+      // Keep normalized within bounds for stability and readable instrumentation
+      const MAX_POWER_NORM = 1.25;
+      newP = clamp(newP, 0, MAX_POWER_NORM);
+      let newPNorm = newP;
       // 4) Thermal power and decay heat
       const Pth = newPNorm * P_TH_NOM;
       const decayFrac = prev.isScrammed ? 0.02 : 0.006;
@@ -759,6 +768,7 @@ const PWRSimulator = () => {
         _boronEff: boronEff,
         _power: newP,
         _precursor: newC,
+        reactivityPcm: rho_pcm,
         flux: newPNorm,
         secondaryPumpSpeed: newSecondaryPumpSpeed,
         coreTemp: Math.max(ambient, coreTempCapped),
@@ -816,6 +826,7 @@ const PWRSimulator = () => {
       _power: 0,
       _precursor: 0,
       _boronEff: 1500,
+      reactivityPcm: -350,
     });
     setActiveView(null);
   }, []);
