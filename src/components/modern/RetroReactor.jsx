@@ -409,6 +409,46 @@ const RetroReactor = () => {
     return () => cancelAnimationFrame(requestRef.current);
   }, [updatePhysics, active]);
 
+  // Keyboard controls
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (gamePhase !== 'PLAYING' && gamePhase !== 'SIMULATOR') return;
+
+      const rodStep = 1;
+      const flowStep = 1;
+
+      switch (e.key) {
+        case 'w':
+        case 'ArrowUp':
+          e.preventDefault();
+          setControlRodLevel(prev => Math.max(0, prev - rodStep));
+          break;
+        case 's':
+        case 'ArrowDown':
+          e.preventDefault();
+          setControlRodLevel(prev => Math.min(100, prev + rodStep));
+          break;
+        case 'd':
+        case 'ArrowRight':
+          e.preventDefault();
+          setCoolantFlow(prev => Math.min(100, prev + flowStep));
+          break;
+        case 'a':
+        case 'ArrowLeft':
+          e.preventDefault();
+          setCoolantFlow(prev => Math.max(0, prev - flowStep));
+          break;
+        default:
+          break;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [gamePhase]);
+
   const handleScram = () => {
     setControlRodLevel(100);
   };
@@ -440,7 +480,7 @@ const RetroReactor = () => {
 
                   <div className="flex flex-col gap-4">
                     <button onClick={() => startGame(0)} className="bg-green-700 text-black font-bold text-2xl px-12 py-4 hover:bg-green-500 hover:scale-105 transition-all uppercase tracking-widest">
-                        Start Shift
+                        Start Shift 1
                     </button>
                     <button onClick={startSimulator} className="border border-green-700 text-green-500 text-sm px-4 py-2 hover:bg-green-900/50">
                         RETURN TO SANDBOX
@@ -522,7 +562,7 @@ const RetroReactor = () => {
                 ) : (
                      <span>MODE: SANDBOX // UNLIMITED</span>
                 )}
-                <span>Reactor-4</span>
+                <span>Reactor 4</span>
             </div>
         </div>
         
@@ -564,7 +604,7 @@ const RetroReactor = () => {
         <div className="lg:col-span-4 space-y-6">
             <div className="border-2 border-green-800 p-6 bg-black/80 shadow-[0_0_20px_rgba(0,20,0,0.2)]">
                 <h2 className="text-green-400 border-b border-green-900 pb-2 mb-6 uppercase tracking-wider flex items-center">
-                    <Activity className="w-4 h-4 mr-2" /> Manual Override
+                    Controls
                 </h2>
                 
                 <RetroSlider 
@@ -723,36 +763,6 @@ const RetroReactor = () => {
         @keyframes flicker { 0% { opacity: 0.95; } 50% { opacity: 1; } 100% { opacity: 0.98; } }
         .blink { animation: blinker 1s linear infinite; }
         @keyframes blinker { 50% { opacity: 0; } }
-
-        /* Custom styles for transparent slider thumb */
-        .custom-slider::-webkit-slider-thumb {
-          -webkit-appearance: none;
-          appearance: none;
-          width: 24px;
-          height: 24px;
-          background: transparent !important;
-          cursor: pointer;
-          border: none;
-          box-shadow: none;
-        }
-
-        .custom-slider::-moz-range-thumb {
-          width: 24px;
-          height: 24px;
-          background: transparent !important;
-          cursor: pointer;
-          border: none;
-          box-shadow: none;
-        }
-        
-        .custom-slider::-ms-thumb {
-          width: 24px;
-          height: 24px;
-          background: transparent !important;
-          cursor: pointer;
-          border: none;
-          box-shadow: none;
-        }
       `}</style>
     </div>
   );
@@ -763,35 +773,13 @@ const CRTButton = ({ onClick, children, className = '', active = false, danger =
     <button onClick={onClick} className={`relative uppercase font-bold tracking-widest px-6 py-3 border-2 transition-all active:translate-y-1 ${danger ? 'border-red-600 text-red-600' : 'border-green-800 text-green-700 hover:border-green-500 hover:text-green-500'} ${className}`}>{children}</button>
 );
 
-const RetroSlider = ({ value, onChange, label, min = 0, max = 100 }) => (
+const RetroSlider = ({ value, onChange, label, min=0, max=100 }) => (
     <div className="mb-6 group">
-        <div className="flex justify-between text-green-600 font-mono mb-1 uppercase text-xs">
-            <span>{label}</span>
-            <span>[{value.toFixed(1)}]</span>
-        </div>
-        <div className="relative h-8 bg-black border border-green-900">
-            {/* Tick marks remain in the background */}
-            <div className="absolute inset-0 flex justify-between items-center opacity-20 pointer-events-none px-2">
-                {[...Array(20)].map((_, i) => <div key={i} className="h-4 w-px bg-green-500"></div>)}
-            </div>
-
-            {/* The visual bar showing the current value */}
-            <div
-                className="absolute top-0 left-0 h-full bg-green-700/50 transition-all duration-75"
-                style={{ width: `${(value / max) * 100}%` }}
-            >
-            </div>
-
-            {/* The interactive slider, now in the foreground */}
-            <input
-                type="range"
-                min={min}
-                max={max}
-                step="0.5"
-                value={value}
-                onChange={onChange}
-                className="custom-slider relative w-full h-full appearance-none bg-transparent cursor-pointer z-10"
-            />
+        <div className="flex justify-between text-green-600 font-mono mb-1 uppercase text-xs"><span>{label}</span><span>[{value.toFixed(1)}]</span></div>
+        <div className="relative h-8 bg-black border border-green-900 p-1">
+            <div className="absolute inset-0 flex justify-between px-2 items-center opacity-20 pointer-events-none">{[...Array(20)].map((_, i) => <div key={i} className="h-2 w-px bg-green-500"></div>)}</div>
+            <div className="h-full bg-green-700/50 border-r-2 border-green-400 relative transition-all duration-75" style={{ width: `${(value / max) * 100}%` }}><div className="absolute right-0 top-0 bottom-0 w-1 bg-green-300 opacity-50 animate-pulse"></div></div>
+            <input type="range" min={min} max={max} step="0.5" value={value} onChange={onChange} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
         </div>
     </div>
 );

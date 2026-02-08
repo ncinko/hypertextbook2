@@ -36,25 +36,28 @@ const Win95Panel = ({ title, children, className = "", onClose }) => (
   </div>
 );
 
-const Win95Button = ({ onClick, disabled, children, className = "" }) => (
+const Win95Button = ({ onClick, disabled, children, className = "", active = false }) => (
   <button
     onClick={onClick}
     disabled={disabled}
     className={`
-      bg-[#c0c0c0] px-4 py-1 text-black font-bold text-sm
-      border-2
-      border-t-white border-l-white
-      border-b-black border-r-black
-      active:not(:disabled):border-t-black active:not(:disabled):border-l-black
-      active:not(:disabled):border-b-white active:not(:disabled):border-r-white
-      disabled:text-gray-500 disabled:bg-[#b0b0b0]
+      !bg-[#c0c0c0] !px-4 !py-1 !text-black !font-bold !text-sm !outline-none !rounded-none !shadow-none !no-underline
+      !border-t-2 !border-l-2 !border-b-2 !border-r-2 !border-solid
+      
+      hover:!bg-[#c0c0c0] hover:!text-black
+      
+      ${active 
+        ? '!border-t-black !border-l-black !border-b-white !border-r-white' 
+        : '!border-t-white !border-l-white !border-b-black !border-r-black active:!border-t-black active:!border-l-black active:!border-b-white active:!border-r-white'}
+      
+      disabled:!text-gray-500 disabled:!cursor-not-allowed disabled:active:!border-t-white disabled:active:!border-l-white
+      
       ${className}
     `}
   >
     {children}
   </button>
 );
-
 const Win95Inset = ({ children, className = "" }) => (
   <div className={`bg-white border-2 border-gray-500 border-t-black border-l-black border-r-white border-b-white ${className}`}>
     {children}
@@ -102,18 +105,18 @@ const ControlSlider = memo(({ label, value, onChange, disabled, min = 0, max = 1
   }, [onChange]);
 
   return (
-    <div className="mb-4">
-      <div className="flex justify-between mb-1">
-        <label className="text-sm text-black font-bold">{label}</label>
-        <span className="text-sm font-mono bg-white border border-gray-500 px-1 min-w-[3rem] text-right">{value.toFixed(0)}{unit}</span>
+    <div className="!mb-4">
+      <div className="!flex !justify-between !mb-1">
+        <label className="!text-sm !text-black !font-bold">{label}</label>
+        <span className="!text-sm !font-mono !bg-white !border !border-gray-500 !px-1 !min-w-[3rem] !text-right !text-black">{value.toFixed(0)}{unit}</span>
       </div>
-      <div className="relative h-8 flex items-center">
+      <div className="!relative !h-8 !flex !items-center">
         {/* Track Line */}
-        <div className="absolute left-0 right-0 h-2 border-t border-l border-gray-500 border-b border-r border-white bg-white"></div>
+        <div className="!absolute !left-0 !right-0 !h-2 !border-t !border-l !border-gray-500 !border-b !border-r !border-white !bg-white"></div>
         {/* Tick Marks */}
-        <div className="absolute top-6 left-0 right-0 flex justify-between px-1">
+        <div className="!absolute !top-6 !left-0 !right-0 !flex !justify-between !px-1">
            {[...Array(11)].map((_, i) => (
-             <div key={i} className="w-[1px] h-2 bg-black"></div>
+             <div key={i} className="!w-[1px] !h-2 !bg-black"></div>
            ))}
         </div>
         <input 
@@ -124,22 +127,28 @@ const ControlSlider = memo(({ label, value, onChange, disabled, min = 0, max = 1
           value={value} 
           onChange={handleChange}
           disabled={disabled}
-          className="w-full h-8 appearance-none bg-transparent relative z-10 cursor-pointer 
-            [&::-webkit-slider-thumb]:appearance-none
-            [&::-webkit-slider-thumb]:w-4
-            [&::-webkit-slider-thumb]:h-6
-            [&::-webkit-slider-thumb]:bg-[#c0c0c0]
-            [&::-webkit-slider-thumb]:border-t-2 [&::-webkit-slider-thumb]:border-l-2 [&::-webkit-slider-thumb]:border-white
-            [&::-webkit-slider-thumb]:border-b-2 [&::-webkit-slider-thumb]:border-r-2 [&::-webkit-slider-thumb]:border-black
-            [&::-webkit-slider-thumb]:-mt-1
-            [&::-webkit-slider-runnable-track]:bg-transparent
-            [&::-moz-range-track]:bg-transparent
-            [&::-moz-range-thumb]:w-4
-            [&::-moz-range-thumb]:h-6
-            [&::-moz-range-thumb]:bg-[#c0c0c0]
-            [&::-moz-range-thumb]:border-t-2 [&::-moz-range-thumb]:border-l-2 [&::-moz-range-thumb]:border-white
-            [&::-moz-range-thumb]:border-b-2 [&::-moz-range-thumb]:border-r-2 [&::-moz-range-thumb]:border-black
-            [&::-moz-range-thumb]:border-radius-0
+          className="!w-full !h-8 !appearance-none !bg-transparent !bg-none !relative !z-10 !cursor-pointer !rounded-none !shadow-none !border-none !outline-none !p-0 !m-0
+            [&::-webkit-slider-runnable-track]:!bg-transparent [&::-webkit-slider-runnable-track]:!border-none [&::-webkit-slider-runnable-track]:!shadow-none
+            [&::-moz-range-track]:!bg-transparent [&::-moz-range-track]:!border-none [&::-moz-range-track]:!shadow-none
+            
+            [&::-webkit-slider-thumb]:!appearance-none
+            [&::-webkit-slider-thumb]:!w-4
+            [&::-webkit-slider-thumb]:!h-6
+            [&::-webkit-slider-thumb]:!bg-[#c0c0c0]
+            [&::-webkit-slider-thumb]:!border-t-2 [&::-webkit-slider-thumb]:!border-l-2 [&::-webkit-slider-thumb]:!border-white
+            [&::-webkit-slider-thumb]:!border-b-2 [&::-webkit-slider-thumb]:!border-r-2 [&::-webkit-slider-thumb]:!border-black
+            [&::-webkit-slider-thumb]:!-mt-1
+            [&::-webkit-slider-thumb]:!rounded-none
+            active:[&::-webkit-slider-thumb]:!border-t-black active:[&::-webkit-slider-thumb]:!border-l-black active:[&::-webkit-slider-thumb]:!border-b-white active:[&::-webkit-slider-thumb]:!border-r-white
+            
+            [&::-moz-range-thumb]:!appearance-none
+            [&::-moz-range-thumb]:!w-4
+            [&::-moz-range-thumb]:!h-6
+            [&::-moz-range-thumb]:!bg-[#c0c0c0]
+            [&::-moz-range-thumb]:!border-t-2 [&::-moz-range-thumb]:!border-l-2 [&::-moz-range-thumb]:!border-white
+            [&::-moz-range-thumb]:!border-b-2 [&::-moz-range-thumb]:!border-r-2 [&::-moz-range-thumb]:!border-black
+            [&::-moz-range-thumb]:!rounded-none
+            active:[&::-moz-range-thumb]:!border-t-black active:[&::-moz-range-thumb]:!border-l-black active:[&::-moz-range-thumb]:!border-b-white active:[&::-moz-range-thumb]:!border-r-white
           "
         />
       </div>
@@ -804,165 +813,272 @@ const PWRSimulator = () => {
   const previousTimeRef = useRef();
 
   // --- Physics Engine ---
-  const updatePhysics = (deltaTime) => {
-    setSimState(prev => {
-      if (prev.meltdown) return prev;
+  // --- Physics Engine (Drop-in replacement tuned for ~1200 MWe / 3600 MWth) ---
+const updatePhysics = (deltaTime) => {
+  setSimState((prev) => {
+    if (prev.meltdown) return prev;
 
-      // SPEED MULTIPLIER: 20x real time
-      const TIME_SCALE = 20.0;
-      const dt = deltaTime * TIME_SCALE;
+    // ---------------------------
+    // Time handling (keep your 20x feel)
+    // ---------------------------
+    const TIME_SCALE = 20.0;
+    const dt = Math.max(0, deltaTime) * TIME_SCALE;
 
-      // 1. Calculate Primary Loop Pressure & Saturation Temp
-      // Basic PZR logic + Ideal gas law approx for expansion
-      const avgTemp = (prev.coolantTempHot + prev.coolantTempCold) / 2;
-      let newPressure = 1 + (avgTemp / 320) * 155; 
-      
-      // Saturation Temp (Boiling point at current pressure)
-      // Approximation: 155 bar -> 345 C. 1 bar -> 100 C.
-      // Curve: T_sat = 100 + (P * 1.6)
-      const saturationTemp = 100 + (newPressure * 1.6);
+    // ---------------------------
+    // Plant anchors (targets)
+    // ---------------------------
+    const P_ELEC_NOM = 1200; // MWe
+    const ETA_ELEC = 0.33;   // electric efficiency (rough)
+    const P_TH_NOM = P_ELEC_NOM / ETA_ELEC; // ~3636 MWth
 
-      // 2. Boiling Check (Negative Void Coefficient Logic)
-      let voidPenalty = 0;
-      let statusOverride = null;
-      let pressureSpike = 0;
+    const PZR_SET_BAR = 155; // primary pressure setpoint (bar)
+    const TURBINE_SYNC_RPM = 3600; // 60 Hz, 2-pole equivalent display
 
-      if (prev.coolantTempHot > saturationTemp) {
-         statusOverride = "CRITICAL: BULK BOILING";
-         // Negative Void Coefficient: Boiling displaces moderator -> reactivity drops
-         // Penalty increases with temp overshoot
-         voidPenalty = (prev.coolantTempHot - saturationTemp) * 0.1; 
-         
-         // Pressure spikes due to steam formation in primary loop
-         pressureSpike = (prev.coolantTempHot - saturationTemp) * 2;
-      }
+    // Primary loop nominal thermal-hydraulic behavior:
+    // Choose MW_per_K so that at full power you get ~35-40C delta-T.
+    // Example: if MW_per_K_nom ~ 96, then 3600/96 ~ 37.5C.
+    const MW_PER_K_NOM = 96;
 
-      // 3. Reactivity & Kinetic Flux Model (Major Update)
-      // We are now switching to a simplified point kinetics model.
-      
-      const reactivityBase = (100 - prev.controlRodPosition) / 100; // 0.0 to 1.0
-      // Calibrate so ~1500ppm boron balances out fresh fuel at zero temp
-      const boronPenalty = prev.boronConcentration / 2000; 
-      // Temp feedback: -0.00015 per degree above 30. (Reduced from 0.0002)
-      const tempFeedback = (prev.coreTemp - 30) * 0.00015; 
-      
-      // Rod calibration:
-      // We want Critical (0 reactivity) at roughly Rods=50%, Boron=1000ppm, Temp=300C
-      // 0.5 (rods) - 0.5 (boron) - 0.05 (temp) = -0.05 (subcritical)
-      // Let's adjust the base.
-      
-      // Net Reactivity = (Reactivity from Rods) - (Boron Poison) - (Temp Defect) - (Void)
-      // Note: We subtract an offset so 0 is achievable.
-      // Let's define "100% Rods Withdrawn" as 0.2 excess reactivity
-      const rodWorth = reactivityBase * 0.25; 
-      const boronWorth = (prev.boronConcentration / 2000) * 0.25; 
-      const tempWorth = (prev.coreTemp - 30) * 0.00005; // 0.015 at 300C
-      
-      const netReactivity = rodWorth - boronWorth - tempWorth - voidPenalty - 0.02; 
-      
-      // Flux Kinetics: dFlux/dt = Flux * Reactivity * Lambda
-      // + Source Term (always small amount)
-      // REDUCED SOURCE TERM: Prevents heat generation at startup
-      const sourceTerm = 0.0001; 
-      let fluxChange = prev.flux * netReactivity * dt * 2.0; 
-      let newFlux = prev.flux + fluxChange;
-      
-      // Safety Clamp: Prevents Flux from becoming negative or NaN
-      if (isNaN(newFlux)) newFlux = sourceTerm;
-      
-      // Source term keeps it alive at very low levels
-      if (newFlux < sourceTerm) {
-         // If subcritical, settle at subcritical multiplication level
-         if (netReactivity < 0) {
-             newFlux = sourceTerm / (1 - Math.min(0, netReactivity)); // Simplified subcrit multiplication
-         } else {
-             newFlux = sourceTerm;
-         }
-      }
-      
-      // Scram logic
-      if (prev.isScrammed) {
-         newFlux = 0; // Forced kill
-      }
+    // "Thermal inertia" time constants in *sim-time* (seconds)
+    const TAU_NEUTRON = 8.0;   // power response (delayed-neutron-ish feel)
+    const TAU_PRIMARY = 35.0;  // average coolant temp inertia
+    const TAU_HOTLEG = 12.0;   // hot leg tracks core faster than average
+    const TAU_TURBINE = 6.0;   // rotor response
+    const TAU_PZR = 10.0;      // pressurizer pressure control response
+    const TAU_BORON = 240.0;   // boron acts slow (chem/volume control feel)
 
-      // 4. Heat Generation from Flux
-      // Nominal 100% flux = enough heat to maintain 315C at full flow
-      // Subtract sourceTerm so idle heat is 0
-      const heatGeneration = Math.max(0, newFlux - sourceTerm) * 5000; 
-      const decayHeat = prev.coreTemp > 100 ? 5 : 0;
-      const totalHeatGen = heatGeneration + decayHeat;
+    // ---------------------------
+    // Helper clamps
+    // ---------------------------
+    const clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
+    const lerpExp = (x, xTarget, tau) => {
+      // exponential approach: dx = (target-x)*(1-exp(-dt/tau))
+      const a = 1 - Math.exp(-dt / Math.max(1e-6, tau));
+      return x + (xTarget - x) * a;
+    };
 
-      // 5. Primary Loop Heat Transfer
-      // Add natural circulation component (approx 20% flow at large delta T)
-      const naturalCirculation = Math.max(0, (prev.coreTemp - prev.coolantTempCold) * 0.002); 
-      const primaryFlowRate = Math.min(1.0, (prev.primaryPumpSpeed / 100) + naturalCirculation);
-      
-      const heatRemoval = (prev.coreTemp - prev.coolantTempCold) * primaryFlowRate * 2.5;
-      
-      let newCoreTemp = prev.coreTemp + (totalHeatGen - heatRemoval) * dt * 0.5;
-      // Passive cooling - DECREASED to prevent 75C trap
-      newCoreTemp -= (newCoreTemp - 25) * 0.002 * dt;
+    // ---------------------------
+    // 1) Flow model (primary)
+    // ---------------------------
+    const pumpFrac = clamp(prev.primaryPumpSpeed / 100, 0, 1);
 
-      const newHotLegTemp = prev.coolantTempHot + (newCoreTemp - prev.coolantTempHot) * 0.1 * (TIME_SCALE/10); 
+    // Natural circulation: increases with deltaT, capped
+    const dT_nc = Math.max(0, prev.coolantTempHot - prev.coolantTempCold);
+    const natCirc = clamp(dT_nc * 0.003, 0, 0.25); // up to ~25% equivalent flow
 
-      // 6. Secondary Loop
-      const newSecondaryPumpSpeed = prev.turbineValve; 
-      const secondaryFlowRate = newSecondaryPumpSpeed / 100;
+    const primaryFlowFrac = clamp(pumpFrac + natCirc, 0.02, 1.2);
 
-      const heatToSteam = (newHotLegTemp - 100) * primaryFlowRate * 2.0; 
-      
-      const newColdLegTemp = newHotLegTemp - (Math.max(0, heatToSteam) * 0.15); 
+    // ---------------------------
+    // 2) Reactivity model in pcm (fast rods, slow boron, negative temp feedback)
+    // ---------------------------
+    // Rods: your UI uses controlRodPosition where 100 seems "fully inserted" (scram).
+    const rodWithdrawFrac = clamp((100 - prev.controlRodPosition) / 100, 0, 1);
 
-      let newSteamPressure = prev.steamPressure + (Math.max(0, heatToSteam) * 0.1 * dt);
-      
-      const steamFlowRate = newSteamPressure * (prev.turbineValve / 100); 
-      const steamRelease = steamFlowRate * dt; 
-      
-      newSteamPressure -= steamRelease * 0.8;
-      newSteamPressure -= newSteamPressure * 0.005 * dt;
+    // Rough worths (tunable):
+    // Full withdrawal adds ~ +2500 pcm.
+    const rho_rods_pcm = rodWithdrawFrac * 2500;
 
-      const targetRPM = steamRelease * 4000; 
-      let newTurbineRPM = prev.turbineRPM + (targetRPM - prev.turbineRPM) * 0.02 * (TIME_SCALE/10); 
-      
-      const newPowerOutput = (newTurbineRPM / 3000) * 1200;
+    // Boron: use an INTERNAL boron state that moves slowly toward slider setpoint
+    // (so users can crank it but it doesn’t instantly swing the core).
+    const boronTarget = clamp(prev.boronConcentration, 0, 2000);
+    const boronEff = lerpExp(prev._boronEff ?? boronTarget, boronTarget, TAU_BORON);
 
-      // Apply pressure spike from boiling
-      newPressure += pressureSpike;
+    // Reference boron ~1500 ppm near HFP-ish for your "fresh fuel" default.
+    // 1.5 pcm per ppm away from 1500 gives ~±750 pcm per 500 ppm.
+    const rho_boron_pcm = -(boronEff - 1500) * 1.5;
 
-      // 7. Status Logic
-      let newStatus = "NORMAL OPERATION";
-      let isMeltdown = false;
-      
-      if (prev.isScrammed) newStatus = "SCRAM ACTIVATED";
-      else if (statusOverride) newStatus = statusOverride; 
-      else if (newCoreTemp < 100) newStatus = "COLD SHUTDOWN";
-      else if (newCoreTemp > 300 && newCoreTemp < 330) newStatus = "OPTIMAL POWER";
-      else if (newCoreTemp >= 330) newStatus = "WARNING: HIGH TEMP";
-      
-      if (newPressure > CRITICAL_PRESSURE) newStatus = "CRIT: OVERPRESSURE";
-      
-      if (newCoreTemp >= MELTDOWN_TEMP) {
-        isMeltdown = true;
-        newStatus = "FATAL: CORE MELT";
-        newCoreTemp = MELTDOWN_TEMP;
-      }
+    // Moderator temperature feedback (negative). Use average coolant/core proxy.
+    const T_ref = 300; // °C reference around operating
+    const T_avg = prev.coreTemp; // your "coreTemp" acts like average primary temp
+    const rho_temp_pcm = -(T_avg - T_ref) * 4.0; // ~ -4 pcm/°C
 
-      return {
-        ...prev,
-        flux: newFlux, // Store new flux state
-        secondaryPumpSpeed: newSecondaryPumpSpeed, 
-        coreTemp: Math.max(25, newCoreTemp),
-        coolantTempHot: newHotLegTemp,
-        coolantTempCold: newColdLegTemp,
-        pressure: Math.max(1, newPressure),
-        steamPressure: Math.min(100, newSteamPressure),
-        turbineRPM: Math.max(0, newTurbineRPM),
-        powerOutput: Math.max(0, newPowerOutput),
-        meltdown: isMeltdown,
-        statusMessage: newStatus
-      };
-    });
-  };
+    // ---------------------------
+    // 3) Primary pressure & saturation / "boiling" cue
+    // ---------------------------
+    // Keep your simple saturation approximation (good enough for a game):
+    // T_sat ~ 100 + 1.6*P(bar)  -> 155 bar => 348 C (close enough)
+    // But in a PWR, pressure is controlled near setpoint when hot.
+    const isHot = prev.coreTemp > 180 || prev.primaryPumpSpeed > 10;
+
+    let pressureTarget = isHot ? PZR_SET_BAR : clamp(1 + (prev.coreTemp / 200) * 20, 1, 30);
+    // tiny thermal swing term when hot (NOT dominant)
+    if (isHot) pressureTarget += (T_avg - 300) * 0.03; // a couple bar over large swings
+
+    let newPressure = lerpExp(prev.pressure, pressureTarget, TAU_PZR);
+    newPressure = clamp(newPressure, 1, MAX_PRESSURE);
+
+    const saturationTemp = 100 + newPressure * 1.6;
+
+    // "Subcooling margin" cue: if hot leg approaches saturation, penalize reactivity heavily.
+    const subcoolMargin = saturationTemp - (prev.coolantTempHot ?? prev.coreTemp);
+    const nearBoiling = subcoolMargin < 10; // <10C subcooling
+    const boilOvershoot = Math.max(0, 10 - subcoolMargin); // 0..10+
+    const rho_void_pcm = -boilOvershoot * 120; // strong negative as you lose margin
+
+    // Small pressure spike effect if actually overshooting (dramatic cue)
+    const pressureSpike = Math.max(0, (prev.coolantTempHot - saturationTemp)) * 1.8;
+    newPressure = clamp(newPressure + pressureSpike, 1, MAX_PRESSURE);
+
+    // Net reactivity with a small offset so "default" sits near critical with some tuning room
+    const rho_offset_pcm = -350; // tweak if your default drifts high/low
+    let rho_pcm = rho_rods_pcm + rho_boron_pcm + rho_temp_pcm + rho_void_pcm + rho_offset_pcm;
+
+    // If scrammed, force deep negative
+    if (prev.isScrammed) rho_pcm = -5000;
+
+    // Clamp to keep kinetics stable
+    rho_pcm = clamp(rho_pcm, -8000, 2500);
+
+    // ---------------------------
+    // 4) Simplified point kinetics for normalized power ("flux" used as power proxy)
+    // ---------------------------
+    // Treat prev.flux as normalized power: 0..1 (~100% at 1), but allow slight overshoot.
+    const source = 0.00003; // small source / subcritical multiplication seed
+    let pNorm = isFinite(prev.flux) ? prev.flux : source;
+    pNorm = clamp(pNorm, 0, 1.2);
+
+    // Below prompt critical: exponential period-like response with a time constant.
+    // Scale: 1000 pcm = 0.10 Δk/k (rough), so rho_pcm/10000 ~ Δk/k.
+    const rho_dk = rho_pcm / 10000;
+
+    // dp/dt = (rho/tau) * p + source
+    const dp = ((rho_dk / TAU_NEUTRON) * pNorm + source) * dt;
+    let newPNorm = pNorm + dp;
+
+    // If deeply subcritical, converge to a small subcritical level (avoids "stuck at zero")
+    if (rho_pcm < -500 && newPNorm < 0.02) {
+      newPNorm = clamp(source / (1 - rho_dk), 0, 0.02);
+    }
+
+    // Scram kills promptly (but you still get decay heat)
+    if (prev.isScrammed) newPNorm = 0;
+
+    newPNorm = clamp(newPNorm, 0, 1.25);
+
+    // ---------------------------
+    // 5) Thermal power and decay heat
+    // ---------------------------
+    const Pth = newPNorm * P_TH_NOM; // MWth
+    const decayFrac = prev.isScrammed ? 0.02 : 0.006; // quick "decay-ish" cue
+    const Pth_total = Pth + decayFrac * P_TH_NOM * clamp(prev.coreTemp / 300, 0, 1);
+
+    // ---------------------------
+    // 6) Primary temperatures (hot leg / cold leg)
+    // ---------------------------
+    // deltaT rises when flow drops
+    const effFlow = Math.max(0.05, primaryFlowFrac);
+    const deltaT_target = Pth_total / (MW_PER_K_NOM * effFlow); // °C
+
+    // Choose a "cold leg baseline" that tends toward ~290–300 when producing heat,
+    // and toward ambient when shut down/cold.
+    const ambient = 25;
+    const coldBaseAtPower = 295;
+    const coldTarget =
+      (newPNorm > 0.05 || prev.coreTemp > 120)
+        ? coldBaseAtPower + (1 - effFlow) * 12 // slightly higher if low flow (less SG effectiveness)
+        : ambient + (prev.primaryPumpSpeed / 100) * 15; // pump heats/mixes slightly
+
+    const hotTarget = coldTarget + clamp(deltaT_target, 0, 80);
+    const avgTarget = coldTarget + clamp(deltaT_target, 0, 80) * 0.5;
+
+    // Update temperatures with inertia
+    const newColdLegTemp = lerpExp(prev.coolantTempCold, coldTarget, TAU_PRIMARY);
+    const newHotLegTemp = lerpExp(prev.coolantTempHot, hotTarget, TAU_HOTLEG);
+    let newCoreTemp = lerpExp(prev.coreTemp, avgTarget, TAU_PRIMARY);
+
+    // Extra passive cooldown toward ambient when power is very low
+    if (newPNorm < 0.02 && prev.primaryPumpSpeed < 5) {
+      newCoreTemp = lerpExp(newCoreTemp, ambient, 140);
+    }
+
+    // ---------------------------
+    // 7) Secondary / steam pressure + turbine/load
+    // ---------------------------
+    // Secondary pump tied to turbine valve (your existing UI assumption)
+    const newSecondaryPumpSpeed = prev.turbineValve;
+    const secFlowFrac = clamp(newSecondaryPumpSpeed / 100, 0, 1);
+
+    // Secondary saturation approximation:
+    // Want ~60 bar around ~275–285C: T_sat2 ≈ 100 + 3*P2
+    const steamP = clamp(prev.steamPressure, 0, 100);
+    const Tsat2 = 100 + 3.0 * steamP;
+
+    // Heat transfer capacity: scales with sec flow and temperature driving head
+    const UA = 80 * (0.25 + 0.75 * secFlowFrac); // MW/°C effective
+    const dT_sg = Math.max(0, newHotLegTemp - Tsat2);
+    const Q_sg = clamp(UA * dT_sg, 0, Pth_total); // MWth into secondary
+
+    // Turbine extraction: proportional to valve opening and steam pressure
+    const valveFrac = clamp(prev.turbineValve / 100, 0, 1);
+    const K_turb = 60; // MW/(bar) at full valve -> 60bar => 3600 MW (near nominal)
+    const Q_turb = clamp(K_turb * steamP * valveFrac, 0, P_TH_NOM * 1.1);
+
+    // Steam pressure dynamics: rises when Q_sg > Q_turb, falls otherwise
+    const C_steam = 700; // MW per bar-second (tunes responsiveness)
+    let newSteamPressure = steamP + ((Q_sg - Q_turb) / C_steam) * dt;
+
+    // Condenser / leakage term (keeps it from drifting)
+    newSteamPressure -= newSteamPressure * 0.0025 * dt;
+
+    // Prevent nonsense
+    newSteamPressure = clamp(newSteamPressure, 0, 100);
+
+    // Turbine RPM tends to synchronous with load; no-load will spin down
+    const loadFrac = clamp(Q_turb / P_TH_NOM, 0, 1.2);
+    const rpmTarget = TURBINE_SYNC_RPM * clamp(loadFrac, 0, 1.02);
+    const newTurbineRPM = lerpExp(prev.turbineRPM, rpmTarget, TAU_TURBINE);
+
+    // Electrical output (cap at nominal)
+    const newPowerOutput = clamp((newTurbineRPM / TURBINE_SYNC_RPM) * P_ELEC_NOM, 0, P_ELEC_NOM);
+
+    // ---------------------------
+    // 8) Status + safety
+    // ---------------------------
+    let newStatus = "NORMAL OPERATION";
+    let isMeltdown = false;
+
+    if (prev.isScrammed) newStatus = "SCRAM ACTIVATED";
+    else if (newCoreTemp < 100) newStatus = "COLD SHUTDOWN";
+    else if (newCoreTemp > 290 && newCoreTemp < 325) newStatus = "POWER OPERATION";
+    else if (newCoreTemp >= 325) newStatus = "WARNING: HIGH TEMP";
+
+    if (nearBoiling) newStatus = "CRITICAL: LOW SUBCOOL MARGIN";
+    if (newPressure > CRITICAL_PRESSURE) newStatus = "CRIT: OVERPRESSURE";
+
+    let coreTempCapped = newCoreTemp;
+    if (coreTempCapped >= MELTDOWN_TEMP) {
+      isMeltdown = true;
+      newStatus = "FATAL: CORE MELT";
+      coreTempCapped = MELTDOWN_TEMP;
+    }
+
+    return {
+      ...prev,
+      // hidden internal state for slow boron response
+      _boronEff: boronEff,
+
+      // core state
+      flux: newPNorm,
+
+      // loops
+      secondaryPumpSpeed: newSecondaryPumpSpeed,
+      coreTemp: Math.max(ambient, coreTempCapped),
+      coolantTempHot: newHotLegTemp,
+      coolantTempCold: newColdLegTemp,
+      pressure: newPressure,
+      steamPressure: newSteamPressure,
+
+      // turbine / electrical
+      turbineRPM: Math.max(0, newTurbineRPM),
+      powerOutput: newPowerOutput,
+
+      // flags
+      meltdown: isMeltdown,
+      statusMessage: newStatus,
+    };
+  });
+};
+
 
   const tick = (time) => {
     if (previousTimeRef.current !== undefined) {
