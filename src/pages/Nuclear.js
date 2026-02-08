@@ -78,16 +78,26 @@ export default function Nuclear() {
 
           
           <h2>Reactor Simulations</h2>
-          <div className="flex space-x-4 mb-4">
+          <div className="flex space-x-3 mb-4">
             <button 
               onClick={() => setSelectedReactor("retro")}
-              className={`px-4 py-2 rounded ${selectedReactor === 'retro' ? 'bg-blue-500 text-white' : 'bg-gray-200'}`}
+              className={`
+                px-4 py-2 text-sm font-bold border-2 bg-[#c0c0c0]
+                border-t-white border-l-white border-b-black border-r-black
+                active:border-t-black active:border-l-black active:border-b-white active:border-r-white
+                ${selectedReactor === 'retro' ? 'text-white bg-[#000080]' : 'text-black'}
+              `}
             >
               RBMK Reactor
             </button>
             <button 
               onClick={() => setSelectedReactor("pwr")}
-              className={`px-4 py-2 rounded ${selectedReactor === 'pwr' ? 'bg-blue-500 text-white' : 'bg-gray-200'}`}
+              className={`
+                px-4 py-2 text-sm font-bold border-2 bg-[#c0c0c0]
+                border-t-white border-l-white border-b-black border-r-black
+                active:border-t-black active:border-l-black active:border-b-white active:border-r-white
+                ${selectedReactor === 'pwr' ? 'text-white bg-[#000080]' : 'text-black'}
+              `}
             >
               PWR Reactor
             </button>
