@@ -4,11 +4,12 @@ import HiddenQuestion from "../components/shared/HiddenQuestion";
 import HiddenExposition from "../components/shared/HiddenExposition";
 import NuclearDecayExplorer from "../components/modern/NuclearDecayExplorer";
 import NuclearBindingApp from "../components/modern/NuclearBindingApp";
+import CP1Simulation from "../components/modern/CP1Simulation";
 import RetroReactor from "../components/modern/RetroReactor";
 import PWRSimulator from "../components/modern/PWRReactor";
 
 export default function Nuclear() {
-  const [selectedReactor, setSelectedReactor] = useState("retro");
+  const [selectedReactor, setSelectedReactor] = useState("cp-1");
 
   return (
     <div className="mathjax-container">
@@ -80,6 +81,17 @@ export default function Nuclear() {
           <h2>Reactor Simulations</h2>
           <div className="flex space-x-3 mb-4">
             <button 
+              onClick={() => setSelectedReactor("cp-1")}
+              className={`
+                px-4 py-2 text-sm font-bold border-2 bg-[#c0c0c0]
+                border-t-white border-l-white border-b-black border-r-black
+                active:border-t-black active:border-l-black active:border-b-white active:border-r-white
+                ${selectedReactor === 'cp-1' ? 'text-white bg-[#000080]' : 'text-black'}
+              `}
+            >
+              CP-1
+            </button>
+            <button 
               onClick={() => setSelectedReactor("retro")}
               className={`
                 px-4 py-2 text-sm font-bold border-2 bg-[#c0c0c0]
@@ -88,7 +100,7 @@ export default function Nuclear() {
                 ${selectedReactor === 'retro' ? 'text-white bg-[#000080]' : 'text-black'}
               `}
             >
-              RBMK Reactor
+              RBMK
             </button>
             <button 
               onClick={() => setSelectedReactor("pwr")}
@@ -99,11 +111,13 @@ export default function Nuclear() {
                 ${selectedReactor === 'pwr' ? 'text-white bg-[#000080]' : 'text-black'}
               `}
             >
-              PWR Reactor
+              PWR
             </button>
           </div>
 
-          {selectedReactor === "retro" ? <RetroReactor /> : <PWRSimulator />}
+          {selectedReactor === "cp-1" && <CP1Simulation />}
+          {selectedReactor === "retro" && <RetroReactor />}
+          {selectedReactor === "pwr" && <PWRSimulator />}
 
           
 
