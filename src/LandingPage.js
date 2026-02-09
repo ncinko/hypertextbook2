@@ -330,7 +330,7 @@ function drawHawks(ctx) {
         <div style={{ marginTop: 16, display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
           <Link to="/vectors" style={{ padding: "10px 14px", borderRadius: 12, background: "#1f2937", color: "white", textDecoration: "none" }}>Vectors</Link>
           <Link to="/energy" style={{ padding: "10px 14px", borderRadius: 12, background: "#1f2937", color: "white", textDecoration: "none" }}>Energy</Link>
-          <Link to="/magnetic-force" style={{ padding: "10px 14px", borderRadius: 12, background: "#1f2937", color: "white", textDecoration: "none" }}>Magnetism</Link>
+          <Link to="/nuclear" style={{ padding: "10px 14px", borderRadius: 12, background: "#1f2937", color: "white", textDecoration: "none" }}>Nuclear</Link>
         </div>
       </div>
     </div>
