@@ -1,5 +1,20 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Minus, Square, X, Activity, Zap, Thermometer, Droplet, Wind, AlertTriangle, Settings, ChevronDown, ChevronUp, Play } from 'lucide-react';
+import {
+  Minus,
+  Square,
+  X,
+  Activity,
+  Zap,
+  Thermometer,
+  Droplet,
+  Wind,
+  AlertTriangle,
+  Settings,
+  ChevronDown,
+  ChevronUp,
+  Play,
+  Target
+} from 'lucide-react';
 
 /* -------------------------------------------------------------------------- */
 /* PHYSICS ENGINE                               */
@@ -23,23 +38,23 @@ const INITIAL_STATE = {
   T_coolant_avg: 278, // Adjusted for higher coupling (closer to steam temp)
   T_hot: 300,         // Tighter leg spread
   T_cold: 280,
-  pressure_primary: 155, 
+  pressure_primary: 155,
   pumpSpeed: 100,    // Pumps running
   flowRate: 18000,   // Full flow
 
   // Secondary Loop (Steam)
-  steamPressure: 60, 
-  steamTemp: 275,    
-  steamFlow: 200,      
-  feedwaterFlow: 200,  
-  sgLevel: 50,       
+  steamPressure: 60,
+  steamTemp: 275,
+  steamFlow: 200,
+  feedwaterFlow: 200,
+  sgLevel: 50,
 
   // Turbine & Electric
   turbineValve: 15,  // Slightly open to maintain idle/house load
   turbineSpeed: 3600,// Synced speed
-  gridLoad: 300,    
+  gridLoad: 300,
   genOutput: 180,    // House load approx
-  frequency: 0,      
+  frequency: 0,
 
   // System
   tripped: false,
@@ -51,8 +66,8 @@ const INITIAL_STATE = {
 const ALPHAS = {
   doppler: -1.5e-5,   // Reduced slightly to allow easier power escalation
   moderator: -2e-4,   // Reduced slightly to prevent hard crashes at high temp
-  void: -1e-3,      
-  boron: -1e-4,     
+  void: -1e-3,
+  boron: -1e-4,
 };
 
 /* -------------------------------------------------------------------------- */
@@ -134,11 +149,11 @@ const Win95Window = ({ title, children, x, y, width, height, onClose, onMinimize
           <span>{title}</span>
         </div>
         <div className="flex gap-1">
-          <button 
+          <button
             className="win95-btn w-4 h-4 p-0 flex items-center justify-center leading-none"
             onClick={(e) => { e.stopPropagation(); onMinimize(); }}
           >_</button>
-          <button 
+          <button
             className="win95-btn w-4 h-4 p-0 flex items-center justify-center leading-none"
             onClick={(e) => { e.stopPropagation(); onClose(); }}
           >X</button>
@@ -154,7 +169,7 @@ const Win95Window = ({ title, children, x, y, width, height, onClose, onMinimize
 };
 
 const BevelBox = ({ children, className = "", style = {} }) => (
-  <div 
+  <div
     className={`bg-white border-2 border-[#808080] border-r-white border-b-white ${className}`}
     style={{ boxShadow: 'inset 1px 1px #000, 1px 1px white', ...style }}
   >
@@ -175,13 +190,13 @@ const WinButton = ({ children, onClick, active = false, className = "", disabled
 const ProgressBar = ({ value, max = 100, color = "green", height = "16px" }) => {
   const percent = Math.min(100, Math.max(0, (value / max) * 100));
   const chunks = Math.floor(percent / 5); // 5% chunks
-  
+
   return (
     <BevelBox className="w-full relative bg-black p-[2px]" style={{ height }}>
       <div className="flex h-full gap-[2px]">
         {[...Array(20)].map((_, i) => (
-          <div 
-            key={i} 
+          <div
+            key={i}
             className={`flex-1 ${i < chunks ? (color === 'red' ? 'bg-[#ff0000]' : color === 'yellow' ? 'bg-[#ffff00]' : 'bg-[#00ff00]') : 'bg-[#003300]'}`}
           />
         ))}
@@ -201,15 +216,15 @@ const LabeledValue = ({ label, value, unit }) => (
 
 const VerticalSlider = ({ value, min, max, onChange, label, height = 150 }) => {
   const percentage = ((value - min) / (max - min)) * 100;
-  
+
   return (
     <div className="flex flex-col items-center gap-2">
       <div className="relative w-8 bg-[#808080] border border-white border-l-[#404040] border-t-[#404040]" style={{ height }}>
         {/* Track Line */}
         <div className="absolute left-1/2 top-2 bottom-2 w-[2px] bg-[#404040] -translate-x-1/2"></div>
-        
+
         {/* Thumb */}
-        <div 
+        <div
           className="absolute left-0 w-full h-4 bg-[#c0c0c0] border-2 border-white border-r-black border-b-black cursor-ns-resize z-10"
           style={{ bottom: `calc(${percentage}% - 8px)` }}
           onMouseDown={(e) => {
@@ -238,6 +253,382 @@ const VerticalSlider = ({ value, min, max, onChange, label, height = 150 }) => {
 };
 
 /* -------------------------------------------------------------------------- */
+/* MISSILE COMMAND (IN-FILE MINI GAME)             */
+/* -------------------------------------------------------------------------- */
+
+const MissileCommand = () => {
+  const W = 420;
+  const H = 300;
+
+  const canvasRef = useRef(null);
+  const rafRef = useRef(null);
+  const lastRef = useRef(performance.now());
+  const spawnRef = useRef(0);
+
+  const missilesRef = useRef([]);      // {x,y,vx,vy}
+  const interceptorsRef = useRef([]);  // {x,y,vx,vy,targetX,targetY}
+  const explosionsRef = useRef([]);    // {x,y,r,dr,life}
+  const citiesRef = useRef([]);        // {x, alive}
+  const baseRef = useRef({ x: W / 2, y: H - 22 });
+
+  const [running, setRunning] = useState(true);
+  const runningRef = useRef(true);
+
+  const [score, setScore] = useState(0);
+  const [wave, setWave] = useState(1);
+  const [lives, setLives] = useState(3);
+
+  const scoreRef = useRef(0);
+  const waveRef = useRef(1);
+  const livesRef = useRef(3);
+
+  const resetGame = useCallback(() => {
+    missilesRef.current = [];
+    interceptorsRef.current = [];
+    explosionsRef.current = [];
+
+    const cityXs = [70, 120, 170, 250, 300, 350].map(v => (v / 420) * W);
+    citiesRef.current = cityXs.map(x => ({ x, alive: true }));
+
+    scoreRef.current = 0;
+    waveRef.current = 1;
+    livesRef.current = 3;
+
+    setScore(0);
+    setWave(1);
+    setLives(3);
+
+    spawnRef.current = 0;
+    lastRef.current = performance.now();
+
+    runningRef.current = true;
+    setRunning(true);
+  }, []);
+
+  useEffect(() => { runningRef.current = running; }, [running]);
+
+  useEffect(() => {
+    resetGame();
+  }, [resetGame]);
+
+  const fireInterceptor = useCallback((tx, ty) => {
+    const base = baseRef.current;
+    const dx = tx - base.x;
+    const dy = ty - base.y;
+    const dist = Math.max(1, Math.hypot(dx, dy));
+    const speed = 100; // px/s
+    const vx = (dx / dist) * speed;
+    const vy = (dy / dist) * speed;
+
+    interceptorsRef.current.push({
+      x: base.x,
+      y: base.y,
+      vx, vy,
+      targetX: tx,
+      targetY: ty
+    });
+  }, []);
+
+  const onCanvasClick = useCallback((e) => {
+    if (!canvasRef.current) return;
+    if (!runningRef.current) return;
+
+    const rect = canvasRef.current.getBoundingClientRect();
+    const tx = (e.clientX - rect.left) * (W / rect.width);
+    const ty = (e.clientY - rect.top) * (H / rect.height);
+    fireInterceptor(tx, ty);
+  }, [fireInterceptor]);
+
+  const spawnMissile = useCallback(() => {
+    const startX = Math.random() * W;
+    const startY = -10;
+
+    // Aim at random city, else base
+    const aliveCities = citiesRef.current.filter(c => c.alive);
+    const target = aliveCities.length
+      ? aliveCities[Math.floor(Math.random() * aliveCities.length)]
+      : { x: baseRef.current.x, y: baseRef.current.y };
+
+    const targetX = target.x;
+    const targetY = H - 24;
+
+    const dx = targetX - startX;
+    const dy = targetY - startY;
+    const dist = Math.max(1, Math.hypot(dx, dy));
+
+    const speed = 40 + waveRef.current * 6; // grows with wave
+    const vx = (dx / dist) * speed;
+    const vy = (dy / dist) * speed;
+
+    missilesRef.current.push({ x: startX, y: startY, vx, vy });
+  }, [W, H]);
+
+  const explode = useCallback((x, y) => {
+    explosionsRef.current.push({
+      x, y,
+      r: 1,
+      dr: 80,     // expansion speed px/s
+      life: 0.6    // seconds
+    });
+  }, []);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const ctx = canvas.getContext("2d");
+
+    const step = (tNow) => {
+      rafRef.current = requestAnimationFrame(step);
+
+      const dt = Math.min(0.05, (tNow - lastRef.current) / 1000);
+      lastRef.current = tNow;
+
+      // background
+      ctx.fillStyle = "#000000";
+      ctx.fillRect(0, 0, W, H);
+
+      // ground
+      ctx.fillStyle = "#102010";
+      ctx.fillRect(0, H - 26, W, 26);
+
+      // spawn missiles
+      if (runningRef.current) {
+        spawnRef.current += dt;
+        const spawnEvery = Math.max(0.35, 1.2 - 0.07 * waveRef.current);
+        while (spawnRef.current > spawnEvery) {
+          spawnRef.current -= spawnEvery;
+          // spawn a small burst sometimes
+          spawnMissile();
+          if (Math.random() < 0.25) spawnMissile();
+        }
+      }
+
+      // update missiles
+      const missiles = missilesRef.current;
+      for (let i = missiles.length - 1; i >= 0; i--) {
+        const m = missiles[i];
+        if (runningRef.current) {
+          m.x += m.vx * dt;
+          m.y += m.vy * dt;
+        }
+
+        // draw missile + trail
+        ctx.strokeStyle = "#aaaaaa";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(m.x, m.y);
+        ctx.lineTo(m.x - m.vx * 0.06, m.y - m.vy * 0.06);
+        ctx.stroke();
+
+        ctx.fillStyle = "#ffcc66";
+        ctx.fillRect(m.x - 1, m.y - 1, 2, 2);
+
+        // impact
+        if (m.y >= H - 26) {
+          missiles.splice(i, 1);
+
+          // damage: kill nearest alive city within radius
+          const impactX = m.x;
+          const cities = citiesRef.current;
+          let hit = false;
+          for (let c of cities) {
+            if (!c.alive) continue;
+            if (Math.abs(c.x - impactX) < 20) {
+              c.alive = false;
+              hit = true;
+              break;
+            }
+          }
+
+          if (!hit) {
+            // if no city, count as base hit -> lose a life
+            livesRef.current = Math.max(0, livesRef.current - 1);
+            setLives(livesRef.current);
+          }
+
+          explode(m.x, H - 26);
+
+          // game over
+          const anyCities = citiesRef.current.some(c => c.alive);
+          if (!anyCities && livesRef.current <= 0) {
+            runningRef.current = false;
+            setRunning(false);
+          }
+        }
+      }
+
+      // update interceptors
+      const interceptors = interceptorsRef.current;
+      for (let i = interceptors.length - 1; i >= 0; i--) {
+        const it = interceptors[i];
+        if (runningRef.current) {
+          it.x += it.vx * dt;
+          it.y += it.vy * dt;
+        }
+
+        // draw interceptor
+        ctx.strokeStyle = "#66ccff";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(it.x, it.y);
+        ctx.lineTo(it.x - it.vx * 0.05, it.y - it.vy * 0.05);
+        ctx.stroke();
+
+        ctx.fillStyle = "#66ccff";
+        ctx.fillRect(it.x - 1, it.y - 1, 2, 2);
+
+        // reached target?
+        const dx = it.targetX - it.x;
+        const dy = it.targetY - it.y;
+        if (Math.hypot(dx, dy) < 10) {
+          interceptors.splice(i, 1);
+          explode(it.x, it.y);
+        }
+
+        // out of bounds
+        if (it.x < -50 || it.x > W + 50 || it.y < -80 || it.y > H + 50) {
+          interceptors.splice(i, 1);
+        }
+      }
+
+      // update explosions + collisions
+      const explosions = explosionsRef.current;
+      for (let i = explosions.length - 1; i >= 0; i--) {
+        const ex = explosions[i];
+        if (runningRef.current) {
+          ex.r += ex.dr * dt;
+          ex.life -= dt;
+        }
+
+        // draw explosion ring
+        ctx.strokeStyle = "#ffdd77";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(ex.x, ex.y, ex.r, 0, Math.PI * 2);
+        ctx.stroke();
+
+        ctx.strokeStyle = "#ff8844";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.arc(ex.x, ex.y, Math.max(0, ex.r - 8), 0, Math.PI * 2);
+        ctx.stroke();
+
+        // explode kills missiles
+        for (let m = missilesRef.current.length - 1; m >= 0; m--) {
+          const mm = missilesRef.current[m];
+          const d = Math.hypot(mm.x - ex.x, mm.y - ex.y);
+          if (d < ex.r) {
+            missilesRef.current.splice(m, 1);
+            // score
+            scoreRef.current += 10;
+            setScore(scoreRef.current);
+            // chain pop
+            explode(mm.x, mm.y);
+          }
+        }
+
+        if (ex.life <= 0 || ex.r > 120) {
+          explosions.splice(i, 1);
+        }
+      }
+
+      // base + cities
+      const base = baseRef.current;
+      ctx.fillStyle = "#c0c0c0";
+      ctx.fillRect(base.x - 10, base.y - 6, 20, 12);
+      ctx.fillStyle = "#808080";
+      ctx.fillRect(base.x - 2, base.y - 16, 4, 12);
+
+      for (const c of citiesRef.current) {
+        ctx.fillStyle = c.alive ? "#33ff66" : "#224422";
+        ctx.fillRect(c.x - 10, H - 22, 20, 10);
+        ctx.fillStyle = c.alive ? "#22aa44" : "#1a2a1a";
+        ctx.fillRect(c.x - 6, H - 28, 12, 6);
+      }
+
+      // HUD
+      ctx.fillStyle = "#00ff00";
+      ctx.font = '12px "MS Sans Serif", Tahoma, sans-serif';
+      ctx.fillText(`SCORE ${scoreRef.current}`, 10, 16);
+      ctx.fillText(`WAVE ${waveRef.current}`, 10, 32);
+      ctx.fillText(`LIVES ${livesRef.current}`, 10, 48);
+
+      // wave advance (every N points)
+      if (scoreRef.current >= waveRef.current * 300) {
+        waveRef.current += 1;
+        setWave(waveRef.current);
+        // small bonus life occasionally
+        if (waveRef.current % 3 === 0) {
+          livesRef.current = Math.min(9, livesRef.current + 1);
+          setLives(livesRef.current);
+        }
+      }
+
+      // paused overlay
+      if (!runningRef.current) {
+        ctx.fillStyle = "rgba(0,0,0,0.55)";
+        ctx.fillRect(0, 0, W, H);
+        ctx.fillStyle = "#ffffff";
+        ctx.font = 'bold 16px "MS Sans Serif", Tahoma, sans-serif';
+        ctx.fillText("PAUSED / GAME OVER", 120, 140);
+        ctx.font = '12px "MS Sans Serif", Tahoma, sans-serif';
+        ctx.fillText("Click Resume to continue (or Reset).", 110, 162);
+      }
+    };
+
+    rafRef.current = requestAnimationFrame(step);
+    return () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    };
+  }, [explode, spawnMissile]);
+
+  return (
+    <div className="flex flex-col gap-2">
+      <fieldset className="border border-gray-400 p-2">
+        <legend className="text-xs px-1">Missile Command</legend>
+
+        <div className="flex items-center gap-2 mb-2">
+          <WinButton onClick={() => setRunning(r => !r)} className="text-xs">
+            {running ? "Pause" : "Resume"}
+          </WinButton>
+          <WinButton onClick={resetGame} className="text-xs">
+            Reset
+          </WinButton>
+
+          <div className="flex-1"></div>
+
+          <div className="text-xs font-mono bg-black text-[#00ff00] px-2 py-1 border border-gray-600">
+            {`Score ${score}  |  Wave ${wave}  |  Lives ${lives}`}
+          </div>
+        </div>
+
+        <BevelBox className="bg-black p-1 inline-block">
+          <canvas
+            ref={canvasRef}
+            width={W}
+            height={H}
+            onMouseDown={onCanvasClick}
+            style={{
+              width: "420px",
+              height: "300px",
+              imageRendering: "pixelated",
+              cursor: "crosshair",
+              display: "block",
+              border: "1px solid #404040"
+            }}
+          />
+        </BevelBox>
+
+        <div className="mt-2 text-[10px] text-gray-700">
+          Click to fire interceptors. Protect the cities. Explosions destroy incoming missiles.
+        </div>
+      </fieldset>
+    </div>
+  );
+};
+
+/* -------------------------------------------------------------------------- */
 /* APP COMPONENT                               */
 /* -------------------------------------------------------------------------- */
 
@@ -248,6 +639,7 @@ const App = () => {
     reactor: { isOpen: false, isMinimized: false, z: 0 },
     steam: { isOpen: false, isMinimized: false, z: 0 },
     turbine: { isOpen: false, isMinimized: false, z: 0 },
+    missile: { isOpen: false, isMinimized: false, z: 0 }, // NEW
   });
   const [startMenuOpen, setStartMenuOpen] = useState(false);
 
@@ -257,7 +649,7 @@ const App = () => {
   const getReactivityComponents = () => {
     const deltaT_fuel = sim.T_fuel - 300;
     const deltaT_mod = sim.T_coolant_avg - 290;
-    
+
     return {
       rods: ((sim.controlRodPos / 100) * 0.055) * 100000,
       boron: ((sim.boronConc - 1200) * ALPHAS.boron) * 100000,
@@ -328,50 +720,50 @@ const App = () => {
     setSim(prev => {
       // 1. Core Physics & Inputs
       const targetFlow = (prev.pumpSpeed / 100) * MAX_FLOW_RATE; // kg/s
-      
+
       const deltaT_fuel = prev.T_fuel - 300;
       const deltaT_mod = prev.T_coolant_avg - 290;
-      
+
       const rho_rods = (prev.controlRodPos / 100) * 0.055; // Increased worth slightly
-      const rho_boron = (prev.boronConc - 1200) * ALPHAS.boron; 
+      const rho_boron = (prev.boronConc - 1200) * ALPHAS.boron;
       const rho_doppler = deltaT_fuel * ALPHAS.doppler;
       const rho_mod = deltaT_mod * ALPHAS.moderator;
-      
+
       const rho_total = rho_rods + rho_boron + rho_doppler + rho_mod - 0.02;
 
-      let nextFlux = prev.neutronFlux * Math.exp(rho_total * dt * 20); 
-      if (rho_total < -0.1) nextFlux *= 0.9; 
-      
+      let nextFlux = prev.neutronFlux * Math.exp(rho_total * dt * 20);
+      if (rho_total < -0.1) nextFlux *= 0.9;
+
       if (nextFlux < 1e-9) nextFlux = 1e-9;
 
       const thermalPower = nextFlux * NOMINAL_POWER_MWTH;
 
       // 2. Thermal Hydraulics - Variables declared before calculation
-      const heatCapacityFuel = 5000; 
-      const heatCapacityCoolant = 8000; 
+      const heatCapacityFuel = 5000;
+      const heatCapacityCoolant = 8000;
       // Re-tuned Heat Transfer: Lower coeff means fuel gets hotter (Nominal ~980C, Melt ~2200C at ~9500MW)
       const heatTransferCoeff = 1 + (prev.flowRate / MAX_FLOW_RATE) * 8;
-      
+
       // FIX: Make UA_SG flow dependent.
       // Base transfer (conduction/natural circ) + Flow driven component.
       // If pumps off, heat transfer drops significantly, preventing SG pressure spike from core heat alone.
-      const baseUA = 20; 
+      const baseUA = 20;
       const maxUA = 180;
       const UA_SG = baseUA + (prev.flowRate / MAX_FLOW_RATE) * (maxUA - baseUA);
 
-      const Cp_water = 0.005; 
+      const Cp_water = 0.005;
       const flowLag = 0.95;
 
       // Calculations
       const energyToCoolant = heatTransferCoeff * (prev.T_fuel - prev.T_coolant_avg) * dt;
       const heatToSG = UA_SG * (prev.T_coolant_avg - prev.steamTemp) * dt;
-      
+
       const nextT_fuel = Math.max(20, prev.T_fuel + (thermalPower - energyToCoolant) / heatCapacityFuel * dt);
       const nextFlow = prev.flowRate * flowLag + targetFlow * (1 - flowLag);
-      
+
       // Calculate derived temperatures
       const nextT_coolant_avg = Math.max(20, prev.T_coolant_avg + (energyToCoolant - heatToSG) / heatCapacityCoolant * dt);
-      
+
       // Defensively calc deltaT_legs to avoid division by zero if flow is very small
       const safeFlow = Math.max(nextFlow, 1);
 
@@ -380,35 +772,35 @@ const App = () => {
       // that cause the "cold leg drop" artifact.
       const currentHeatTransferMW = heatTransferCoeff * (prev.T_fuel - prev.T_coolant_avg);
       let deltaT_legs = currentHeatTransferMW / (safeFlow * Cp_water);
-      
-      // PHYSICS FIX: Clamp T_hot to never exceed T_fuel. 
+
+      // PHYSICS FIX: Clamp T_hot to never exceed T_fuel.
       // At low flow, the simple Q = m*Cp*dT equation yields impossible dT values.
       // We limit the spread so T_hot stays bounded by the source temp (T_fuel).
       const maxPhysicalDelta = 2 * (nextT_fuel - nextT_coolant_avg);
       if (deltaT_legs > maxPhysicalDelta) {
-         deltaT_legs = Math.max(0, maxPhysicalDelta);
+        deltaT_legs = Math.max(0, maxPhysicalDelta);
       }
-      
+
       // FIX: Ensure T_hot and T_cold are fully defined in this scope before return
       const T_hot = Math.max(20, nextT_coolant_avg + deltaT_legs / 2);
-      const T_cold = Math.max(20, 40+ nextT_coolant_avg - deltaT_legs / 2);
+      const T_cold = Math.max(20, 40 + nextT_coolant_avg - deltaT_legs / 2);
 
       // 3. Steam Cycle
       const valveCoeff = 1.1; // Reduced to maintain pressure better against load
       const steamOut = prev.steamPressure * (prev.turbineValve / 100) * valveCoeff;
-      
-      const energyIn = heatToSG; 
-      const energyOut = steamOut * 2.8; 
-      
+
+      const energyIn = heatToSG;
+      const energyOut = steamOut * 2.8;
+
       const pressureChange = (energyIn - energyOut) * 0.005 * dt;
       const nextSteamPressure = Math.max(1, prev.steamPressure + pressureChange);
-      const nextSteamTemp = 100 + nextSteamPressure * 2.5; 
+      const nextSteamTemp = 100 + nextSteamPressure * 2.5;
 
       // 4. Turbine & Generator
       const turbineSpinup = 0.5 * dt;
-      const targetSpeed = (prev.steamPressure / 60) * (prev.turbineValve / 100) * 3600; 
+      const targetSpeed = (prev.steamPressure / 60) * (prev.turbineValve / 100) * 3600;
       const nextTurbineSpeed = prev.turbineSpeed + (targetSpeed - prev.turbineSpeed) * turbineSpinup;
-      
+
       // Adjusted multiplier to reach ~1200MW with lower valveCoeff
       const genOutput = steamOut * 18 * (nextTurbineSpeed / 3600);
 
@@ -450,7 +842,16 @@ const App = () => {
     return () => cancelAnimationFrame(frameId);
   }, [updateSim]);
 
+  const maxZ = Math.max(...Object.values(windows).map(w => w.z));
 
+  const windowTitle = (key) => {
+    if (key === 'main') return 'Unit 1 Control';
+    if (key === 'reactor') return 'Reactor Core';
+    if (key === 'steam') return 'Steam Gen';
+    if (key === 'turbine') return 'Turbine';
+    if (key === 'missile') return 'Missile Command';
+    return key;
+  };
 
   return (
     <div className="w-full h-screen bg-[#008080] overflow-hidden relative select-none font-[Tahoma]">
@@ -618,105 +1019,102 @@ const App = () => {
           border-radius: 0 !important;
         }
       `}</style>
-      
+
       {/* ------------------ SYSTEM DIAGRAM (Interactive) ------------------ */}
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 opacity-30 pointer-events-none scale-150">
       </div>
-
-      {/* No Desktop Icons (Start Menu Only) */}
 
       {/* ------------------ WINDOWS ------------------ */}
 
       {/* --- MAIN CONTROL --- */}
       {windows.main.isOpen && !windows.main.isMinimized && (
-        <Win95Window 
-          title="Unit 1 Control - Overview" 
-          x={50} y={30} width={800} height={600} 
+        <Win95Window
+          title="Unit 1 Control - Overview"
+          x={50} y={30} width={800} height={600}
           onClose={() => closeWindow('main')}
           onMinimize={() => minimizeWindow('main')}
-          active={windows.main.z === Math.max(...Object.values(windows).map(w => w.z))}
+          active={windows.main.z === maxZ}
           onFocus={() => bringToFront('main')}
         >
           <div className="grid grid-cols-12 gap-4 h-full">
             {/* Left: Diagram */}
             <BevelBox className="col-span-12 h-80 bg-gray-200 relative p-4 flex items-center justify-center overflow-hidden">
-               {/* Enhanced SVG P&ID */}
-               <svg viewBox="0 0 500 300" className="w-full h-full">
-                 
-                 {/* Secondary Return Loop (Feedwater) */}
-                 <path 
-                    d="M 400 260 L 400 280 L 280 280 L 280 250" 
-                    fill="none" 
-                    stroke="#4682B4" 
-                    strokeWidth="4" 
-                    className={sim.steamPressure > 10 && sim.turbineValve > 0 ? "pipe-flow" : "pipe-static"}
-                 />
+              {/* Enhanced SVG P&ID */}
+              <svg viewBox="0 0 500 300" className="w-full h-full">
 
-                 {/* Primary Loop Pipes */}
-                 <path 
-                    d="M 120 150 L 240 150 L 240 220 L 120 220 Z" 
-                    fill="none" 
-                    stroke={sim.T_hot > 300 ? "red" : "maroon"} 
-                    strokeWidth="12" 
-                    className={sim.pumpSpeed > 5 ? "pipe-flow" : "pipe-static"}
-                 />
-                 
-                 {/* Reactor Group */}
-                 <g onClick={() => openWindow('reactor')} className="cursor-pointer hover:opacity-80 transition-opacity">
-                    <rect x="80" y="120" width="60" height="130" rx="5" fill="#444" stroke="black" strokeWidth="2" />
-                    {/* Visual Control Rods */}
-                    <rect 
-                        x="90" 
-                        y={130 - (sim.controlRodPos / 100) * 40} 
-                        width="40" 
-                        height="40" 
-                        fill="#ccc" 
-                        stroke="black"
-                        className="transition-all duration-300"
-                    />
-                    <text x="110" y="185" textAnchor="middle" fill="white" fontSize="12" fontWeight="bold">RX</text>
-                 </g>
-                 
-                 {/* SG Group */}
-                 <g onClick={() => openWindow('steam')} className="cursor-pointer hover:opacity-80 transition-opacity">
-                    <rect x="240" y="110" width="60" height="140" rx="5" fill="#ccc" stroke="black" strokeWidth="2" />
-                    <text x="270" y="180" textAnchor="middle" fill="black" fontSize="12" fontWeight="bold">SG</text>
-                 </g>
+                {/* Secondary Return Loop (Feedwater) */}
+                <path
+                  d="M 400 260 L 400 280 L 280 280 L 280 250"
+                  fill="none"
+                  stroke="#4682B4"
+                  strokeWidth="4"
+                  className={sim.steamPressure > 10 && sim.turbineValve > 0 ? "pipe-flow" : "pipe-static"}
+                />
 
-                 {/* Steam Pipes (To Turbine) */}
-                 <path 
-                    d="M 270 110 L 270 80 L 400 80 L 400 110" 
-                    fill="none" 
-                    stroke="#aaa" 
-                    strokeWidth="8" 
-                    className={sim.steamPressure > 10 && sim.turbineValve > 0 ? "pipe-flow" : "pipe-static"}
-                 />
+                {/* Primary Loop Pipes */}
+                <path
+                  d="M 120 150 L 240 150 L 240 220 L 120 220 Z"
+                  fill="none"
+                  stroke={sim.T_hot > 300 ? "red" : "maroon"}
+                  strokeWidth="12"
+                  className={sim.pumpSpeed > 5 ? "pipe-flow" : "pipe-static"}
+                />
 
-                 {/* Turbine Exhaust Pipe (To Condenser) */}
-                 <path 
-                    d="M 400 140 L 400 220" 
-                    fill="none" 
-                    stroke="#aaa" 
-                    strokeWidth="8"
-                    className={sim.steamPressure > 10 && sim.turbineValve > 0 ? "pipe-flow" : "pipe-static"} 
-                 />
-                 
-                 {/* Turbine Group */}
-                 <g onClick={() => openWindow('turbine')} className="cursor-pointer hover:opacity-80 transition-opacity">
-                    <path d="M 360 110 L 440 140 L 440 110 L 360 140 Z" fill="#666" stroke="black" strokeWidth="2" />
-                    <text x="400" y="160" textAnchor="middle" fill="black" fontSize="12" fontWeight="bold">TURB</text>
+                {/* Reactor Group */}
+                <g onClick={() => openWindow('reactor')} className="cursor-pointer hover:opacity-80 transition-opacity">
+                  <rect x="80" y="120" width="60" height="130" rx="5" fill="#444" stroke="black" strokeWidth="2" />
+                  {/* Visual Control Rods */}
+                  <rect
+                    x="90"
+                    y={130 - (sim.controlRodPos / 100) * 40}
+                    width="40"
+                    height="40"
+                    fill="#ccc"
+                    stroke="black"
+                    className="transition-all duration-300"
+                  />
+                  <text x="110" y="185" textAnchor="middle" fill="white" fontSize="12" fontWeight="bold">RX</text>
+                </g>
 
-                 </g>
+                {/* SG Group */}
+                <g onClick={() => openWindow('steam')} className="cursor-pointer hover:opacity-80 transition-opacity">
+                  <rect x="240" y="110" width="60" height="140" rx="5" fill="#ccc" stroke="black" strokeWidth="2" />
+                  <text x="270" y="180" textAnchor="middle" fill="black" fontSize="12" fontWeight="bold">SG</text>
+                </g>
 
-                 {/* Condenser Box */}
-                 <rect x="360" y="220" width="80" height="40" fill="#8899AA" stroke="black" />
-                 <text x="400" y="245" textAnchor="middle" fill="white" fontSize="10">CONDENSER</text>
+                {/* Steam Pipes (To Turbine) */}
+                <path
+                  d="M 270 110 L 270 80 L 400 80 L 400 110"
+                  fill="none"
+                  stroke="#aaa"
+                  strokeWidth="8"
+                  className={sim.steamPressure > 10 && sim.turbineValve > 0 ? "pipe-flow" : "pipe-static"}
+                />
 
-               </svg>
+                {/* Turbine Exhaust Pipe (To Condenser) */}
+                <path
+                  d="M 400 140 L 400 220"
+                  fill="none"
+                  stroke="#aaa"
+                  strokeWidth="8"
+                  className={sim.steamPressure > 10 && sim.turbineValve > 0 ? "pipe-flow" : "pipe-static"}
+                />
 
-               <div className="absolute top-2 right-2 bg-black border border-gray-500 p-1 text-green-500 font-mono text-xs">
-                 SYS: {sim.tripped ? "TRIPPED" : "NORMAL"}
-               </div>
+                {/* Turbine Group */}
+                <g onClick={() => openWindow('turbine')} className="cursor-pointer hover:opacity-80 transition-opacity">
+                  <path d="M 360 110 L 440 140 L 440 110 L 360 140 Z" fill="#666" stroke="black" strokeWidth="2" />
+                  <text x="400" y="160" textAnchor="middle" fill="black" fontSize="12" fontWeight="bold">TURB</text>
+                </g>
+
+                {/* Condenser Box */}
+                <rect x="360" y="220" width="80" height="40" fill="#8899AA" stroke="black" />
+                <text x="400" y="245" textAnchor="middle" fill="white" fontSize="10">CONDENSER</text>
+
+              </svg>
+
+              <div className="absolute top-2 right-2 bg-black border border-gray-500 p-1 text-green-500 font-mono text-xs">
+                SYS: {sim.tripped ? "TRIPPED" : "NORMAL"}
+              </div>
             </BevelBox>
 
             {/* Bottom: Controls & Telemetry */}
@@ -724,65 +1122,65 @@ const App = () => {
               <fieldset className="border border-white p-2 h-full col-span-2">
                 <legend className="px-1 text-xs">Unit Controls</legend>
                 <div className="flex gap-4 justify-around items-end h-full pb-2">
-                    
-                    {/* Pump Control */}
-                    <div className="flex flex-col items-center gap-1 w-1/3">
-                        <span className="text-xs">Primary Pump</span>
-                        <input 
-                            type="range" 
-                            min="0" max="100" 
-                            value={sim.pumpSpeed}
-                            onChange={(e) => setSim(s => ({...s, pumpSpeed: parseFloat(e.target.value)}))}
-                            className="w-full win95-range"
-                        />
-                        <div className="w-8 text-xs font-mono border bg-white text-center">{sim.pumpSpeed.toFixed(0)}%</div>
-                    </div>
 
-                    {/* Rod Control */}
-                    <div className="flex flex-col items-center gap-1 w-1/3">
-                        <span className="text-xs">Control Rods</span>
-                        <input 
-                            type="range" 
-                            min="0" max="100" 
-                            value={sim.controlRodPos}
-                            onChange={(e) => !sim.tripped && setSim(s => ({...s, controlRodPos: parseFloat(e.target.value)}))}
-                            className="w-full win95-range"
-                        />
-                        <div className="w-8 text-xs font-mono border bg-white text-center">{sim.controlRodPos.toFixed(0)}%</div>
-                    </div>
+                  {/* Pump Control */}
+                  <div className="flex flex-col items-center gap-1 w-1/3">
+                    <span className="text-xs">Primary Pump</span>
+                    <input
+                      type="range"
+                      min="0" max="100"
+                      value={sim.pumpSpeed}
+                      onChange={(e) => setSim(s => ({ ...s, pumpSpeed: parseFloat(e.target.value) }))}
+                      className="w-full win95-range"
+                    />
+                    <div className="w-8 text-xs font-mono border bg-white text-center">{sim.pumpSpeed.toFixed(0)}%</div>
+                  </div>
 
-                    {/* Turbine Control */}
-                    <div className="flex flex-col items-center gap-1 w-1/3">
-                        <span className="text-xs">Turbine Valve</span>
-                        <input 
-                            type="range" 
-                            min="0" max="100" 
-                            value={sim.turbineValve}
-                            onChange={(e) => setSim(s => ({...s, turbineValve: parseFloat(e.target.value)}))}
-                            className="w-full win95-range"
-                        />
-                        <div className="w-8 text-xs font-mono border bg-white text-center">{sim.turbineValve.toFixed(0)}%</div>
-                    </div>
+                  {/* Rod Control */}
+                  <div className="flex flex-col items-center gap-1 w-1/3">
+                    <span className="text-xs">Control Rods</span>
+                    <input
+                      type="range"
+                      min="0" max="100"
+                      value={sim.controlRodPos}
+                      onChange={(e) => !sim.tripped && setSim(s => ({ ...s, controlRodPos: parseFloat(e.target.value) }))}
+                      className="w-full win95-range"
+                    />
+                    <div className="w-8 text-xs font-mono border bg-white text-center">{sim.controlRodPos.toFixed(0)}%</div>
+                  </div>
+
+                  {/* Turbine Control */}
+                  <div className="flex flex-col items-center gap-1 w-1/3">
+                    <span className="text-xs">Turbine Valve</span>
+                    <input
+                      type="range"
+                      min="0" max="100"
+                      value={sim.turbineValve}
+                      onChange={(e) => setSim(s => ({ ...s, turbineValve: parseFloat(e.target.value) }))}
+                      className="w-full win95-range"
+                    />
+                    <div className="w-8 text-xs font-mono border bg-white text-center">{sim.turbineValve.toFixed(0)}%</div>
+                  </div>
 
                 </div>
               </fieldset>
-              
+
               <div className="col-span-2 flex gap-4">
-                 <div className="flex-1">
-                     <LabeledValue label="Loop Flow" value={sim.flowRate.toFixed(0)} unit="kg/s" />
-                     <LabeledValue label="Hot Leg T" value={sim.T_hot.toFixed(1)} unit="°C" />
-                     <LabeledValue label="Cold Leg T" value={sim.T_cold.toFixed(1)} unit="°C" />
-                 </div>
-                 <div className="flex-1">
-                     <LabeledValue label="RX Power" value={sim.thermalPower.toFixed(0)} unit="MWth" />
-                     <LabeledValue label="Gen Out" value={sim.genOutput.toFixed(0)} unit="MWe" />
-                     <LabeledValue label="Stm Press" value={sim.steamPressure.toFixed(1)} unit="BAR" />
-                 </div>
+                <div className="flex-1">
+                  <LabeledValue label="Loop Flow" value={sim.flowRate.toFixed(0)} unit="kg/s" />
+                  <LabeledValue label="Hot Leg T" value={sim.T_hot.toFixed(1)} unit="°C" />
+                  <LabeledValue label="Cold Leg T" value={sim.T_cold.toFixed(1)} unit="°C" />
+                </div>
+                <div className="flex-1">
+                  <LabeledValue label="RX Power" value={sim.thermalPower.toFixed(0)} unit="MWth" />
+                  <LabeledValue label="Gen Out" value={sim.genOutput.toFixed(0)} unit="MWe" />
+                  <LabeledValue label="Stm Press" value={sim.steamPressure.toFixed(1)} unit="BAR" />
+                </div>
               </div>
             </div>
 
             <div className="col-span-4">
-               <fieldset className="border border-white p-2 h-full">
+              <fieldset className="border border-white p-2 h-full">
                 <legend className="px-1 text-xs">Annunciator Panel</legend>
                 <div className="grid grid-cols-2 gap-1">
                   <div className={`p-1 text-center text-xs font-bold border border-gray-500 ${sim.tripped ? 'bg-red-600 text-white animate-pulse' : 'bg-[#404040] text-gray-600'}`}>RX TRIP</div>
@@ -790,22 +1188,22 @@ const App = () => {
                   <div className={`p-1 text-center text-xs font-bold border border-gray-500 ${sim.steamPressure > 70 ? 'bg-yellow-600 text-black' : 'bg-[#404040] text-gray-600'}`}>HI PRESS</div>
                   <div className={`p-1 text-center text-xs font-bold border border-gray-500 ${sim.genOutput > 1250 ? 'bg-red-600 text-white' : 'bg-[#404040] text-gray-600'}`}>OVERLOAD</div>
                 </div>
-                
+
                 <div className="mt-4 flex justify-center">
                   {sim.tripped ? (
-                     <WinButton 
-                       className="w-full font-bold text-black border-red-900"
-                       onClick={() => setSim(INITIAL_STATE)}
-                     >
-                       SYSTEM RESET
-                     </WinButton>
+                    <WinButton
+                      className="w-full font-bold text-black border-red-900"
+                      onClick={() => setSim(INITIAL_STATE)}
+                    >
+                      SYSTEM RESET
+                    </WinButton>
                   ) : (
-                     <WinButton 
-                       className="w-full font-bold text-red-800"
-                       onClick={() => setSim(s => ({...s, tripped: true, controlRodPos: 0}))}
-                     >
-                       MANUAL SCRAM
-                     </WinButton>
+                    <WinButton
+                      className="w-full font-bold text-red-800"
+                      onClick={() => setSim(s => ({ ...s, tripped: true, controlRodPos: 0 }))}
+                    >
+                      MANUAL SCRAM
+                    </WinButton>
                   )}
                 </div>
               </fieldset>
@@ -816,99 +1214,96 @@ const App = () => {
 
       {/* --- REACTOR DETAILS --- */}
       {windows.reactor.isOpen && !windows.reactor.isMinimized && (
-        <Win95Window 
-          title="Reactor Core Control" 
+        <Win95Window
+          title="Reactor Core Control"
           x={150} y={80} width={400} height={500}
           onClose={() => closeWindow('reactor')}
           onMinimize={() => minimizeWindow('reactor')}
-          active={windows.reactor.z === Math.max(...Object.values(windows).map(w => w.z))}
+          active={windows.reactor.z === maxZ}
           onFocus={() => bringToFront('reactor')}
-
         >
           <div className="flex gap-4 h-full">
             {/* Control Rods Slider */}
             <div className="w-24 flex flex-col items-center border-r border-gray-400 pr-2">
-               <VerticalSlider 
-                 label="Control Rods" 
-                 min={0} max={100} 
-                 value={sim.controlRodPos} 
-                 onChange={(v) => !sim.tripped && setSim(s => ({...s, controlRodPos: v}))}
-                 height={300}
-               />
-               <div className="mt-4 text-center">
-                  <div className="text-[10px] text-gray-600">Net Reactivity</div>
-                  <div className={`font-mono border px-1 ${sim.reactivity > 0 ? 'text-red-600' : 'text-blue-600'}`}>
-                    {(sim.reactivity * 100000).toFixed(0)} pcm
-                  </div>
-               </div>
+              <VerticalSlider
+                label="Control Rods"
+                min={0} max={100}
+                value={sim.controlRodPos}
+                onChange={(v) => !sim.tripped && setSim(s => ({ ...s, controlRodPos: v }))}
+                height={300}
+              />
+              <div className="mt-4 text-center">
+                <div className="text-[10px] text-gray-600">Net Reactivity</div>
+                <div className={`font-mono border px-1 ${sim.reactivity > 0 ? 'text-red-600' : 'text-blue-600'}`}>
+                  {(sim.reactivity * 100000).toFixed(0)} pcm
+                </div>
+              </div>
             </div>
 
             {/* Core Data */}
             <div className="flex-1 flex flex-col gap-4">
-               <fieldset className="border border-gray-400 p-2">
-                 <legend className="text-xs px-1">Neutronics</legend>
-                 <LabeledValue 
-                   label="Thermal Power" 
-                   value={sim.thermalPower < 1 ? sim.thermalPower.toExponential(2) : sim.thermalPower.toFixed(1)} 
-                   unit="MWth" 
-                 />
-                 <div className="text-xs mb-1">Flux Level</div>
-                 <ProgressBar value={sim.neutronFlux * 100} color={sim.neutronFlux > 1.05 ? 'red' : 'green'} />
-               </fieldset>
+              <fieldset className="border border-gray-400 p-2">
+                <legend className="text-xs px-1">Neutronics</legend>
+                <LabeledValue
+                  label="Thermal Power"
+                  value={sim.thermalPower < 1 ? sim.thermalPower.toExponential(2) : sim.thermalPower.toFixed(1)}
+                  unit="MWth"
+                />
+                <div className="text-xs mb-1">Flux Level</div>
+                <ProgressBar value={sim.neutronFlux * 100} color={sim.neutronFlux > 1.05 ? 'red' : 'green'} />
+              </fieldset>
 
-               {/* Reactivity Monitor (NEW) */}
-               <fieldset className="border border-gray-400 p-2 bg-gray-100">
-                 <legend className="text-xs px-1 ">Reactivity Monitor (pcm)</legend>
-                 {(() => {
-                   const comps = getReactivityComponents();
-                   return (
-                     <div className="grid grid-cols-2 gap-x-2 gap-y-1 text-xs font-mono">
-                        <span className="text-gray-600">Rod Worth:</span>
-                        <span className="text-right text-green-700">+{comps.rods.toFixed(0)}</span>
-                        
-                        <span className="text-gray-600">Boron (relative):</span>
-                        <span className="text-right text-red-700">{comps.boron.toFixed(0)}</span>
-                        
-                        <span className="text-gray-600">Doppler:</span>
-                        <span className="text-right text-blue-700">{comps.doppler.toFixed(0)}</span>
-                        
-                        <span className="text-gray-600">Moderator:</span>
-                        <span className="text-right text-blue-700">{comps.moderator.toFixed(0)}</span>
+              {/* Reactivity Monitor (NEW) */}
+              <fieldset className="border border-gray-400 p-2 bg-gray-100">
+                <legend className="text-xs px-1 ">Reactivity Monitor (pcm)</legend>
+                {(() => {
+                  const comps = getReactivityComponents();
+                  return (
+                    <div className="grid grid-cols-2 gap-x-2 gap-y-1 text-xs font-mono">
+                      <span className="text-gray-600">Rod Worth:</span>
+                      <span className="text-right text-green-700">+{comps.rods.toFixed(0)}</span>
 
-                        <span className="text-gray-600">Core Design:</span>
-                        <span className="text-right text-blue-700">{comps.baseline.toFixed(0)}</span>
-                     </div>
-                   );
-                 })()}
-               </fieldset>
+                      <span className="text-gray-600">Boron (relative):</span>
+                      <span className="text-right text-red-700">{comps.boron.toFixed(0)}</span>
 
-               <fieldset className="border border-gray-400 p-2">
-                 <legend className="text-xs px-1">Chemical Shim</legend>
-                 <div className="flex flex-col gap-2">
-                   <div className="flex justify-between items-center">
-                     <span className="text-xs">Boron Conc.</span>
-                     <span className="font-mono bg-white border border-gray-600 px-1 text-sm">{sim.boronConc.toFixed(0)} ppm</span>
-                   </div>
-                   <div className="flex gap-1 justify-center">
-                      <WinButton 
-                        className="text-xs flex-1"
-                        onClick={() => setSim(s => ({...s, boronConc: Math.max(0, s.boronConc - 10)}))}
-                      >Dilute</WinButton>
-                      <WinButton 
-                        className="text-xs flex-1"
-                        onClick={() => setSim(s => ({...s, boronConc: s.boronConc + 10}))}
-                      >Borate</WinButton>
-                   </div>
-                 </div>
-               </fieldset>
+                      <span className="text-gray-600">Doppler:</span>
+                      <span className="text-right text-blue-700">{comps.doppler.toFixed(0)}</span>
 
-               <fieldset className="border border-gray-400 p-2">
-                 <legend className="text-xs px-1">Core Thermodynamics</legend>
-                 <LabeledValue label="Avg Fuel Temp" value={sim.T_fuel.toFixed(0)} unit="°C" />
-                 <LabeledValue label="Outlet Temp" value={sim.T_hot.toFixed(1)} unit="°C" />
-                 
+                      <span className="text-gray-600">Moderator:</span>
+                      <span className="text-right text-blue-700">{comps.moderator.toFixed(0)}</span>
 
-               </fieldset>
+                      <span className="text-gray-600">Core Design:</span>
+                      <span className="text-right text-blue-700">{comps.baseline.toFixed(0)}</span>
+                    </div>
+                  );
+                })()}
+              </fieldset>
+
+              <fieldset className="border border-gray-400 p-2">
+                <legend className="text-xs px-1">Chemical Shim</legend>
+                <div className="flex flex-col gap-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs">Boron Conc.</span>
+                    <span className="font-mono bg-white border border-gray-600 px-1 text-sm">{sim.boronConc.toFixed(0)} ppm</span>
+                  </div>
+                  <div className="flex gap-1 justify-center">
+                    <WinButton
+                      className="text-xs flex-1"
+                      onClick={() => setSim(s => ({ ...s, boronConc: Math.max(0, s.boronConc - 10) }))}
+                    >Dilute</WinButton>
+                    <WinButton
+                      className="text-xs flex-1"
+                      onClick={() => setSim(s => ({ ...s, boronConc: s.boronConc + 10 }))}
+                    >Borate</WinButton>
+                  </div>
+                </div>
+              </fieldset>
+
+              <fieldset className="border border-gray-400 p-2">
+                <legend className="text-xs px-1">Core Thermodynamics</legend>
+                <LabeledValue label="Avg Fuel Temp" value={sim.T_fuel.toFixed(0)} unit="°C" />
+                <LabeledValue label="Outlet Temp" value={sim.T_hot.toFixed(1)} unit="°C" />
+              </fieldset>
             </div>
           </div>
         </Win95Window>
@@ -916,41 +1311,40 @@ const App = () => {
 
       {/* --- TURBINE DETAILS --- */}
       {windows.turbine.isOpen && !windows.turbine.isMinimized && (
-        <Win95Window 
-          title="Turbine & Generator" 
+        <Win95Window
+          title="Turbine & Generator"
           x={400} y={150} width={400} height={350}
           onClose={() => closeWindow('turbine')}
           onMinimize={() => minimizeWindow('turbine')}
-          active={windows.turbine.z === Math.max(...Object.values(windows).map(w => w.z))}
+          active={windows.turbine.z === maxZ}
           onFocus={() => bringToFront('turbine')}
-
         >
           <div className="flex gap-4 h-full">
             <div className="w-24 flex flex-col items-center border-r border-gray-400 pr-2">
-               <VerticalSlider 
-                 label="Gov Valve" 
-                 min={0} max={100} 
-                 value={sim.turbineValve} 
-                 onChange={(v) => setSim(s => ({...s, turbineValve: v}))}
-                 height={200}
-               />
+              <VerticalSlider
+                label="Gov Valve"
+                min={0} max={100}
+                value={sim.turbineValve}
+                onChange={(v) => setSim(s => ({ ...s, turbineValve: v }))}
+                height={200}
+              />
             </div>
-            
+
             <div className="flex-1 flex flex-col gap-3">
               <fieldset className="border border-gray-400 p-2 bg-gray-100">
                 <legend className="text-xs px-1">Generator Output</legend>
                 <div className="flex items-end gap-1 mb-2">
-                   <span className="font-mono text-3xl font-bold text-blue-800 leading-none">
-                     {sim.genOutput.toFixed(0)}
-                   </span>
-                   <span className="text-sm font-bold text-gray-600 mb-1">MWe</span>
+                  <span className="font-mono text-3xl font-bold text-blue-800 leading-none">
+                    {sim.genOutput.toFixed(0)}
+                  </span>
+                  <span className="text-sm font-bold text-gray-600 mb-1">MWe</span>
                 </div>
                 <ProgressBar value={sim.genOutput / 15} max={100} color="green" height="24px" />
                 <div className="mt-2 flex justify-between text-xs">
-                   <span>Grid Load: {sim.gridLoad} MW</span>
-                   <span className={sim.genOutput < sim.gridLoad ? "text-red-600" : "text-green-600"}>
-                     {sim.genOutput < sim.gridLoad ? "IMPORTING" : "EXPORTING"}
-                   </span>
+                  <span>Grid Load: {sim.gridLoad} MW</span>
+                  <span className={sim.genOutput < sim.gridLoad ? "text-red-600" : "text-green-600"}>
+                    {sim.genOutput < sim.gridLoad ? "IMPORTING" : "EXPORTING"}
+                  </span>
                 </div>
               </fieldset>
 
@@ -967,152 +1361,173 @@ const App = () => {
 
       {/* --- STEAM GENERATOR DETAILS --- */}
       {windows.steam.isOpen && !windows.steam.isMinimized && (
-        <Win95Window 
-          title="Steam Generators (SG)" 
+        <Win95Window
+          title="Steam Generators (SG)"
           x={300} y={100} width={500} height={300}
           onClose={() => closeWindow('steam')}
           onMinimize={() => minimizeWindow('steam')}
-          active={windows.steam.z === Math.max(...Object.values(windows).map(w => w.z))}
+          active={windows.steam.z === maxZ}
           onFocus={() => bringToFront('steam')}
-
         >
           <div className="flex gap-4 h-full">
-             {/* Left: Animated SG Diagram */}
-             <div className="w-[220px] h-full bg-gray-200 border-2 border-gray-600 border-r-white border-b-white relative overflow-hidden">
-                <svg viewBox="0 0 200 250" className="w-full h-full">
-                  {/* SG Shell */}
-                  <rect x="50" y="20" width="100" height="220" rx="20" fill="#e0e0e0" stroke="black" strokeWidth="2" />
-                  
-                  {/* Water Level (Secondary) */}
-                  <defs>
-                    <clipPath id="sgShellClip">
-                       <rect x="50" y="20" width="100" height="220" rx="20" />
-                    </clipPath>
-                  </defs>
-                  <rect 
-                    x="50" 
-                    y={240 - (sim.sgLevel/100)*180} 
-                    width="100" 
-                    height={(sim.sgLevel/100)*180} 
-                    fill="#87CEEB" 
-                    clipPath="url(#sgShellClip)" 
-                    opacity="0.6" 
-                  />
-                  
-                  {/* Boiling Animation (Bubbles) */}
-                  {sim.thermalPower > 10 && (
-                     <g>
-                        <circle cx="80" cy="150" r="3" fill="white" className="bubble bubble-delay-1" />
-                        <circle cx="120" cy="120" r="4" fill="white" className="bubble bubble-delay-2" />
-                        <circle cx="100" cy="180" r="2" fill="white" className="bubble" />
-                        <circle cx="90" cy="130" r="2" fill="white" className="bubble bubble-delay-2" />
-                     </g>
-                  )}
+            {/* Left: Animated SG Diagram */}
+            <div className="w-[220px] h-full bg-gray-200 border-2 border-gray-600 border-r-white border-b-white relative overflow-hidden">
+              <svg viewBox="0 0 200 250" className="w-full h-full">
+                {/* SG Shell */}
+                <rect x="50" y="20" width="100" height="220" rx="20" fill="#e0e0e0" stroke="black" strokeWidth="2" />
 
-                  {/* Primary U-Tubes (Inverted U) */}
-                  <path d="M 80 240 L 80 100 A 20 20 0 0 1 120 100 L 120 240" fill="none" stroke="maroon" strokeWidth="12" />
-                  
-                  {/* Flow Animation inside tubes */}
-                  <path 
-                    d="M 80 240 L 80 100 A 20 20 0 0 1 120 100 L 120 240" 
-                    fill="none" 
-                    stroke="#ff4444" 
-                    strokeWidth="4" 
-                    className={sim.pumpSpeed > 5 ? "pipe-flow" : ""} 
-                  />
+                {/* Water Level (Secondary) */}
+                <defs>
+                  <clipPath id="sgShellClip">
+                    <rect x="50" y="20" width="100" height="220" rx="20" />
+                  </clipPath>
+                </defs>
+                <rect
+                  x="50"
+                  y={240 - (sim.sgLevel / 100) * 180}
+                  width="100"
+                  height={(sim.sgLevel / 100) * 180}
+                  fill="#87CEEB"
+                  clipPath="url(#sgShellClip)"
+                  opacity="0.6"
+                />
 
-                  {/* Labels */}
-                  <text x="70" y="248" fontSize="10" fontWeight="bold">Hot</text>
-                  <text x="110" y="248" fontSize="10" fontWeight="bold">Cold</text>
-                  
-                  {/* Steam Outlet */}
-                  <path d="M 100 20 L 100 0" stroke="gray" strokeWidth="8" />
-                </svg>
-             </div>
+                {/* Boiling Animation (Bubbles) */}
+                {sim.thermalPower > 10 && (
+                  <g>
+                    <circle cx="80" cy="150" r="3" fill="white" className="bubble bubble-delay-1" />
+                    <circle cx="120" cy="120" r="4" fill="white" className="bubble bubble-delay-2" />
+                    <circle cx="100" cy="180" r="2" fill="white" className="bubble" />
+                    <circle cx="90" cy="130" r="2" fill="white" className="bubble bubble-delay-2" />
+                  </g>
+                )}
 
-             {/* Right: Data Controls */}
-             <div className="flex-1 flex flex-col gap-3">
-                <div className="grid grid-cols-2 gap-2">
-                   <BevelBox className="p-1 flex flex-col items-center justify-center bg-black h-16">
-                      <span className="text-green-500 font-mono text-xl">{sim.steamPressure.toFixed(1)}</span>
-                      <span className="text-green-700 text-[10px]">BAR</span>
-                   </BevelBox>
-                   <BevelBox className="p-1 flex flex-col items-center justify-center bg-black h-16">
-                      <span className="text-green-500 font-mono text-xl">{sim.steamTemp.toFixed(1)}</span>
-                      <span className="text-green-700 text-[10px]">°C</span>
-                   </BevelBox>
-                </div>
+                {/* Primary U-Tubes (Inverted U) */}
+                <path d="M 80 240 L 80 100 A 20 20 0 0 1 120 100 L 120 240" fill="none" stroke="maroon" strokeWidth="12" />
 
-                <fieldset className="border border-gray-400 p-2 flex-1">
-                  <legend className="text-xs px-1">Feedwater</legend>
-                  <div className="h-full flex flex-col justify-around">
-                      <LabeledValue label="Flow" value={sim.steamFlow.toFixed(1)} unit="kg/s" />
-                      <div className="flex flex-col gap-1">
-                        <span className="text-xs">SG Level</span>
-                        <ProgressBar value={sim.sgLevel} color="blue" />
-                      </div>
+                {/* Flow Animation inside tubes */}
+                <path
+                  d="M 80 240 L 80 100 A 20 20 0 0 1 120 100 L 120 240"
+                  fill="none"
+                  stroke="#ff4444"
+                  strokeWidth="4"
+                  className={sim.pumpSpeed > 5 ? "pipe-flow" : ""}
+                />
+
+                {/* Labels */}
+                <text x="70" y="248" fontSize="10" fontWeight="bold">Hot</text>
+                <text x="110" y="248" fontSize="10" fontWeight="bold">Cold</text>
+
+                {/* Steam Outlet */}
+                <path d="M 100 20 L 100 0" stroke="gray" strokeWidth="8" />
+              </svg>
+            </div>
+
+            {/* Right: Data Controls */}
+            <div className="flex-1 flex flex-col gap-3">
+              <div className="grid grid-cols-2 gap-2">
+                <BevelBox className="p-1 flex flex-col items-center justify-center bg-black h-16">
+                  <span className="text-green-500 font-mono text-xl">{sim.steamPressure.toFixed(1)}</span>
+                  <span className="text-green-700 text-[10px]">BAR</span>
+                </BevelBox>
+                <BevelBox className="p-1 flex flex-col items-center justify-center bg-black h-16">
+                  <span className="text-green-500 font-mono text-xl">{sim.steamTemp.toFixed(1)}</span>
+                  <span className="text-green-700 text-[10px]">°C</span>
+                </BevelBox>
+              </div>
+
+              <fieldset className="border border-gray-400 p-2 flex-1">
+                <legend className="text-xs px-1">Feedwater</legend>
+                <div className="h-full flex flex-col justify-around">
+                  <LabeledValue label="Flow" value={sim.steamFlow.toFixed(1)} unit="kg/s" />
+                  <div className="flex flex-col gap-1">
+                    <span className="text-xs">SG Level</span>
+                    <ProgressBar value={sim.sgLevel} color="blue" />
                   </div>
-                </fieldset>
-             </div>
+                </div>
+              </fieldset>
+            </div>
           </div>
         </Win95Window>
       )}
-      
+
+      {/* --- MISSILE COMMAND WINDOW (NEW) --- */}
+      {windows.missile.isOpen && !windows.missile.isMinimized && (
+        <Win95Window
+          title="Missile Command"
+          x={120} y={120} width={520} height={430}
+          onClose={() => closeWindow('missile')}
+          onMinimize={() => minimizeWindow('missile')}
+          active={windows.missile.z === maxZ}
+          onFocus={() => bringToFront('missile')}
+        >
+          <MissileCommand />
+        </Win95Window>
+      )}
+
       {/* Taskbar */}
       <div className="absolute bottom-0 w-full h-8 bg-[#c0c0c0] border-t-2 border-white flex items-center px-1 gap-1 z-[200] shadow-md select-none">
-         <div className="relative">
-            <WinButton 
-              className="flex items-center gap-1 font-bold italic pr-4 pl-2 py-0.5"
-              active={startMenuOpen}
-              onClick={() => setStartMenuOpen(!startMenuOpen)}
-            >
-              <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/e/e2/Windows_logo_and_wordmark_-_1995-2001.svg/512px-Windows_logo_and_wordmark_-_1995-2001.svg.png" className="h-4 w-auto opacity-80" alt="" />
-              Start
-            </WinButton>
-            {startMenuOpen && (
-              <div className="absolute bottom-8 left-0 w-48 bg-[#c0c0c0] border-2 border-white border-r-gray-800 border-b-gray-800 shadow-xl flex flex-col p-1 z-[201]">
-                 <div className="bg-blue-900 text-white font-bold p-1 pl-8 mb-1 vertical-text relative">
-                    <span className="text-lg">Windows 95</span>
-                 </div>
-                 <button onClick={() => openWindow('main')} className="win95-menu-item">
-                    <Activity size={16} /> Unit 1 Overview
-                 </button>
-                 <button onClick={() => openWindow('reactor')} className="win95-menu-item">
-                    <Zap size={16} /> Reactor Core
-                 </button>
-                 <button onClick={() => openWindow('steam')} className="win95-menu-item">
-                    <Droplet size={16} /> Steam Gen
-                 </button>
-                 <button onClick={() => openWindow('turbine')} className="win95-menu-item">
-                    <Wind size={16} /> Turbine
-                 </button>
-                 <div className="h-[1px] bg-gray-500 my-1"></div>
-                 <button onClick={() => setStartMenuOpen(false)} className="win95-menu-item">
-                    Shut Down...
-                 </button>
+        <div className="relative">
+          <WinButton
+            className="flex items-center gap-1 font-bold italic pr-4 pl-2 py-0.5"
+            active={startMenuOpen}
+            onClick={() => setStartMenuOpen(!startMenuOpen)}
+          >
+            <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/e/e2/Windows_logo_and_wordmark_-_1995-2001.svg/512px-Windows_logo_and_wordmark_-_1995-2001.svg.png" className="h-4 w-auto opacity-80" alt="" />
+            Start
+          </WinButton>
+          {startMenuOpen && (
+            <div className="absolute bottom-8 left-0 w-48 bg-[#c0c0c0] border-2 border-white border-r-gray-800 border-b-gray-800 shadow-xl flex flex-col p-1 z-[201]">
+              <div className="bg-blue-900 text-white font-bold p-1 pl-8 mb-1 vertical-text relative">
+                <span className="text-lg">Windows 95</span>
               </div>
-            )}
-         </div>
-         
-         <div className="w-[2px] h-6 border-l border-gray-400 border-r border-white mx-1"></div>
-         
-         {Object.entries(windows).map(([key, win]) => (
-            win.isOpen && (
-              <WinButton 
-                key={key} 
-                active={win.z === Math.max(...Object.values(windows).map(w => w.z)) && !win.isMinimized}
-                onClick={() => handleTaskbarClick(key)}
-                className="w-32 text-left truncate text-xs py-1"
-              >
-                {key === 'main' ? 'Unit 1 Control' : key === 'reactor' ? 'Reactor Core' : key === 'steam' ? 'Steam Gen' : 'Turbine'}
-              </WinButton>
-            )
-         ))}
-         
-         <div className="flex-1"></div>
-         <BevelBox className="px-2 py-1 bg-gray-200 text-xs flex gap-2 w-24 justify-center">
-            <span>{new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
-         </BevelBox>
+              <button onClick={() => openWindow('main')} className="win95-menu-item">
+                <Activity size={16} /> Unit 1 Overview
+              </button>
+              <button onClick={() => openWindow('reactor')} className="win95-menu-item">
+                <Zap size={16} /> Reactor Core
+              </button>
+              <button onClick={() => openWindow('steam')} className="win95-menu-item">
+                <Droplet size={16} /> Steam Gen
+              </button>
+              <button onClick={() => openWindow('turbine')} className="win95-menu-item">
+                <Wind size={16} /> Turbine
+              </button>
+
+              <div className="h-[1px] bg-gray-500 my-1"></div>
+
+              {/* NEW: Missile Command */}
+              <button onClick={() => openWindow('missile')} className="win95-menu-item">
+                <Target size={16} /> Missile Command
+              </button>
+
+              <div className="h-[1px] bg-gray-500 my-1"></div>
+              <button onClick={() => setStartMenuOpen(false)} className="win95-menu-item">
+                Shut Down...
+              </button>
+            </div>
+          )}
+        </div>
+
+        <div className="w-[2px] h-6 border-l border-gray-400 border-r border-white mx-1"></div>
+
+        {Object.entries(windows).map(([key, win]) => (
+          win.isOpen && (
+            <WinButton
+              key={key}
+              active={win.z === maxZ && !win.isMinimized}
+              onClick={() => handleTaskbarClick(key)}
+              className="w-32 text-left truncate text-xs py-1"
+            >
+              {windowTitle(key)}
+            </WinButton>
+          )
+        ))}
+
+        <div className="flex-1"></div>
+        <BevelBox className="px-2 py-1 bg-gray-200 text-xs flex gap-2 w-24 justify-center">
+          <span>{new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+        </BevelBox>
       </div>
 
     </div>
